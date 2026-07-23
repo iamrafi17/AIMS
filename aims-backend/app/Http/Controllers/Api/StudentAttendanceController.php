@@ -73,6 +73,7 @@ class StudentAttendanceController extends Controller
             ->first();
 
         $geofenceActive = $student->hte
+            && $student->hte->geofence_enabled
             && $student->hte->latitude !== null
             && $student->hte->longitude !== null
             && $student->hte->geofence_radius > 0;
@@ -286,6 +287,7 @@ class StudentAttendanceController extends Controller
         if (
             $validated['work_mode'] === 'wfo'
             && $student->hte
+            && $student->hte->geofence_enabled
             && $student->hte->latitude !== null
             && $student->hte->longitude !== null
             && $student->hte->geofence_radius > 0
@@ -538,7 +540,7 @@ class StudentAttendanceController extends Controller
         }
 
         // Check geofence if WFO
-        if ($request->work_mode === 'wfo' && $student->hte) {
+        if ($request->work_mode === 'wfo' && $student->hte?->geofence_enabled) {
             $distance = $this->calculateDistance(
                 $request->latitude,
                 $request->longitude,

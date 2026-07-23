@@ -25,6 +25,10 @@ class Attendance extends Model
         'overtime_hours',
         'am_activity',
         'pm_activity',
+        'journal_status',
+        'journal_feedback',
+        'journal_reviewed_by',
+        'journal_reviewed_at',
         'am_time_in_location',
         'am_time_out_location',
         'pm_time_in_location',
@@ -64,6 +68,7 @@ class Attendance extends Model
             'longitude_out' => 'decimal:8',
             'is_verified' => 'boolean',
             'verified_at' => 'datetime',
+            'journal_reviewed_at' => 'datetime',
         ];
     }
 
@@ -75,5 +80,10 @@ class Attendance extends Model
     public function verifier()
     {
         return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    public function journalReviewer()
+    {
+        return $this->belongsTo(User::class, 'journal_reviewed_by');
     }
 }

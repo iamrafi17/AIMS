@@ -33,15 +33,21 @@ function Header({ onMenuClick }) {
           {/* Dark mode toggle */}
           <button
             onClick={toggleDarkMode}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            className="relative grid h-10 w-10 place-items-center overflow-hidden rounded-xl border border-transparent hover:border-gray-200 hover:bg-gray-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#800000]/15 dark:hover:border-gray-600 dark:hover:bg-gray-700"
             aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             title={darkMode ? 'Light mode' : 'Dark mode'}
+            aria-pressed={darkMode}
           >
-            {darkMode ? (
-              <SunIcon className="w-6 h-6 text-yellow-500" />
-            ) : (
-              <MoonIcon className="w-6 h-6 text-gray-600" />
-            )}
+            <SunIcon
+              className={`absolute h-6 w-6 text-yellow-500 transition-all duration-300 ease-out ${
+                darkMode ? 'rotate-0 scale-100 opacity-100' : '-rotate-90 scale-50 opacity-0'
+              }`}
+            />
+            <MoonIcon
+              className={`absolute h-6 w-6 text-gray-600 transition-all duration-300 ease-out dark:text-blue-200 ${
+                darkMode ? 'rotate-90 scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'
+              }`}
+            />
           </button>
 
           {/* Notifications */}

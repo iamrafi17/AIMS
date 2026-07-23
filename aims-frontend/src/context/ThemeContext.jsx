@@ -1,8 +1,9 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
+  const transitionTimer = useRef(null);
   const [darkMode, setDarkMode] = useState(() => {
     try {
       const saved = localStorage.getItem('darkMode');
@@ -24,7 +25,21 @@ export function ThemeProvider({ children }) {
     document.documentElement.style.colorScheme = darkMode ? 'dark' : 'light';
   }, [darkMode]);
 
-  const toggleDarkMode = () => setDarkMode((current) => !current);
+  useEffect(() => () => {
+    if (transitionTimer.current) window.clearTimeout(transitionTimer.current);
+  }, []);
+
+  const toggleDarkMode = useCallback(() => {
+    const root = document.documentElement;
+    root.classList.add('theme-transitioning');
+    if (transitionTimer.current) window.clearTimeout(transitionTimer.current);
+
+    setDarkMode((current) => !current);
+    transitionTimer.current = window.setTimeout(() => {
+      root.classList.remove('theme-transitioning');
+      transitionTimer.current = null;
+    }, 400);
+  }, []);
 
   return (
     <ThemeContext.Provider value={{ darkMode, toggleDarkMode }}>

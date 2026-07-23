@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FiArrowRight,
@@ -99,8 +99,47 @@ const fallbackAnnouncements = [
   },
 ];
 
+function Reveal({ as: Tag = 'div', children, className = '', delay = 0 }) {
+  const elementRef = useRef(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return undefined;
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) {
+      setVisible(true);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          observer.unobserve(entry.target);
+        }
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -48px' },
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <Tag
+      ref={elementRef}
+      className={`landing-reveal ${visible ? 'is-visible' : ''} ${className}`}
+      style={{ '--reveal-delay': `${delay}ms` }}
+    >
+      {children}
+    </Tag>
+  );
+}
+
 function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const [portalData, setPortalData] = useState({
     statistics: {
       student_interns: 0,
@@ -117,6 +156,13 @@ function LandingPage() {
       .catch(() => {
         // The public page remains usable while the backend is being initialized.
       });
+  }, []);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 12);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const closeMenu = () => setMenuOpen(false);
@@ -137,7 +183,7 @@ function LandingPage() {
         Official Internship Portal of Marinduque State University — Santa Cruz Campus
       </div>
 
-      <header className="sticky top-0 z-50 border-b border-black/5 bg-white/95 backdrop-blur-xl">
+      <header className={`sticky top-0 z-50 border-b border-black/5 bg-white/95 backdrop-blur-xl transition-[box-shadow,background-color] duration-300 ${scrolled ? 'shadow-lg shadow-slate-900/5' : 'shadow-none'}`}>
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3 lg:px-8" aria-label="Main navigation">
           <Link to="/" className="flex min-w-0 items-center gap-3" onClick={closeMenu}>
             <img src={marsuLogo} alt="Marinduque State University seal" className="h-12 w-12 shrink-0 object-contain" />
@@ -155,7 +201,7 @@ function LandingPage() {
               ['Announcements', '#announcements'],
               ['Contact Us', '#contact'],
             ].map(([label, href]) => (
-              <a key={href} href={href} className="text-sm font-semibold text-slate-600 transition hover:text-[#800000]">
+              <a key={href} href={href} className="landing-nav-link text-sm font-semibold text-slate-600 transition hover:text-[#800000]">
                 {label}
               </a>
             ))}
@@ -176,7 +222,7 @@ function LandingPage() {
         </nav>
 
         {menuOpen && (
-          <div className="border-t border-slate-100 bg-white px-5 py-5 shadow-xl lg:hidden">
+          <div className="landing-mobile-menu border-t border-slate-100 bg-white px-5 py-5 shadow-xl lg:hidden">
             <div className="mx-auto flex max-w-7xl flex-col gap-1">
               {[
                 ['Home', '#home'],
@@ -201,7 +247,7 @@ function LandingPage() {
         <section id="home" className="relative overflow-hidden bg-[radial-gradient(circle_at_12%_20%,rgba(212,175,55,0.15),transparent_27%),linear-gradient(135deg,#fff_0%,#fffaf3_48%,#f8eeee_100%)] scroll-mt-24">
           <div className="absolute -left-20 top-24 h-72 w-72 rounded-full border-[42px] border-[#800000]/5" />
           <div className="mx-auto grid min-h-[calc(100vh-110px)] max-w-7xl items-center gap-12 px-5 py-16 lg:grid-cols-[0.88fr_1.12fr] lg:px-8 lg:py-20">
-            <div className="relative z-10">
+            <div className="landing-hero-copy relative z-10">
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#d4af37]/35 bg-white/80 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-[#7b1818] shadow-sm">
                 <FiShield className="text-[#c39219]" />
                 One connected internship ecosystem
@@ -230,12 +276,12 @@ function LandingPage() {
               </div>
             </div>
 
-            <div className="relative">
-              <div className="absolute -inset-4 rounded-[2.5rem] bg-gradient-to-br from-[#800000]/12 to-[#d4af37]/20 blur-2xl" />
+            <div className="landing-hero-visual relative">
+              <div className="landing-hero-glow absolute -inset-4 rounded-[2.5rem] bg-gradient-to-br from-[#800000]/12 to-[#d4af37]/20 blur-2xl" />
               <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white/70 p-2 shadow-2xl shadow-[#5c0000]/15 backdrop-blur">
                 <img src={heroImage} alt="Student interns using the AIMS digital monitoring platform" className="aspect-[3/2] w-full rounded-[1.55rem] object-cover" />
               </div>
-              <div className="absolute -bottom-5 left-4 flex items-center gap-3 rounded-2xl border border-white bg-white/95 p-3 pr-5 shadow-xl sm:left-[-1.5rem] sm:p-4 sm:pr-7">
+              <div className="landing-float absolute -bottom-5 left-4 flex items-center gap-3 rounded-2xl border border-white bg-white/95 p-3 pr-5 shadow-xl sm:left-[-1.5rem] sm:p-4 sm:pr-7">
                 <div className="grid h-11 w-11 place-items-center rounded-xl bg-[#800000] text-white"><FiTrendingUp /></div>
                 <div><p className="text-xs font-semibold text-slate-500">Internship journey</p><p className="text-sm font-black text-slate-900">Monitored. Guided. Achieved.</p></div>
               </div>
@@ -245,11 +291,11 @@ function LandingPage() {
 
         <section id="about" className="scroll-mt-24 bg-white py-20 sm:py-24">
           <div className="mx-auto grid max-w-7xl gap-12 px-5 lg:grid-cols-[0.78fr_1.22fr] lg:items-center lg:px-8">
-            <div>
+            <Reveal>
               <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-[#a8750b]">About AIMS</p>
               <h2 className="mt-4 text-3xl font-black tracking-tight text-[#430909] sm:text-4xl">Designed around the complete internship journey.</h2>
-            </div>
-            <div className="rounded-3xl border border-slate-100 bg-[#fbfaf8] p-7 shadow-sm sm:p-10">
+            </Reveal>
+            <Reveal delay={120} className="rounded-3xl border border-slate-100 bg-[#fbfaf8] p-7 shadow-sm sm:p-10">
               <p className="text-base leading-8 text-slate-600 sm:text-lg">
                 The Academic Internship Monitoring System is a web-based platform developed for Marinduque State University to streamline internship management, student monitoring, attendance tracking, document submission, and communication between students, coordinators, supervisors, and university administrators.
               </p>
@@ -266,22 +312,22 @@ function LandingPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </Reveal>
           </div>
         </section>
 
         <section id="features" className="scroll-mt-24 bg-[#f7f5f2] py-20 sm:py-24">
           <div className="mx-auto max-w-7xl px-5 lg:px-8">
-            <div className="mx-auto max-w-2xl text-center">
+            <Reveal className="mx-auto max-w-2xl text-center">
               <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-[#a8750b]">Key features</p>
               <h2 className="mt-4 text-3xl font-black tracking-tight text-[#430909] sm:text-4xl">One platform. Every internship role.</h2>
               <p className="mt-4 leading-7 text-slate-600">Purpose-built tools help each member of the internship community act with clarity.</p>
-            </div>
+            </Reveal>
             <div className="mt-12 grid gap-6 lg:grid-cols-2">
-              {featureGroups.map((group) => {
+              {featureGroups.map((group, index) => {
                 const GroupIcon = group.icon;
                 return (
-                  <article key={group.title} className="group rounded-3xl border border-black/[0.06] bg-white p-7 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#800000]/5 sm:p-8">
+                  <Reveal as="article" key={group.title} delay={(index % 2) * 110} className="group rounded-3xl border border-black/[0.06] bg-white p-7 shadow-sm transition-[transform,box-shadow,border-color] duration-500 hover:-translate-y-1.5 hover:shadow-xl hover:shadow-[#800000]/5 sm:p-8">
                     <div className="flex items-start gap-4">
                       <div className="grid h-13 w-13 shrink-0 place-items-center rounded-2xl bg-[#800000] text-xl text-white shadow-lg shadow-[#800000]/15">
                         <GroupIcon />
@@ -299,7 +345,7 @@ function LandingPage() {
                         </div>
                       ))}
                     </div>
-                  </article>
+                  </Reveal>
                 );
               })}
             </div>
@@ -308,20 +354,20 @@ function LandingPage() {
 
         <section className="bg-[#710808] py-16 text-white sm:py-20">
           <div className="mx-auto max-w-7xl px-5 lg:px-8">
-            <div className="mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <Reveal className="mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
               <div>
                 <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#f1cb63]">AIMS at a glance</p>
                 <h2 className="mt-3 text-3xl font-black tracking-tight">Internship impact, visible in real time.</h2>
               </div>
               <p className="max-w-lg text-sm leading-6 text-white/65">Live totals are sourced from the AIMS records maintained by the university internship community.</p>
-            </div>
+            </Reveal>
             <div className="grid gap-px overflow-hidden rounded-3xl border border-white/10 bg-white/10 sm:grid-cols-2 lg:grid-cols-4">
-              {stats.map(({ label, value, icon: Icon }) => (
-                <div key={label} className="bg-[#710808] p-7 sm:p-8">
+              {stats.map(({ label, value, icon: Icon }, index) => (
+                <Reveal key={label} delay={index * 90} className="landing-stat-card bg-[#710808] p-7 sm:p-8">
                   <Icon className="text-2xl text-[#f1cb63]" />
                   <p className="mt-6 text-4xl font-black tabular-nums">{Number(value).toLocaleString()}</p>
                   <p className="mt-2 text-sm font-semibold text-white/65">{label}</p>
-                </div>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -329,16 +375,16 @@ function LandingPage() {
 
         <section id="announcements" className="scroll-mt-24 bg-white py-20 sm:py-24">
           <div className="mx-auto max-w-7xl px-5 lg:px-8">
-            <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+            <Reveal className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
               <div>
                 <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-[#a8750b]">Announcements</p>
                 <h2 className="mt-4 text-3xl font-black tracking-tight text-[#430909] sm:text-4xl">Stay informed and internship-ready.</h2>
               </div>
               <Link to="/login" className="inline-flex items-center gap-2 text-sm font-extrabold text-[#800000]">View your portal <FiArrowRight /></Link>
-            </div>
+            </Reveal>
             <div className="mt-10 grid gap-5 lg:grid-cols-3">
               {announcements.slice(0, 3).map((announcement, index) => (
-                <article key={announcement.id} className="rounded-3xl border border-slate-100 bg-[#fbfaf8] p-7 transition hover:border-[#800000]/15 hover:shadow-lg">
+                <Reveal as="article" key={announcement.id} delay={index * 100} className="rounded-3xl border border-slate-100 bg-[#fbfaf8] p-7 transition-[transform,box-shadow,border-color] duration-500 hover:-translate-y-1 hover:border-[#800000]/15 hover:shadow-lg">
                   <div className="flex items-center justify-between gap-4">
                     <span className="rounded-full bg-[#800000]/8 px-3 py-1 text-xs font-extrabold text-[#800000]">
                       {index === 0 ? 'Internship Advisory' : index === 1 ? 'University Update' : 'Upcoming Activity'}
@@ -352,14 +398,14 @@ function LandingPage() {
                       ? new Date(announcement.published_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
                       : 'Details available in AIMS'}
                   </p>
-                </article>
+                </Reveal>
               ))}
             </div>
           </div>
         </section>
 
         <section className="bg-[#f6f1ea] px-5 py-12 sm:py-16">
-          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-7 rounded-[2rem] bg-[#430909] px-7 py-10 text-center text-white shadow-2xl shadow-[#430909]/15 sm:px-12 lg:flex-row lg:text-left">
+          <Reveal className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-7 rounded-[2rem] bg-[#430909] px-7 py-10 text-center text-white shadow-2xl shadow-[#430909]/15 sm:px-12 lg:flex-row lg:text-left">
             <div>
               <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#eac557]">Start your internship journey</p>
               <h2 className="mt-3 text-2xl font-black sm:text-3xl">Ready to connect with AIMS?</h2>
@@ -369,7 +415,7 @@ function LandingPage() {
               <Link to="/register" className="rounded-xl bg-[#d4af37] px-6 py-3.5 text-sm font-black text-[#3b0808] transition hover:bg-[#e4c45f]">Register as Student</Link>
               <Link to="/login" className="rounded-xl border border-white/20 px-6 py-3.5 text-sm font-black text-white transition hover:bg-white/10">Login</Link>
             </div>
-          </div>
+          </Reveal>
         </section>
       </main>
 

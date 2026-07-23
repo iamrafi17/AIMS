@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\OjtEnrollment;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -110,8 +111,26 @@ class AuthController extends Controller
         ]);
 
         [$user, $student] = DB::transaction(function () use ($request) {
+            $enrollment = OjtEnrollment::where('school_id', $request->student_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $enrollment) {
+                throw ValidationException::withMessages([
+                    'student_id' => ['Your School ID is not included in the coordinator OJT enrollment list.'],
+                ]);
+            }
+
+            if ($enrollment->registered_at || $enrollment->student_record_id) {
+                throw ValidationException::withMessages([
+                    'student_id' => ['An account has already been registered for this School ID.'],
+                ]);
+            }
+
+            [$firstName, $lastName] = $this->splitEnrollmentName($enrollment->full_name);
+
             $user = User::create([
-                'name' => $request->first_name.' '.$request->last_name,
+                'name' => $enrollment->full_name,
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
                 'role' => 'student',
@@ -120,8 +139,8 @@ class AuthController extends Controller
             $student = Student::create([
                 'user_id' => $user->id,
                 'student_id' => $request->student_id,
-                'first_name' => $request->first_name,
-                'last_name' => $request->last_name,
+                'first_name' => $firstName,
+                'last_name' => $lastName,
                 'middle_name' => $request->middle_name,
                 'gender' => $request->gender,
                 'birth_date' => $request->birth_date,
@@ -130,7 +149,7 @@ class AuthController extends Controller
                 'college_id' => $request->college_id,
                 'program_id' => $request->program_id,
                 'year_level' => $request->year_level,
-                'section' => $request->section,
+                'section' => $enrollment->section,
                 'parent_name' => $request->parent_name,
                 'parent_relationship' => $request->parent_relationship,
                 'parent_address' => $request->parent_address,
@@ -138,6 +157,11 @@ class AuthController extends Controller
                 'hte_id' => $request->hte_id,
                 'internship_semester' => $request->internship_semester,
                 'internship_year' => $request->internship_year,
+            ]);
+
+            $enrollment->update([
+                'student_record_id' => $student->id,
+                'registered_at' => now(),
             ]);
 
             return [$user, $student];
@@ -156,6 +180,43 @@ class AuthController extends Controller
                 'student_id' => $student->student_id,
             ],
         ], 201);
+    }
+
+    public function enrollment(string $schoolId)
+    {
+        $enrollment = OjtEnrollment::where('school_id', trim($schoolId))->first();
+
+        if (! $enrollment) {
+            return response()->json([
+                'message' => 'School ID was not found in the coordinator OJT enrollment list.',
+            ], 404);
+        }
+
+        if ($enrollment->registered_at || $enrollment->student_record_id) {
+            return response()->json([
+                'message' => 'An account has already been registered for this School ID.',
+            ], 409);
+        }
+
+        [$firstName, $lastName] = $this->splitEnrollmentName($enrollment->full_name);
+
+        return response()->json([
+            'student_id' => $enrollment->school_id,
+            'full_name' => $enrollment->full_name,
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'section' => $enrollment->section,
+        ]);
+    }
+
+    private function splitEnrollmentName(string $fullName): array
+    {
+        $name = preg_replace('/\s+/', ' ', trim($fullName));
+        $parts = explode(' ', $name);
+        $lastName = count($parts) > 1 ? array_pop($parts) : '';
+        $firstName = implode(' ', $parts) ?: $name;
+
+        return [$firstName, $lastName];
     }
 
     public function logout(Request $request)

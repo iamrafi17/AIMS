@@ -17,46 +17,63 @@ class CoordinatorStudentManagementTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_coordinator_can_create_update_review_and_delete_a_student(): void
+    public function test_coordinator_can_update_review_and_delete_a_registered_student(): void
     {
         [$coordinator, $college, $program, $hte] = $this->managementContext();
         Sanctum::actingAs($coordinator);
 
         $payload = $this->studentPayload($college, $program, $hte);
-
-        $created = $this->postJson('/api/coordinator/students', $payload)
-            ->assertCreated()
-            ->assertJsonPath('student.student_id', '2026-1001')
-            ->assertJsonPath('student.user.email', 'intern@example.com')
-            ->assertJsonStructure(['temporary_password'])
-            ->json('student');
-
-        $this->assertNotEmpty($this->postJson('/api/coordinator/students', [])->json('errors'));
+        $student = $this->createStudent($college, $program, $hte);
 
         $payload['first_name'] = 'Updated';
         $payload['email'] = 'updated.intern@example.com';
 
-        $this->putJson('/api/coordinator/students/'.$created['id'], $payload)
+        $this->putJson('/api/coordinator/students/'.$student->id, $payload)
             ->assertOk()
             ->assertJsonPath('student.first_name', 'Updated')
             ->assertJsonPath('student.user.email', 'updated.intern@example.com');
 
-        $this->postJson('/api/coordinator/students/'.$created['id'].'/approve')
+        $this->postJson('/api/coordinator/students/'.$student->id.'/approve')
             ->assertOk();
 
         $this->assertDatabaseHas('students', [
-            'id' => $created['id'],
+            'id' => $student->id,
             'registration_status' => 'approved',
             'internship_status' => 'active',
             'registration_reviewed_by' => $coordinator->id,
         ]);
 
-        $userId = Student::findOrFail($created['id'])->user_id;
-        $this->deleteJson('/api/coordinator/students/'.$created['id'])
+        $userId = $student->user_id;
+        $this->deleteJson('/api/coordinator/students/'.$student->id)
             ->assertOk();
 
-        $this->assertDatabaseMissing('students', ['id' => $created['id']]);
+        $this->assertDatabaseMissing('students', ['id' => $student->id]);
         $this->assertDatabaseMissing('users', ['id' => $userId]);
+    }
+
+    public function test_coordinator_can_manually_add_an_ojt_enrollment_without_credentials(): void
+    {
+        [$coordinator] = $this->managementContext();
+        Sanctum::actingAs($coordinator);
+
+        $this->postJson('/api/coordinator/students', [
+            'full_name' => 'Juan Dela Cruz',
+            'school_id' => '2026-QUICK-01',
+            'section' => 'BSIT 4A',
+        ])->assertCreated()
+            ->assertJsonPath('enrollment.school_id', '2026-QUICK-01')
+            ->assertJsonPath('enrollment.full_name', 'Juan Dela Cruz')
+            ->assertJsonPath('enrollment.section', 'BSIT 4A')
+            ->assertJsonMissingPath('temporary_password');
+
+        $this->assertDatabaseHas('ojt_enrollments', [
+            'school_id' => '2026-QUICK-01',
+            'full_name' => 'Juan Dela Cruz',
+            'section' => 'BSIT 4A',
+            'source' => 'manual',
+        ]);
+        $this->assertDatabaseMissing('students', ['student_id' => '2026-QUICK-01']);
+        $this->assertDatabaseMissing('users', ['name' => 'Juan Dela Cruz']);
     }
 
     public function test_coordinator_can_approve_and_reject_student_requirements(): void
@@ -88,29 +105,29 @@ class CoordinatorStudentManagementTest extends TestCase
         ]);
     }
 
-    public function test_coordinator_can_import_students_from_csv_and_receives_credentials(): void
+    public function test_coordinator_can_import_student_enrollments_without_creating_credentials(): void
     {
         [$coordinator] = $this->managementContext();
         Sanctum::actingAs($coordinator);
 
         $csv = implode("\n", [
-            'student_id,first_name,middle_name,last_name,email,password,gender,birth_date,address,phone,college_code,program_code,year_level,section,parent_name,parent_relationship,parent_address,parent_phone,hte_name,internship_semester,internship_year,registration_status,internship_status',
-            '2026-2001,CSV,,Student,csv.student@example.com,,female,2002-02-02,Santa Cruz,09170000001,CICS,BSIT,4,A,CSV Parent,Parent,Santa Cruz,09170000002,Partner HTE,First Semester,2026-2027,pending,pending',
-            '2026-2002,Bad,,Program,bad.program@example.com,Password123!,male,2002-03-03,Santa Cruz,09170000003,CICS,UNKNOWN,4,A,Bad Parent,Parent,Santa Cruz,09170000004,,First Semester,2026-2027,pending,pending',
+            'school_id,full_name,section',
+            '2026-2001,Maria Santos,BSIT 4A',
+            '2026-2002,Pedro Reyes,BSIT 4B',
+            '2026-2001,Duplicate Student,BSIT 4C',
         ]);
 
         $this->post('/api/coordinator/students/import', [
             'file' => UploadedFile::fake()->createWithContent('students.csv', $csv),
         ], ['Accept' => 'application/json'])
             ->assertOk()
-            ->assertJsonPath('imported', 1)
+            ->assertJsonPath('imported', 2)
             ->assertJsonPath('failed', 1)
-            ->assertJsonPath('credentials.0.student_id', '2026-2001')
-            ->assertJsonPath('credentials.0.email', 'csv.student@example.com')
-            ->assertJsonStructure(['credentials' => [['temporary_password']]]);
+            ->assertJsonMissingPath('credentials');
 
-        $this->assertDatabaseHas('students', ['student_id' => '2026-2001']);
-        $this->assertDatabaseMissing('students', ['student_id' => '2026-2002']);
+        $this->assertDatabaseHas('ojt_enrollments', ['school_id' => '2026-2001', 'source' => 'csv']);
+        $this->assertDatabaseHas('ojt_enrollments', ['school_id' => '2026-2002', 'source' => 'csv']);
+        $this->assertDatabaseMissing('students', ['student_id' => '2026-2001']);
     }
 
     private function managementContext(): array

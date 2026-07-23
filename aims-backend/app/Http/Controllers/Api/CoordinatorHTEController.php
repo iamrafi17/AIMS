@@ -1,0 +1,273 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\College;
+use App\Models\Holiday;
+use App\Models\HTE;
+use App\Models\MOA;
+use App\Models\Student;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+
+class CoordinatorHTEController extends Controller
+{
+    public function index()
+    {
+        $htes = HTE::with(['students.program', 'students.college', 'moas.college', 'moas.approver'])
+            ->withCount('students')
+            ->orderBy('name')
+            ->get();
+        $moas = MOA::with(['hte', 'college', 'approver'])->latest('expiration_date')->get();
+        $today = now()->startOfDay();
+        $validMoas = $moas->filter(fn (MOA $moa) => $moa->status === 'approved' && $moa->expiration_date->gte($today));
+
+        return response()->json([
+            'htes' => $htes->map(fn (HTE $hte) => $this->htePayload($hte)),
+            'deployments' => Student::with(['user', 'college', 'program', 'hte'])
+                ->where('registration_status', 'approved')
+                ->orderBy('last_name')
+                ->get(),
+            'holidays' => Holiday::orderByDesc('date')->get(),
+            'moas' => $moas->map(fn (MOA $moa) => $this->moaPayload($moa)),
+            'colleges' => College::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
+            'summary' => [
+                'total_htes' => $htes->count(),
+                'active_htes' => $htes->where('is_active', true)->count(),
+                'deployed_students' => $htes->sum('students_count'),
+                'geofenced_htes' => $htes->where('geofence_enabled', true)->count(),
+                'valid_moas' => $validMoas->count(),
+                'expiring_moas' => $validMoas->filter(fn (MOA $moa) => $moa->expiration_date->lte($today->copy()->addDays(60)))->count(),
+            ],
+            'expiration_alerts' => $moas
+                ->filter(fn (MOA $moa) => $moa->status === 'approved' && $moa->expiration_date->lte($today->copy()->addDays(60)))
+                ->map(fn (MOA $moa) => $this->moaAlert($moa, $today))
+                ->sortBy('days_remaining')
+                ->values(),
+        ]);
+    }
+
+    public function show(HTE $hte)
+    {
+        return response()->json($this->htePayload(
+            $hte->load(['students.user', 'students.program', 'students.college', 'moas.college', 'moas.approver'])
+        ));
+    }
+
+    public function store(Request $request)
+    {
+        $hte = HTE::create($request->validate($this->hteRules()));
+
+        return response()->json([
+            'message' => 'HTE record created successfully.',
+            'hte' => $this->htePayload($hte->load(['students.program', 'students.college', 'moas.college'])),
+        ], 201);
+    }
+
+    public function update(Request $request, HTE $hte)
+    {
+        $hte->update($request->validate($this->hteRules($hte)));
+
+        return response()->json([
+            'message' => 'HTE record updated successfully.',
+            'hte' => $this->htePayload($hte->fresh()->load(['students.program', 'students.college', 'moas.college'])),
+        ]);
+    }
+
+    public function destroy(HTE $hte)
+    {
+        if ($hte->students()->exists()) {
+            throw ValidationException::withMessages(['hte' => 'Reassign or undeploy all students before deleting this HTE.']);
+        }
+
+        $paths = $hte->moas()->pluck('file_path')->filter();
+        $hte->delete();
+        $paths->each(fn (string $path) => Storage::disk('public')->delete($path));
+
+        return response()->json(['message' => 'HTE record deleted successfully.']);
+    }
+
+    public function deploy(Request $request, Student $student)
+    {
+        $validated = $request->validate([
+            'hte_id' => ['nullable', 'exists:htes,id'],
+            'ojt_start_date' => ['nullable', 'date'],
+            'ojt_end_date' => ['nullable', 'date', 'after_or_equal:ojt_start_date'],
+            'required_ojt_hours' => ['required', 'numeric', 'between:1,2000'],
+            'official_am_start' => ['required', 'date_format:H:i'],
+            'official_am_end' => ['required', 'date_format:H:i', 'after:official_am_start'],
+            'official_pm_start' => ['required', 'date_format:H:i'],
+            'official_pm_end' => ['required', 'date_format:H:i', 'after:official_pm_start'],
+            'work_days' => ['required', 'array', 'min:1'],
+            'work_days.*' => ['required', Rule::in($this->weekdays())],
+            'internship_status' => ['required', 'in:pending,active,completed,dropped'],
+            'allow_past_attendance' => ['required', 'boolean'],
+        ]);
+
+        $student->update($validated);
+
+        return response()->json([
+            'message' => $validated['hte_id'] ? 'Student deployment and schedule updated.' : 'Student undeployed successfully.',
+            'student' => $student->fresh()->load(['user', 'college', 'program', 'hte']),
+        ]);
+    }
+
+    public function storeHoliday(Request $request)
+    {
+        $holiday = Holiday::create($request->validate($this->holidayRules()));
+
+        return response()->json(['message' => 'Holiday added successfully.', 'holiday' => $holiday], 201);
+    }
+
+    public function updateHoliday(Request $request, Holiday $holiday)
+    {
+        $holiday->update($request->validate($this->holidayRules()));
+
+        return response()->json(['message' => 'Holiday updated successfully.', 'holiday' => $holiday->fresh()]);
+    }
+
+    public function destroyHoliday(Holiday $holiday)
+    {
+        $holiday->delete();
+
+        return response()->json(['message' => 'Holiday deleted successfully.']);
+    }
+
+    public function storeMoa(Request $request)
+    {
+        $validated = $request->validate([
+            'hte_id' => ['required', 'exists:htes,id'],
+            'college_id' => ['required', 'exists:colleges,id'],
+            'effective_date' => ['required', 'date'],
+            'expiration_date' => ['required', 'date', 'after:effective_date'],
+            'file' => ['required', 'file', 'mimes:pdf', 'max:10240'],
+        ]);
+        $path = $request->file('file')->store('moas', 'public');
+
+        $moa = MOA::create([
+            ...collect($validated)->except('file')->all(),
+            'file_path' => $path,
+            'status' => 'pending',
+        ]);
+
+        return response()->json([
+            'message' => 'MOA uploaded and submitted for approval.',
+            'moa' => $this->moaPayload($moa->load(['hte', 'college', 'approver'])),
+        ], 201);
+    }
+
+    public function updateMoa(Request $request, MOA $moa)
+    {
+        $validated = $request->validate([
+            'college_id' => ['required', 'exists:colleges,id'],
+            'effective_date' => ['required', 'date'],
+            'expiration_date' => ['required', 'date', 'after:effective_date'],
+        ]);
+        $moa->update([
+            ...$validated,
+            'status' => 'pending',
+            'approved_by' => null,
+            'approved_at' => null,
+        ]);
+
+        return response()->json([
+            'message' => 'MOA details updated and returned to pending approval.',
+            'moa' => $this->moaPayload($moa->fresh()->load(['hte', 'college', 'approver'])),
+        ]);
+    }
+
+    public function downloadMoa(MOA $moa)
+    {
+        if (! Storage::disk('public')->exists($moa->file_path)) {
+            return response()->json(['message' => 'MOA file not found.'], 404);
+        }
+
+        return Storage::disk('public')->download($moa->file_path);
+    }
+
+    public function destroyMoa(MOA $moa)
+    {
+        Storage::disk('public')->delete($moa->file_path);
+        $moa->delete();
+
+        return response()->json(['message' => 'MOA record deleted successfully.']);
+    }
+
+    private function hteRules(?HTE $hte = null): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:255', Rule::unique('htes', 'name')->ignore($hte?->id)],
+            'address' => ['required', 'string', 'max:1000'],
+            'contact_person' => ['required', 'string', 'max:255'],
+            'contact_email' => ['required', 'email', 'max:255'],
+            'contact_phone' => ['required', 'string', 'max:20'],
+            'latitude' => ['nullable', 'required_if:geofence_enabled,true', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'required_if:geofence_enabled,true', 'numeric', 'between:-180,180'],
+            'geofence_radius' => ['required', 'integer', 'between:10,10000'],
+            'geofence_enabled' => ['required', 'boolean'],
+            'default_am_start' => ['required', 'date_format:H:i'],
+            'default_am_end' => ['required', 'date_format:H:i', 'after:default_am_start'],
+            'default_pm_start' => ['required', 'date_format:H:i'],
+            'default_pm_end' => ['required', 'date_format:H:i', 'after:default_pm_start'],
+            'work_days' => ['required', 'array', 'min:1'],
+            'work_days.*' => ['required', Rule::in($this->weekdays())],
+            'is_active' => ['required', 'boolean'],
+        ];
+    }
+
+    private function holidayRules(): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:255'],
+            'date' => ['required', 'date'],
+            'description' => ['nullable', 'string', 'max:1000'],
+            'is_recurring' => ['required', 'boolean'],
+        ];
+    }
+
+    private function weekdays(): array
+    {
+        return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    }
+
+    private function htePayload(HTE $hte): array
+    {
+        $moas = $hte->relationLoaded('moas') ? $hte->moas : collect();
+        $students = $hte->relationLoaded('students') ? $hte->students : collect();
+
+        return [
+            ...$hte->toArray(),
+            'students_count' => $hte->students_count ?? $students->count(),
+            'active_students_count' => $students->where('internship_status', 'active')->count(),
+            'valid_moa_count' => $moas->filter(fn (MOA $moa) => $moa->status === 'approved' && $moa->expiration_date->gte(now()->startOfDay()))->count(),
+        ];
+    }
+
+    private function moaPayload(MOA $moa): array
+    {
+        $expired = $moa->expiration_date->lt(now()->startOfDay());
+
+        return [
+            ...$moa->toArray(),
+            'computed_status' => $expired ? 'expired' : $moa->status,
+            'days_remaining' => (int) now()->startOfDay()->diffInDays($moa->expiration_date, false),
+        ];
+    }
+
+    private function moaAlert(MOA $moa, $today): array
+    {
+        $days = (int) $today->diffInDays($moa->expiration_date, false);
+
+        return [
+            'id' => $moa->id,
+            'hte' => $moa->hte?->name,
+            'college' => $moa->college?->code,
+            'expiration_date' => $moa->expiration_date->toDateString(),
+            'days_remaining' => $days,
+            'level' => $days < 0 ? 'expired' : ($days <= 30 ? 'critical' : 'warning'),
+        ];
+    }
+}

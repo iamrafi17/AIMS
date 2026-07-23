@@ -55,6 +55,8 @@ function StepHeader({ eyebrow, title, description }) {
 function RegisterPage() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [enrollmentLoading, setEnrollmentLoading] = useState(false);
+  const [enrollmentVerified, setEnrollmentVerified] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [colleges, setColleges] = useState([]);
@@ -70,6 +72,7 @@ function RegisterPage() {
 
   const [formData, setFormData] = useState({
     student_id: '',
+    full_name: '',
     first_name: '',
     last_name: '',
     gender: '',
@@ -125,12 +128,44 @@ function RegisterPage() {
     setFormData((current) => ({
       ...current,
       ...(name === 'college_id' ? { program_id: '', hte_id: '' } : {}),
+      ...(name === 'student_id' ? { full_name: '', first_name: '', last_name: '', section: '' } : {}),
       [name]: type === 'checkbox' ? checked : value,
     }));
+    if (name === 'student_id') setEnrollmentVerified(false);
+  };
+
+  const verifyEnrollment = async () => {
+    const schoolId = formData.student_id.trim();
+    if (!schoolId) return toast.error('Enter your School ID first.');
+
+    setEnrollmentLoading(true);
+    setEnrollmentVerified(false);
+    try {
+      const response = await api.get(`/registration/enrollment/${encodeURIComponent(schoolId)}`);
+      setFormData((current) => ({
+        ...current,
+        student_id: response.data.student_id,
+        full_name: response.data.full_name,
+        first_name: response.data.first_name,
+        last_name: response.data.last_name,
+        section: response.data.section,
+      }));
+      setEnrollmentVerified(true);
+      toast.success('OJT enrollment verified.');
+    } catch (error) {
+      setFormData((current) => ({ ...current, full_name: '', first_name: '', last_name: '', section: '' }));
+      toast.error(error.response?.data?.message || 'School ID was not found in the OJT enrollment list.');
+    } finally {
+      setEnrollmentLoading(false);
+    }
   };
 
   const nextStep = (event) => {
     event.preventDefault();
+    if (step === 1 && !enrollmentVerified) {
+      toast.error('Verify your School ID before continuing.');
+      return;
+    }
     setStep((current) => Math.min(current + 1, steps.length));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -174,17 +209,19 @@ function RegisterPage() {
           <>
             <StepHeader eyebrow="Step 1 of 6" title="Personal information" description="Use the same information that appears in your official university records." />
             <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Student ID Number">
-                <input name="student_id" value={formData.student_id} onChange={handleChange} required className={inputClass} placeholder="e.g. 2026-0001" autoComplete="username" />
+              <Field label="School ID">
+                <div className="flex gap-2">
+                  <input name="student_id" value={formData.student_id} onChange={handleChange} required className={inputClass} placeholder="e.g. 2026-0001" autoComplete="username" />
+                  <button type="button" onClick={verifyEnrollment} disabled={enrollmentLoading} className="shrink-0 rounded-xl bg-[#800000] px-4 text-xs font-extrabold text-white disabled:opacity-55">
+                    {enrollmentLoading ? 'Checking...' : 'Verify'}
+                  </button>
+                </div>
               </Field>
               <Field label="Email Address">
                 <input type="email" name="email" value={formData.email} onChange={handleChange} required className={inputClass} placeholder="student@marsu.edu.ph" autoComplete="email" />
               </Field>
-              <Field label="Last Name">
-                <input name="last_name" value={formData.last_name} onChange={handleChange} required className={inputClass} placeholder="Your family name" autoComplete="family-name" />
-              </Field>
-              <Field label="First Name">
-                <input name="first_name" value={formData.first_name} onChange={handleChange} required className={inputClass} placeholder="Your given name" autoComplete="given-name" />
+              <Field label="Full Name" hint="Provided by your coordinator" className="sm:col-span-2">
+                <input value={formData.full_name} readOnly required className={inputClass} placeholder="Verify your School ID to load your name" />
               </Field>
               <Field label="Gender">
                 <select name="gender" value={formData.gender} onChange={handleChange} required className={inputClass}>
@@ -230,7 +267,7 @@ function RegisterPage() {
                 </select>
               </Field>
               <Field label="Section">
-                <input name="section" value={formData.section} onChange={handleChange} required className={inputClass} placeholder="e.g. A" />
+                <input name="section" value={formData.section} readOnly required className={inputClass} placeholder="Loaded from your OJT enrollment" />
               </Field>
             </div>
           </>

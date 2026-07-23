@@ -19,7 +19,7 @@ import toast from 'react-hot-toast';
 import api from '../../services/api';
 
 const emptyForm = {
-  student_id: '', first_name: '', middle_name: '', last_name: '', email: '', password: '', gender: 'female', birth_date: '', address: '', phone: '',
+  student_name: '', student_id: '', first_name: '', middle_name: '', last_name: '', email: '', password: '', gender: 'female', birth_date: '', address: '', phone: '',
   college_id: '', program_id: '', year_level: 4, section: '', parent_name: '', parent_relationship: 'Parent', parent_address: '', parent_phone: '', hte_id: '',
   internship_semester: '', internship_year: '', registration_status: 'pending', internship_status: 'pending', consent_status: 'pending', schedule_status: 'pending',
   ojt_start_date: '', ojt_end_date: '', required_ojt_hours: 486, allow_past_attendance: false,
@@ -28,6 +28,7 @@ const emptyForm = {
 const badge = {
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300', approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
   active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300', completed: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+  registered: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
   rejected: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300', dropped: 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-gray-300',
 };
 
@@ -61,6 +62,8 @@ function Progress({ value, color = 'bg-[#800000]' }) {
 
 function StudentManagement() {
   const [students, setStudents] = useState([]);
+  const [enrollments, setEnrollments] = useState([]);
+  const [enrollmentSummary, setEnrollmentSummary] = useState({});
   const [summary, setSummary] = useState({});
   const [options, setOptions] = useState({ colleges: [], htes: [] });
   const [loading, setLoading] = useState(true);
@@ -88,8 +91,19 @@ function StudentManagement() {
     } catch (error) { toast.error(error.response?.data?.message || 'Unable to load students.'); } finally { setLoading(false); }
   }, [internshipStatus, page, search, status]);
 
+  const fetchEnrollments = useCallback(async () => {
+    try {
+      const response = await api.get('/coordinator/students/enrollments', { params: { search } });
+      setEnrollments(response.data.data || []);
+      setEnrollmentSummary(response.data.summary || {});
+    } catch (error) {
+      toast.error(errorMessage(error, 'Unable to load the OJT enrollment list.'));
+    }
+  }, [search]);
+
   useEffect(() => { api.get('/coordinator/students/options').then((response) => setOptions(response.data)).catch(() => toast.error('Unable to load form options.')); }, []);
   useEffect(() => { const timer = window.setTimeout(fetchStudents, 250); return () => window.clearTimeout(timer); }, [fetchStudents]);
+  useEffect(() => { const timer = window.setTimeout(fetchEnrollments, 250); return () => window.clearTimeout(timer); }, [fetchEnrollments]);
   useEffect(() => { setPage(1); }, [search, status, internshipStatus]);
 
   const programs = useMemo(() => options.colleges?.find((college) => String(college.id) === String(form.college_id))?.programs || [], [options, form.college_id]);
@@ -117,12 +131,17 @@ function StudentManagement() {
   const saveStudent = async (event) => {
     event.preventDefault(); setBusy(true);
     try {
-      const payload = { ...form, college_id: Number(form.college_id), program_id: Number(form.program_id), hte_id: form.hte_id ? Number(form.hte_id) : null, year_level: Number(form.year_level), required_ojt_hours: Number(form.required_ojt_hours), allow_past_attendance: Boolean(form.allow_past_attendance) };
+      const payload = editor.mode === 'create'
+        ? { full_name: form.student_name.trim(), school_id: form.student_id.trim(), section: form.section.trim() }
+        : { ...form, college_id: Number(form.college_id), program_id: Number(form.program_id), hte_id: form.hte_id ? Number(form.hte_id) : null, year_level: Number(form.year_level), required_ojt_hours: Number(form.required_ojt_hours), allow_past_attendance: Boolean(form.allow_past_attendance) };
       if (!payload.password) delete payload.password;
-      const response = editor.mode === 'create' ? await api.post('/coordinator/students', payload) : await api.put(`/coordinator/students/${editor.student.id}`, payload);
+      const response = editor.mode === 'create'
+        ? await api.post('/coordinator/students', payload)
+        : await api.put(`/coordinator/students/${editor.student.id}`, payload);
       toast.success(response.data.message);
-      if (response.data.temporary_password) toast(`Temporary password: ${response.data.temporary_password}`, { icon: '🔑', duration: 12000 });
-      setEditor(null); fetchStudents();
+      setEditor(null);
+      if (editor.mode === 'create') fetchEnrollments();
+      else fetchStudents();
     } catch (error) { toast.error(errorMessage(error, 'Unable to save student.')); } finally { setBusy(false); }
   };
 
@@ -156,28 +175,50 @@ function StudentManagement() {
   const importCsv = async () => {
     if (!importFile) return toast.error('Choose a CSV file first.');
     const payload = new FormData(); payload.append('file', importFile); setBusy(true);
-    try { const response = await api.post('/coordinator/students/import', payload, { headers: { 'Content-Type': 'multipart/form-data' } }); setImportResult(response.data); toast.success(response.data.message); fetchStudents(); } catch (error) { toast.error(errorMessage(error, 'CSV import failed.')); } finally { setBusy(false); }
+    try { const response = await api.post('/coordinator/students/import', payload, { headers: { 'Content-Type': 'multipart/form-data' } }); setImportResult(response.data); toast.success(response.data.message); fetchEnrollments(); } catch (error) { toast.error(errorMessage(error, 'CSV enrollment import failed.')); } finally { setBusy(false); }
   };
 
   const downloadTemplate = () => {
-    const headers = 'student_id,first_name,middle_name,last_name,email,password,gender,birth_date,address,phone,college_code,program_code,year_level,section,parent_name,parent_relationship,parent_address,parent_phone,hte_name,internship_semester,internship_year,registration_status,internship_status\n';
-    const sample = '2026-0002,Juan,,Dela Cruz,juan.delacruz@example.com,ChangeMe123!,male,2002-01-01,"Santa Cruz, Marinduque",09170000000,CICS,BSIT,4,A,Parent Name,Parent,"Santa Cruz, Marinduque",09180000000,Tech Solutions Inc.,First Semester,2026-2027,pending,pending\n';
+    const headers = 'school_id,full_name,section\n';
+    const sample = '2026-0002,Juan Dela Cruz,BSIT 4A\n';
     const url = URL.createObjectURL(new Blob([headers + sample], { type: 'text/csv' })); const link = document.createElement('a'); link.href = url; link.download = 'aims-student-import-template.csv'; link.click(); URL.revokeObjectURL(url);
   };
 
-  const downloadCredentials = () => {
-    const quote = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
-    const rows = importResult.credentials.map((credential) => [credential.student_id, credential.email, credential.temporary_password].map(quote).join(','));
-    const url = URL.createObjectURL(new Blob([`student_id,email,temporary_password\n${rows.join('\n')}\n`], { type: 'text/csv' }));
-    const link = document.createElement('a'); link.href = url; link.download = 'aims-imported-student-credentials.csv'; link.click(); URL.revokeObjectURL(url);
-  };
-
   return <div className="space-y-6">
-    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Coordinator Portal</p><h1 className="mt-1 text-2xl font-black text-[#430909] dark:text-white">Student Management</h1><p className="mt-1 text-sm text-slate-400">Records, approvals, requirements, and internship progress</p></div><div className="flex gap-2"><button onClick={() => { setImportOpen(true); setImportResult(null); setImportFile(null); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-[#800000] dark:border-gray-700 dark:bg-gray-800 dark:text-rose-300"><FiUpload /> Import CSV</button><button onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-4 py-2.5 text-xs font-black text-white"><FiPlus /> Create Student</button></div></div>
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Coordinator Portal</p><h1 className="mt-1 text-2xl font-black text-[#430909] dark:text-white">Student Management</h1><p className="mt-1 text-sm text-slate-400">Records, approvals, requirements, and internship progress</p></div><div className="flex gap-2"><button onClick={() => { setImportOpen(true); setImportResult(null); setImportFile(null); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-[#800000] dark:border-gray-700 dark:bg-gray-800 dark:text-rose-300"><FiUpload /> Import CSV</button><button onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-4 py-2.5 text-xs font-black text-white"><FiPlus /> Add Manually</button></div></div>
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{[
       ['Total Students', summary.total, FiUsers, 'text-[#800000]'], ['Pending Review', summary.pending, FiFileText, 'text-amber-600'], ['Approved', summary.approved, FiCheck, 'text-emerald-600'], ['Rejected', summary.rejected, FiX, 'text-rose-600'], ['Active Interns', summary.active, FiUserCheck, 'text-blue-600'],
     ].map(([label, value, Icon, color]) => <div key={label} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 dark:bg-gray-700"><Icon className={color} /></div><div><p className="text-2xl font-black text-[#430909] dark:text-white">{value || 0}</p><p className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">{label}</p></div></div></div>)}</div>
+
+    <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-gray-700">
+        <div>
+          <h2 className="font-black text-[#430909] dark:text-white">OJT Enrollment List</h2>
+          <p className="mt-1 text-xs text-slate-400">Students uploaded through CSV or added manually. They create their own account during registration.</p>
+        </div>
+        <div className="flex gap-2 text-[10px] font-black uppercase">
+          <span className="rounded-full bg-amber-100 px-3 py-1.5 text-amber-700 dark:bg-amber-950 dark:text-amber-300">{enrollmentSummary.awaiting_registration || 0} awaiting registration</span>
+          <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{enrollmentSummary.registered || 0} registered</span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-left">
+          <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-gray-900">
+            <tr><th className="px-5 py-3">School ID</th><th className="px-4 py-3">Full Name</th><th className="px-4 py-3">Section</th><th className="px-4 py-3">Added Through</th><th className="px-5 py-3">Registration</th></tr>
+          </thead>
+          <tbody>
+            {enrollments.length ? enrollments.map((enrollment) => <tr key={enrollment.id} className="border-t border-slate-100 dark:border-gray-700">
+              <td className="px-5 py-3 text-xs font-black text-slate-700 dark:text-gray-200">{enrollment.school_id}</td>
+              <td className="px-4 py-3 text-sm font-bold text-slate-800 dark:text-white">{enrollment.full_name}</td>
+              <td className="px-4 py-3 text-xs font-bold text-slate-600 dark:text-gray-300">{enrollment.section}</td>
+              <td className="px-4 py-3"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase text-slate-500 dark:bg-gray-700 dark:text-gray-300">{enrollment.source}</span></td>
+              <td className="px-5 py-3"><StatusBadge value={enrollment.registered_at ? 'registered' : 'pending'} /></td>
+            </tr>) : <tr><td colSpan="5" className="py-12 text-center text-sm text-slate-400">No students have been added to the OJT enrollment list.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </section>
 
     <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800"><div className="grid gap-3 lg:grid-cols-[1fr_180px_180px]"><label className="relative"><FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, student ID, or email..." className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none dark:border-gray-600 dark:bg-gray-900" /></label><select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-xl border border-slate-200 px-3 text-sm dark:border-gray-600 dark:bg-gray-900"><option value="">All registrations</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select><select value={internshipStatus} onChange={(event) => setInternshipStatus(event.target.value)} className="rounded-xl border border-slate-200 px-3 text-sm dark:border-gray-600 dark:bg-gray-900"><option value="">All internships</option><option value="pending">Pending</option><option value="active">Active</option><option value="completed">Completed</option><option value="dropped">Dropped</option></select></div></section>
 
@@ -186,7 +227,24 @@ function StudentManagement() {
       <div className="flex items-center justify-between border-t border-slate-100 px-5 py-4 text-xs dark:border-gray-700"><p className="text-slate-400">{total} record(s) · Page {page} of {lastPage}</p><div className="flex gap-2"><button onClick={() => setPage((current) => Math.max(current - 1, 1))} disabled={page === 1} className="rounded-lg border border-slate-200 p-2 disabled:opacity-30 dark:border-gray-600"><FiChevronLeft /></button><button onClick={() => setPage((current) => Math.min(current + 1, lastPage))} disabled={page === lastPage} className="rounded-lg border border-slate-200 p-2 disabled:opacity-30 dark:border-gray-600"><FiChevronRight /></button></div></div>
     </section>
 
-    {editor && <Modal title={editor.mode === 'create' ? 'Create Student Record' : 'Update Student Record'} subtitle="Complete the three short steps below. No browser zooming needed." onClose={() => setEditor(null)} size="form">
+    {editor?.mode === 'create' && <Modal title="Add Student Manually" subtitle="Add one OJT student who was not included in the CSV file." onClose={() => setEditor(null)}>
+      <form onSubmit={saveStudent}>
+        <div className="space-y-4 p-6">
+          <Input label="Full Name" name="student_name" form={form} setForm={setForm} placeholder="e.g. Juan Dela Cruz" autoFocus required />
+          <Input label="School ID" name="student_id" form={form} setForm={setForm} placeholder="e.g. 2026-1001" required />
+          <Input label="Section" name="section" form={form} setForm={setForm} placeholder="e.g. BSIT 4A" required />
+          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+            This adds the student to the OJT enrollment list. The student will create their own email address and password on the Registration page.
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4 dark:border-gray-700 dark:bg-gray-800">
+          <button type="button" onClick={() => setEditor(null)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold dark:border-gray-600">Cancel</button>
+          <button type="submit" disabled={busy} className="rounded-xl bg-[#800000] px-6 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? 'Adding...' : 'Add Student'}</button>
+        </div>
+      </form>
+    </Modal>}
+
+    {editor?.mode === 'edit' && <Modal title="Update Student Record" subtitle="Complete the three short steps below. No browser zooming needed." onClose={() => setEditor(null)} size="form">
       <form onSubmit={saveStudent}>
         <div className="border-b border-slate-100 bg-slate-50/80 px-5 py-3 dark:border-gray-700 dark:bg-gray-900/50">
           <div className="mx-auto flex max-w-2xl items-center">
@@ -263,7 +321,28 @@ function StudentManagement() {
 
     {selected && <Modal title={`${selected.first_name} ${selected.last_name}`} subtitle={`${selected.student_id} · ${selected.user?.email}`} onClose={() => setSelected(null)} size="wide"><div className="grid gap-6 p-6 lg:grid-cols-3"><div className="space-y-5"><div className="rounded-2xl bg-slate-50 p-5 dark:bg-gray-900"><div className="flex flex-wrap gap-2"><StatusBadge value={selected.registration_status} /><StatusBadge value={selected.internship_status} /></div>{selected.registration_feedback && <p className="mt-3 text-xs leading-5 text-rose-600">Review feedback: {selected.registration_feedback}</p>}{selected.registration_status === 'pending' && <div className="mt-4 grid grid-cols-2 gap-2"><button onClick={() => decideRegistration(selected, 'approve')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white">Approve</button><button onClick={() => decideRegistration(selected, 'reject')} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-black text-white">Reject</button></div>}</div><div><div className="mb-2 flex justify-between text-xs"><span>OJT Progress</span><b>{selected.progress?.percent || 0}%</b></div><Progress value={selected.progress?.percent} /><p className="mt-2 text-xs text-slate-400">{selected.progress?.rendered_hours || 0} / {selected.progress?.required_hours || 486} hours · {selected.progress?.attendance_days || 0} attendance days</p></div><div><div className="mb-2 flex justify-between text-xs"><span>Requirements</span><b>{selected.progress?.requirements_percent || 0}%</b></div><Progress value={selected.progress?.requirements_percent} color="bg-blue-500" /><p className="mt-2 text-xs text-slate-400">{selected.progress?.requirements_approved || 0} of {selected.progress?.requirements_total || 0} approved</p></div><button onClick={() => openEdit(selected)} className="w-full rounded-xl border border-slate-200 py-3 text-sm font-black text-[#800000] dark:border-gray-600 dark:text-rose-300">Edit Student Record</button></div><div className="lg:col-span-2"><div className="mb-4 flex items-center justify-between"><h3 className="font-black text-[#430909] dark:text-white">Student Requirements</h3><span className="text-xs text-slate-400">{selected.requirements?.length || 0} record(s)</span></div>{selected.requirements?.length ? <div className="space-y-3">{selected.requirements.map((requirement) => <div key={requirement.id} className="rounded-2xl border border-slate-200 p-4 dark:border-gray-700"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-black text-slate-800 dark:text-white">{requirement.requirement_name}</p><p className="mt-1 text-[11px] text-slate-400">{requirement.file_type?.toUpperCase()} · Submitted {new Date(requirement.created_at).toLocaleDateString()}</p>{requirement.feedback && <p className="mt-2 text-xs text-rose-600">Feedback: {requirement.feedback}</p>}</div><StatusBadge value={requirement.status} /></div><div className="mt-4 flex flex-wrap gap-2"><button onClick={() => downloadRequirement(requirement)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold dark:border-gray-600"><FiDownload /> Download</button><button onClick={() => reviewRequirement(requirement, 'approved')} disabled={busy} className="rounded-lg bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-700">Approve</button><button onClick={() => reviewRequirement(requirement, 'rejected')} disabled={busy} className="rounded-lg bg-rose-100 px-3 py-2 text-xs font-black text-rose-700">Reject</button></div></div>)}</div> : <div className="rounded-2xl border border-dashed border-slate-300 py-12 text-center text-sm text-slate-400 dark:border-gray-600">No requirements submitted.</div>}</div></div></Modal>}
 
-    {importOpen && <Modal title="Import Students via CSV" subtitle="Create multiple student records and login accounts in one upload." onClose={() => setImportOpen(false)}><div className="p-6"><button onClick={downloadTemplate} className="inline-flex items-center gap-2 text-xs font-black text-[#800000] dark:text-rose-300"><FiDownload /> Download CSV Template</button><button onClick={() => importInput.current?.click()} className="mt-5 flex w-full flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center hover:border-[#800000]/40 dark:border-gray-600"><FiUpload className="text-3xl text-[#800000] dark:text-rose-300" /><p className="mt-3 text-sm font-black">{importFile?.name || 'Choose a CSV file'}</p><p className="mt-1 text-xs text-slate-400">Maximum file size: 5 MB</p></button><input ref={importInput} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => { setImportFile(event.target.files?.[0] || null); setImportResult(null); }} />{importResult && <div className="mt-5 rounded-2xl bg-slate-50 p-4 dark:bg-gray-900"><p className="text-sm font-black text-slate-800 dark:text-white">{importResult.message}</p>{importResult.errors?.length > 0 && <div className="mt-3 max-h-36 overflow-y-auto text-xs text-rose-600">{importResult.errors.map((error) => <p key={`${error.row}-${error.student_id}`}>Row {error.row} ({error.student_id || 'unknown'}): {error.message}</p>)}</div>}{importResult.credentials?.length > 0 && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40"><p className="text-xs text-amber-800 dark:text-amber-200">Temporary credentials were generated for {importResult.credentials.length} record(s). Download them before closing this dialog.</p><button onClick={downloadCredentials} className="mt-2 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-xs font-black text-white"><FiDownload /> Download Credentials CSV</button></div>}</div>}<div className="mt-6 flex justify-end gap-3"><button onClick={() => setImportOpen(false)} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold dark:border-gray-600">Close</button><button onClick={importCsv} disabled={busy || !importFile} className="rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? 'Importing...' : 'Import Students'}</button></div></div></Modal>}
+    {importOpen && <Modal title="Enroll Students via CSV" subtitle="Every valid row is added to the OJT enrollment list without creating an account." onClose={() => setImportOpen(false)}>
+      <div className="p-6">
+        <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+          Required CSV columns: <b>school_id</b>, <b>full_name</b>, and <b>section</b>. Older files using <b>student_id</b> and <b>student_name</b> are also accepted. Students already enrolled with the same ID are skipped and reported as errors.
+        </div>
+        <button onClick={downloadTemplate} className="mt-4 inline-flex items-center gap-2 text-xs font-black text-[#800000] dark:text-rose-300"><FiDownload /> Download CSV Template</button>
+        <button onClick={() => importInput.current?.click()} className="mt-5 flex w-full flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center hover:border-[#800000]/40 dark:border-gray-600">
+          <FiUpload className="text-3xl text-[#800000] dark:text-rose-300" />
+          <p className="mt-3 text-sm font-black">{importFile?.name || 'Choose the student CSV file'}</p>
+          <p className="mt-1 text-xs text-slate-400">CSV or TXT, maximum 5 MB</p>
+        </button>
+        <input ref={importInput} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => { setImportFile(event.target.files?.[0] || null); setImportResult(null); }} />
+        {importResult && <div className="mt-5 rounded-2xl bg-slate-50 p-4 dark:bg-gray-900">
+          <p className="text-sm font-black text-slate-800 dark:text-white">{importResult.message}</p>
+          {importResult.errors?.length > 0 && <div className="mt-3 max-h-36 overflow-y-auto text-xs text-rose-600">{importResult.errors.map((error) => <p key={`${error.row}-${error.school_id}`}>Row {error.row} ({error.school_id || 'unknown'}): {error.message}</p>)}</div>}
+        </div>}
+        <div className="mt-6 flex justify-end gap-3">
+          <button onClick={() => setImportOpen(false)} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold dark:border-gray-600">Close</button>
+          <button onClick={importCsv} disabled={busy || !importFile} className="rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? 'Enrolling...' : 'Enroll Students'}</button>
+        </div>
+      </div>
+    </Modal>}
   </div>;
 }
 

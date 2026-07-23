@@ -5,7 +5,9 @@ use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CollegeController;
+use App\Http\Controllers\Api\CoordinatorAttendanceController;
 use App\Http\Controllers\Api\CoordinatorDashboardController;
+use App\Http\Controllers\Api\CoordinatorHTEController;
 use App\Http\Controllers\Api\CoordinatorStudentController;
 use App\Http\Controllers\Api\ProgramHeadDashboardController;
 use App\Http\Controllers\Api\PublicPortalController;
@@ -18,6 +20,7 @@ use Illuminate\Support\Facades\Route;
 // Public Routes
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
+Route::get('/registration/enrollment/{schoolId}', [AuthController::class, 'enrollment']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::get('/portal', [PublicPortalController::class, 'index']);
 
@@ -57,7 +60,27 @@ Route::middleware('auth:sanctum')->group(function () {
     // Coordinator Routes
     Route::middleware('role:coordinator')->prefix('coordinator')->group(function () {
         Route::get('/dashboard', [CoordinatorDashboardController::class, 'index']);
+        Route::get('/attendance', [CoordinatorAttendanceController::class, 'index']);
+        Route::get('/attendance/{attendance}', [CoordinatorAttendanceController::class, 'show']);
+        Route::put('/attendance/{attendance}', [CoordinatorAttendanceController::class, 'update']);
+        Route::delete('/attendance/{attendance}', [CoordinatorAttendanceController::class, 'destroy']);
+        Route::put('/attendance/{attendance}/verify', [CoordinatorAttendanceController::class, 'verify']);
+        Route::post('/attendance/{attendance}/journal-review', [CoordinatorAttendanceController::class, 'reviewJournal']);
+        Route::get('/htes', [CoordinatorHTEController::class, 'index']);
+        Route::post('/htes', [CoordinatorHTEController::class, 'store']);
+        Route::put('/htes/deployments/{student}', [CoordinatorHTEController::class, 'deploy']);
+        Route::post('/htes/holidays', [CoordinatorHTEController::class, 'storeHoliday']);
+        Route::put('/htes/holidays/{holiday}', [CoordinatorHTEController::class, 'updateHoliday']);
+        Route::delete('/htes/holidays/{holiday}', [CoordinatorHTEController::class, 'destroyHoliday']);
+        Route::post('/htes/moas', [CoordinatorHTEController::class, 'storeMoa']);
+        Route::put('/htes/moas/{moa}', [CoordinatorHTEController::class, 'updateMoa']);
+        Route::get('/htes/moas/{moa}/download', [CoordinatorHTEController::class, 'downloadMoa']);
+        Route::delete('/htes/moas/{moa}', [CoordinatorHTEController::class, 'destroyMoa']);
+        Route::get('/htes/{hte}', [CoordinatorHTEController::class, 'show']);
+        Route::put('/htes/{hte}', [CoordinatorHTEController::class, 'update']);
+        Route::delete('/htes/{hte}', [CoordinatorHTEController::class, 'destroy']);
         Route::get('/students/options', [CoordinatorStudentController::class, 'options']);
+        Route::get('/students/enrollments', [CoordinatorStudentController::class, 'enrollments']);
         Route::post('/students/import', [CoordinatorStudentController::class, 'importCsv']);
         Route::apiResource('students', CoordinatorStudentController::class);
         Route::post('/students/{student}/approve', [CoordinatorStudentController::class, 'approveRegistration']);

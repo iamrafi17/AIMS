@@ -45,6 +45,7 @@ class Student extends Model
         'official_am_end',
         'official_pm_start',
         'official_pm_end',
+        'work_days',
     ];
 
     protected function casts(): array
@@ -57,6 +58,7 @@ class Student extends Model
             'required_ojt_hours' => 'decimal:2',
             'allow_past_attendance' => 'boolean',
             'registration_reviewed_at' => 'datetime',
+            'work_days' => 'array',
         ];
     }
 

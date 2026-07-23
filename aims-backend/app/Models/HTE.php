@@ -20,6 +20,12 @@ class HTE extends Model
         'latitude',
         'longitude',
         'geofence_radius',
+        'geofence_enabled',
+        'default_am_start',
+        'default_am_end',
+        'default_pm_start',
+        'default_pm_end',
+        'work_days',
         'is_active',
     ];
 
@@ -29,13 +35,15 @@ class HTE extends Model
             'latitude' => 'decimal:8',
             'longitude' => 'decimal:8',
             'geofence_radius' => 'integer',
+            'geofence_enabled' => 'boolean',
+            'work_days' => 'array',
             'is_active' => 'boolean',
         ];
     }
 
     public function students()
     {
-        return $this->hasMany(Student::class);
+        return $this->hasMany(Student::class, 'hte_id');
     }
 
     public function colleges()
@@ -45,6 +53,6 @@ class HTE extends Model
 
     public function moas()
     {
-        return $this->hasMany(MOA::class);
+        return $this->hasMany(MOA::class, 'hte_id');
     }
 }

@@ -7,6 +7,7 @@ use App\Models\Attendance;
 use App\Models\College;
 use App\Models\HTE;
 use App\Models\InternshipRequirement;
+use App\Models\OjtEnrollment;
 use App\Models\Program;
 use App\Models\Student;
 use App\Models\User;
@@ -60,28 +61,49 @@ class CoordinatorStudentController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function enrollments(Request $request)
     {
-        $validated = $request->validate($this->studentRules());
-        $this->validateProgramCollege($validated);
-        $temporaryPassword = $validated['password'] ?? Str::password(12);
-
-        $student = DB::transaction(function () use ($validated, $temporaryPassword) {
-            $user = User::create([
-                'name' => trim($validated['first_name'].' '.$validated['last_name']),
-                'email' => $validated['email'],
-                'password' => Hash::make($temporaryPassword),
-                'role' => 'student',
-                'is_active' => true,
-            ]);
-
-            return Student::create($this->studentAttributes($validated, $user->id));
-        });
+        $search = trim((string) $request->query('search', ''));
 
         return response()->json([
-            'message' => 'Student record and login account created successfully.',
-            'student' => $this->studentPayload($student->load(['user', 'college', 'program', 'hte', 'attendance', 'requirements'])),
-            'temporary_password' => array_key_exists('password', $validated) ? null : $temporaryPassword,
+            'data' => OjtEnrollment::with(['student.user'])
+                ->when($search, function ($query) use ($search) {
+                    $query->where(function ($nested) use ($search) {
+                        $nested->where('school_id', 'like', '%'.$search.'%')
+                            ->orWhere('full_name', 'like', '%'.$search.'%')
+                            ->orWhere('section', 'like', '%'.$search.'%');
+                    });
+                })
+                ->latest()
+                ->limit(500)
+                ->get(),
+            'summary' => [
+                'total' => OjtEnrollment::count(),
+                'awaiting_registration' => OjtEnrollment::whereNull('registered_at')->count(),
+                'registered' => OjtEnrollment::whereNotNull('registered_at')->count(),
+            ],
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'full_name' => ['required', 'string', 'max:255'],
+            'school_id' => ['required', 'string', 'max:20', Rule::unique('ojt_enrollments', 'school_id'), Rule::unique('students', 'student_id')],
+            'section' => ['required', 'string', 'max:50'],
+        ]);
+
+        $enrollment = OjtEnrollment::create([
+            'school_id' => trim($validated['school_id']),
+            'full_name' => preg_replace('/\s+/', ' ', trim($validated['full_name'])),
+            'section' => trim($validated['section']),
+            'source' => 'manual',
+            'added_by' => $request->user()->id,
+        ]);
+
+        return response()->json([
+            'message' => 'Student added to the OJT enrollment list. They can now register their account.',
+            'enrollment' => $enrollment,
         ], 201);
     }
 
@@ -189,16 +211,19 @@ class CoordinatorStudentController extends Controller
         $request->validate(['file' => ['required', 'file', 'mimes:csv,txt', 'max:5120']]);
         $handle = fopen($request->file('file')->getRealPath(), 'r');
         $headers = array_map(fn ($header) => Str::snake(trim((string) $header)), fgetcsv($handle) ?: []);
-        $requiredHeaders = ['student_id', 'first_name', 'last_name', 'email', 'college_code', 'program_code', 'year_level', 'section'];
+        $schoolIdHeader = in_array('school_id', $headers, true) ? 'school_id' : 'student_id';
+        $fullNameHeader = in_array('full_name', $headers, true) ? 'full_name' : 'student_name';
+        $requiredHeaders = [$schoolIdHeader, $fullNameHeader, 'section'];
 
         if (array_diff($requiredHeaders, $headers)) {
             fclose($handle);
-            throw ValidationException::withMessages(['file' => 'CSV is missing required headers: '.implode(', ', array_diff($requiredHeaders, $headers))]);
+            throw ValidationException::withMessages([
+                'file' => 'CSV must contain school_id, full_name, and section columns.',
+            ]);
         }
 
         $imported = 0;
         $errors = [];
-        $credentials = [];
         $rowNumber = 1;
 
         while (($values = fgetcsv($handle)) !== false) {
@@ -210,43 +235,35 @@ class CoordinatorStudentController extends Controller
             $row = array_combine($headers, array_slice($values, 0, count($headers)));
 
             try {
-                $college = College::where('code', trim($row['college_code']))->firstOrFail();
-                $program = Program::where('college_id', $college->id)->where('code', trim($row['program_code']))->firstOrFail();
-                $hte = filled($row['hte_name'] ?? null) ? HTE::where('name', trim($row['hte_name']))->first() : null;
-                $password = filled($row['password'] ?? null) ? trim($row['password']) : Str::password(12);
-                $payload = [
-                    'student_id' => trim($row['student_id']), 'first_name' => trim($row['first_name']), 'last_name' => trim($row['last_name']),
-                    'middle_name' => trim($row['middle_name'] ?? '') ?: null, 'email' => trim($row['email']), 'password' => $password,
-                    'gender' => in_array(strtolower(trim($row['gender'] ?? 'other')), ['male', 'female', 'other'], true) ? strtolower(trim($row['gender'] ?? 'other')) : 'other',
-                    'birth_date' => trim($row['birth_date'] ?? '') ?: '2000-01-01', 'address' => trim($row['address'] ?? '') ?: 'Not provided',
-                    'phone' => trim($row['phone'] ?? '') ?: 'Not provided', 'college_id' => $college->id, 'program_id' => $program->id,
-                    'year_level' => (int) $row['year_level'], 'section' => trim($row['section']), 'parent_name' => trim($row['parent_name'] ?? '') ?: 'Not provided',
-                    'parent_relationship' => trim($row['parent_relationship'] ?? '') ?: null, 'parent_address' => trim($row['parent_address'] ?? '') ?: 'Not provided',
-                    'parent_phone' => trim($row['parent_phone'] ?? '') ?: 'Not provided', 'hte_id' => $hte?->id,
-                    'internship_semester' => trim($row['internship_semester'] ?? '') ?: null, 'internship_year' => trim($row['internship_year'] ?? '') ?: null,
-                    'registration_status' => in_array(trim($row['registration_status'] ?? ''), ['pending', 'approved', 'rejected'], true) ? trim($row['registration_status']) : 'pending',
-                    'internship_status' => in_array(trim($row['internship_status'] ?? ''), ['pending', 'active', 'completed', 'dropped'], true) ? trim($row['internship_status']) : 'pending',
-                ];
+                $payload = validator([
+                    'school_id' => trim((string) ($row[$schoolIdHeader] ?? '')),
+                    'full_name' => trim((string) ($row[$fullNameHeader] ?? '')),
+                    'section' => trim((string) ($row['section'] ?? '')),
+                ], [
+                    'school_id' => ['required', 'string', 'max:20', Rule::unique('ojt_enrollments', 'school_id'), Rule::unique('students', 'student_id')],
+                    'full_name' => ['required', 'string', 'max:255'],
+                    'section' => ['required', 'string', 'max:50'],
+                ])->validate();
 
-                validator($payload, $this->studentRules())->validate();
-                DB::transaction(function () use ($payload) {
-                    $user = User::create(['name' => trim($payload['first_name'].' '.$payload['last_name']), 'email' => $payload['email'], 'password' => Hash::make($payload['password']), 'role' => 'student']);
-                    Student::create($this->studentAttributes($payload, $user->id));
-                });
+                OjtEnrollment::create([
+                    'school_id' => $payload['school_id'],
+                    'full_name' => preg_replace('/\s+/', ' ', trim($payload['full_name'])),
+                    'section' => $payload['section'],
+                    'source' => 'csv',
+                    'added_by' => $request->user()->id,
+                ]);
                 $imported++;
-                $credentials[] = ['student_id' => $payload['student_id'], 'email' => $payload['email'], 'temporary_password' => $password];
             } catch (\Throwable $exception) {
-                $errors[] = ['row' => $rowNumber, 'student_id' => $row['student_id'] ?? null, 'message' => $exception instanceof ValidationException ? collect($exception->errors())->flatten()->first() : $exception->getMessage()];
+                $errors[] = ['row' => $rowNumber, 'school_id' => $row[$schoolIdHeader] ?? null, 'message' => $exception instanceof ValidationException ? collect($exception->errors())->flatten()->first() : $exception->getMessage()];
             }
         }
         fclose($handle);
 
         return response()->json([
-            'message' => $imported.' student record(s) imported; '.count($errors).' row(s) failed.',
+            'message' => $imported.' student(s) added to the OJT enrollment list; '.count($errors).' row(s) failed.',
             'imported' => $imported,
             'failed' => count($errors),
             'errors' => $errors,
-            'credentials' => $credentials,
         ]);
     }
 

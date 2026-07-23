@@ -33,7 +33,7 @@ class MOA extends Model
 
     public function hte()
     {
-        return $this->belongsTo(HTE::class);
+        return $this->belongsTo(HTE::class, 'hte_id');
     }
 
     public function college()
