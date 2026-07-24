@@ -12,12 +12,17 @@ class StudentRequirementController extends Controller
     public function index(Request $request)
     {
         $student = $request->user()->student;
+        InternshipRequirement::ensureForStudent($student->id);
 
         $requirements = InternshipRequirement::where('student_id', $student->id)
-            ->latest()
             ->get();
 
-        return response()->json($requirements);
+        return response()->json(
+            collect(InternshipRequirement::OFFICIAL_REQUIREMENTS)
+                ->map(fn ($name) => $requirements->firstWhere('requirement_name', $name))
+                ->filter()
+                ->values()
+        );
     }
 
     public function upload(Request $request, $id)
@@ -32,7 +37,7 @@ class StudentRequirementController extends Controller
             ->where('student_id', $student->id)
             ->first();
 
-        if (!$requirement) {
+        if (! $requirement) {
             return response()->json(['message' => 'Requirement not found'], 404);
         }
 
@@ -40,13 +45,21 @@ class StudentRequirementController extends Controller
         $extension = $file->getClientOriginalExtension();
         $fileType = in_array($extension, ['pdf']) ? 'pdf' : (in_array($extension, ['jpg', 'jpeg', 'png']) ? 'image' : 'document');
 
-        $path = $file->store('requirements/' . $student->id, 'public');
+        $oldPath = $requirement->file_path;
+        $path = $file->store('requirements/'.$student->id, 'public');
 
         $requirement->update([
             'file_path' => $path,
             'file_type' => $fileType,
             'status' => 'pending',
+            'feedback' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
         ]);
+
+        if ($oldPath && $oldPath !== $path) {
+            Storage::disk('public')->delete($oldPath);
+        }
 
         return response()->json([
             'message' => 'File uploaded successfully',

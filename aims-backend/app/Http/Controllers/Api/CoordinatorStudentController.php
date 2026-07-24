@@ -23,7 +23,7 @@ class CoordinatorStudentController extends Controller
 {
     public function index(Request $request)
     {
-        $students = Student::with(['user', 'college', 'program', 'hte', 'attendance', 'requirements'])
+        $students = Student::with(['user', 'college', 'program', 'hte', 'attendance'])
             ->when($request->search, function ($query, $search) {
                 $query->where(function ($nested) use ($search) {
                     $nested->where('first_name', 'like', '%'.$search.'%')
@@ -38,6 +38,8 @@ class CoordinatorStudentController extends Controller
             ->orderBy('first_name')
             ->paginate(12);
 
+        InternshipRequirement::ensureForStudents($students->getCollection()->pluck('id'));
+        $students->getCollection()->load('requirements');
         $students->getCollection()->transform(fn (Student $student) => $this->studentPayload($student));
 
         return response()->json([
@@ -109,6 +111,8 @@ class CoordinatorStudentController extends Controller
 
     public function show(Student $student)
     {
+        InternshipRequirement::ensureForStudent($student->id);
+
         return response()->json($this->studentPayload($student->load(['user', 'college', 'program', 'hte', 'attendance', 'requirements.reviewer'])));
     }
 
@@ -177,6 +181,10 @@ class CoordinatorStudentController extends Controller
     {
         if ($requirement->student_id !== $student->id) {
             return response()->json(['message' => 'Requirement does not belong to this student.'], 404);
+        }
+
+        if (! $requirement->file_path) {
+            return response()->json(['message' => 'The student has not uploaded this requirement yet.'], 422);
         }
 
         $validated = $request->validate([
@@ -309,11 +317,18 @@ class CoordinatorStudentController extends Controller
     {
         $hours = $student->attendance->sum(fn (Attendance $record) => $this->renderedHours($record));
         $required = max((float) $student->required_ojt_hours, 0);
-        $approvedRequirements = $student->requirements->where('status', 'approved')->count();
-        $requirementTotal = $student->requirements->count();
+        $requirementOrder = array_flip(InternshipRequirement::OFFICIAL_REQUIREMENTS);
+        $officialRequirements = $student->requirements
+            ->whereIn('requirement_name', InternshipRequirement::OFFICIAL_REQUIREMENTS)
+            ->sortBy(fn (InternshipRequirement $requirement) => $requirementOrder[$requirement->requirement_name])
+            ->values();
+        $approvedRequirements = $officialRequirements->where('status', 'approved')->count();
+        $requirementTotal = $officialRequirements->count();
+        $studentData = $student->toArray();
+        $studentData['requirements'] = $officialRequirements->toArray();
 
         return [
-            ...$student->toArray(),
+            ...$studentData,
             'progress' => [
                 'rendered_hours' => round($hours, 1), 'required_hours' => round($required, 1), 'percent' => $required > 0 ? round(min(($hours / $required) * 100, 100), 1) : 0,
                 'attendance_days' => $student->attendance->whereIn('status', ['present', 'late'])->count(),

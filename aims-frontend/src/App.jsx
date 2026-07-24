@@ -30,6 +30,7 @@ import CoordinatorHTE from './pages/coordinator/HTEManagement';
 import CoordinatorTravel from './pages/coordinator/TravelMonitoring';
 import CoordinatorReports from './pages/coordinator/Reports';
 import CoordinatorAnnouncements from './pages/coordinator/Announcements';
+import CoordinatorProfile from './pages/coordinator/Profile';
 
 // Program Head Pages
 import ProgramHeadDashboard from './pages/program-head/Dashboard';
@@ -112,6 +113,7 @@ function App() {
                   <Route path="/coordinator/travel" element={<CoordinatorTravel />} />
                   <Route path="/coordinator/reports" element={<CoordinatorReports />} />
                   <Route path="/coordinator/announcements" element={<CoordinatorAnnouncements />} />
+                  <Route path="/coordinator/profile" element={<CoordinatorProfile />} />
                 </Route>
 
                 {/* Program Head Routes */}

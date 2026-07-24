@@ -1,46 +1,49 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import UserAvatar from '../UserAvatar';
 import {
-  HomeIcon,
-  ClockIcon,
-  DocumentIcon,
-  MapIcon,
-  BellIcon,
-  UserIcon,
-  UsersIcon,
   AcademicCapIcon,
+  BellIcon,
   BriefcaseIcon,
   ChartBarIcon,
-  CogIcon,
-  ClipboardDocumentCheckIcon,
-  StarIcon,
-  DocumentTextIcon,
   CheckCircleIcon,
+  ClipboardDocumentCheckIcon,
+  ClockIcon,
+  CogIcon,
+  DocumentIcon,
+  DocumentTextIcon,
+  HomeIcon,
+  MapIcon,
+  StarIcon,
+  UserIcon,
+  UsersIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
+import { useAuth } from '../../context/AuthContext';
+import marsuLogo from '../../assets/marsu-logo.png';
+import UserAvatar from '../UserAvatar';
 
 const menuItems = {
   student: [
     { name: 'Dashboard', path: '/student/dashboard', icon: HomeIcon },
     { name: 'Attendance', path: '/student/attendance', icon: ClockIcon },
     { name: 'Requirements', path: '/student/requirements', icon: DocumentIcon },
-    { name: 'Travel', path: '/student/travel', icon: MapIcon },
+    { name: 'Travel Monitoring', path: '/student/travel', icon: MapIcon },
     { name: 'Announcements', path: '/student/announcements', icon: BellIcon },
     { name: 'Profile', path: '/student/profile', icon: UserIcon },
   ],
   coordinator: [
     { name: 'Dashboard', path: '/coordinator/dashboard', icon: HomeIcon },
-    { name: 'Students', path: '/coordinator/students', icon: UsersIcon },
-    { name: 'Attendance', path: '/coordinator/attendance', icon: ClockIcon },
-    { name: 'HTEs', path: '/coordinator/htes', icon: BriefcaseIcon },
-    { name: 'Travel', path: '/coordinator/travel', icon: MapIcon },
+    { name: 'Student Management', path: '/coordinator/students', icon: UsersIcon },
+    { name: 'Attendance & Journals', path: '/coordinator/attendance', icon: ClockIcon },
+    { name: 'HTE Management', path: '/coordinator/htes', icon: BriefcaseIcon },
+    { name: 'Travel Monitoring', path: '/coordinator/travel', icon: MapIcon },
     { name: 'Reports', path: '/coordinator/reports', icon: ChartBarIcon },
     { name: 'Announcements', path: '/coordinator/announcements', icon: BellIcon },
+    { name: 'Profile', path: '/coordinator/profile', icon: UserIcon },
   ],
   program_head: [
     { name: 'Dashboard', path: '/program-head/dashboard', icon: HomeIcon },
     { name: 'Documents', path: '/program-head/documents', icon: DocumentTextIcon },
-    { name: 'Travel', path: '/program-head/travel', icon: MapIcon },
+    { name: 'Travel Monitoring', path: '/program-head/travel', icon: MapIcon },
     { name: 'Reports', path: '/program-head/reports', icon: ChartBarIcon },
     { name: 'Announcements', path: '/program-head/announcements', icon: BellIcon },
   ],
@@ -61,17 +64,30 @@ const menuItems = {
   ],
   supervisor: [
     { name: 'Dashboard', path: '/supervisor/dashboard', icon: HomeIcon },
-    { name: 'Progress', path: '/supervisor/progress', icon: ChartBarIcon },
+    { name: 'Student Progress', path: '/supervisor/progress', icon: ChartBarIcon },
     { name: 'Evaluations', path: '/supervisor/evaluations', icon: StarIcon },
     { name: 'Attendance', path: '/supervisor/attendance', icon: ClockIcon },
     { name: 'Announcements', path: '/supervisor/announcements', icon: BellIcon },
   ],
 };
 
+const roleLabels = {
+  student: 'Student Intern',
+  coordinator: 'Internship Coordinator',
+  program_head: 'Program Head',
+  vpaa: 'VPAA',
+  admin: 'System Administrator',
+  supervisor: 'HTE Supervisor',
+};
+
 function Sidebar({ isOpen, onClose }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const items = menuItems[user?.role] || [];
+
+  const handleNavigate = () => {
+    if (window.matchMedia('(max-width: 1023px)').matches) onClose();
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -80,64 +96,74 @@ function Sidebar({ isOpen, onClose }) {
 
   return (
     <>
-      {/* Overlay for mobile */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden"
-          onClick={onClose}
-        />
-      )}
+      <button
+        type="button"
+        aria-label="Close navigation menu"
+        className={`fixed inset-0 z-30 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${isOpen ? 'visible opacity-100' : 'invisible opacity-0'}`}
+        onClick={onClose}
+        tabIndex={isOpen ? 0 : -1}
+      />
 
-      {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full w-64 bg-gradient-to-b from-[#800000] to-[#5C0000] text-white z-30 transition-transform duration-300 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        aria-label={`${roleLabels[user?.role] || 'AIMS'} navigation`}
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col overflow-hidden bg-gradient-to-b from-[#800000] via-[#720000] to-[#4b0000] text-white shadow-2xl shadow-[#3b0808]/20 transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
-        {/* Logo */}
-        <div className="p-4 border-b border-white/20">
-          <h1 className="text-xl font-bold">AIMS</h1>
-          <p className="text-xs text-white/70">MarSU Santa Cruz Campus</p>
+        <div className="flex h-20 shrink-0 items-center gap-3 border-b border-white/10 px-4">
+          <div className="grid size-12 shrink-0 place-items-center rounded-full bg-white p-1 shadow-lg">
+            <img src={marsuLogo} alt="Marinduque State University seal" className="h-full w-full object-contain" />
+          </div>
+          <div className="min-w-0 flex-1 leading-tight">
+            <p className="text-lg font-black tracking-tight">AIMS</p>
+            <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-white/60">MarSU · Santa Cruz</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-white/70 hover:bg-white/10 hover:text-white lg:hidden" aria-label="Close sidebar">
+            <XMarkIcon className="size-5" />
+          </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="p-4 overflow-y-auto h-[calc(100%-180px)]">
-          <ul className="space-y-2">
+        <div className="shrink-0 px-4 pb-2 pt-5">
+          <p className="px-3 text-[10px] font-black uppercase tracking-[0.18em] text-[#f2cf70]">{roleLabels[user?.role] || 'Portal'}</p>
+        </div>
+
+        <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-4" aria-label="Portal pages">
+          <ul className="space-y-1.5">
             {items.map((item) => (
               <li key={item.path}>
                 <NavLink
                   to={item.path}
+                  end={item.name === 'Dashboard'}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                    `group relative flex min-h-11 items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-bold transition-all duration-200 ${
                       isActive
-                        ? 'bg-white text-[#800000]'
-                        : 'text-white hover:bg-white/10'
+                        ? 'bg-white text-[#700000] shadow-lg shadow-black/10'
+                        : 'text-white/75 hover:translate-x-0.5 hover:bg-white/10 hover:text-white'
                     }`
                   }
-                  onClick={onClose}
+                  onClick={handleNavigate}
                 >
-                  <item.icon className="w-5 h-5" />
-                  <span>{item.name}</span>
+                  {({ isActive }) => (
+                    <>
+                      <item.icon className={`size-5 shrink-0 ${isActive ? 'text-[#800000]' : 'text-white/65 group-hover:text-white'}`} />
+                      <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                      {isActive && <span className="size-1.5 shrink-0 rounded-full bg-[#d4af37]" />}
+                    </>
+                  )}
                 </NavLink>
               </li>
             ))}
           </ul>
         </nav>
 
-        {/* User Info & Logout */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/20">
-          <div className="flex items-center gap-3 mb-3">
-            <UserAvatar user={user} />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user?.name}</p>
-              <p className="text-xs text-white/70 capitalize">{user?.role?.replace('_', ' ')}</p>
+        <div className="shrink-0 border-t border-white/10 bg-black/10 p-3">
+          <div className="mb-3 flex items-center gap-3 rounded-xl bg-white/[0.07] p-3">
+            <UserAvatar user={user} className="size-10" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-black">{user?.name}</p>
+              <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-wide text-white/55">{roleLabels[user?.role] || user?.role}</p>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-full px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition-colors"
-          >
-            Logout
+          <button type="button" onClick={handleLogout} className="w-full rounded-xl border border-white/10 px-4 py-2.5 text-xs font-black text-white/80 transition hover:bg-white/10 hover:text-white">
+            Sign out
           </button>
         </div>
       </aside>

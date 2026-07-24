@@ -1,35 +1,49 @@
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { Bars3Icon, BellIcon, SunIcon, MoonIcon } from '@heroicons/react/24/outline';
 import UserAvatar from '../UserAvatar';
 
-function Header({ onMenuClick }) {
+const pageNames = {
+  dashboard: 'Dashboard',
+  students: 'Student Management',
+  attendance: 'Attendance & Journals',
+  htes: 'HTE Management',
+  travel: 'Travel Monitoring',
+  reports: 'Reports',
+  announcements: 'Announcements',
+  requirements: 'Requirements',
+  profile: 'Profile',
+};
+
+function Header({ onMenuClick, sidebarOpen }) {
   const { user } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
+  const location = useLocation();
+  const pageKey = location.pathname.split('/').filter(Boolean).at(-1);
+  const pageTitle = pageNames[pageKey] || 'AIMS Portal';
 
   return (
-    <header className="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-10">
-      <div className="flex items-center justify-between px-6 py-4">
+    <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-xl dark:border-gray-700 dark:bg-gray-800/90">
+      <div className="flex min-h-20 items-center justify-between gap-3 px-4 sm:px-6">
         {/* Left side */}
         <div className="flex items-center gap-4">
           <button
             onClick={onMenuClick}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            className="rounded-xl p-2.5 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+            aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            aria-expanded={sidebarOpen}
           >
             <Bars3Icon className="w-6 h-6 text-gray-600 dark:text-gray-300" />
           </button>
           <div>
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
-              Welcome, {user?.name}
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">
-              {user?.role?.replace('_', ' ')}
-            </p>
+            <h2 className="text-base font-black text-gray-800 sm:text-lg dark:text-white">{pageTitle}</h2>
+            <p className="hidden text-xs text-gray-500 sm:block dark:text-gray-400">Welcome back, {user?.name}</p>
           </div>
         </div>
 
         {/* Right side */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           {/* Dark mode toggle */}
           <button
             onClick={toggleDarkMode}

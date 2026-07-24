@@ -15,8 +15,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
         ]);
-        
-        $middleware->statefulApi();
+
+        // AIMS authenticates API requests with Sanctum personal-access Bearer
+        // tokens. Enabling stateful SPA middleware here would also require
+        // session cookies and CSRF tokens, mixing two authentication modes.
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

@@ -29,6 +29,7 @@ const badge = {
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300', approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
   active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300', completed: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
   registered: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  missing: 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-gray-300',
   rejected: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300', dropped: 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-gray-300',
 };
 
@@ -58,6 +59,77 @@ function Select({ label, name, form, setForm, children, required = false, ...pro
 
 function Progress({ value, color = 'bg-[#800000]' }) {
   return <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-gray-700"><div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(Math.max(Number(value) || 0, 0), 100)}%` }} /></div>;
+}
+
+function RequirementChecklist({ requirements = [], busy, onDownload, onReview }) {
+  const counts = requirements.reduce((total, requirement) => {
+    const status = requirement.file_path ? requirement.status : 'missing';
+    total[status] = (total[status] || 0) + 1;
+    return total;
+  }, { missing: 0, pending: 0, approved: 0, rejected: 0 });
+  const completion = requirements.length ? Math.round((counts.approved / requirements.length) * 100) : 0;
+
+  return (
+    <div>
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <h3 className="font-black text-[#430909] dark:text-white">Official OJT Requirements</h3>
+          <p className="mt-1 text-xs text-slate-400">Review the student&apos;s ten required documents.</p>
+        </div>
+        <span className="text-sm font-black text-[#800000] dark:text-rose-300">{counts.approved}/{requirements.length || 10} approved</span>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-gray-700 dark:bg-gray-900/60">
+        <div className="mb-2 flex items-center justify-between text-xs">
+          <span className="font-bold text-slate-500 dark:text-gray-300">Completion</span>
+          <span className="font-black text-[#800000] dark:text-rose-300">{completion}%</span>
+        </div>
+        <Progress value={completion} color="bg-gradient-to-r from-[#800000] to-[#d4af37]" />
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            ['Missing', counts.missing, 'text-slate-500'],
+            ['Pending', counts.pending, 'text-amber-600'],
+            ['Approved', counts.approved, 'text-emerald-600'],
+            ['Rejected', counts.rejected, 'text-rose-600'],
+          ].map(([label, value, color]) => <div key={label} className="rounded-xl bg-white px-3 py-2 text-center shadow-sm dark:bg-gray-800"><p className={`text-lg font-black ${color}`}>{value}</p><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</p></div>)}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {requirements.map((requirement, index) => {
+          const status = requirement.file_path ? requirement.status : 'missing';
+          return (
+            <article key={requirement.id} className="flex min-h-44 flex-col rounded-2xl border border-slate-200 p-4 dark:border-gray-700 dark:bg-gray-900/30">
+              <div className="flex items-start gap-3">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#800000]/8 text-sm font-black text-[#800000] dark:bg-rose-950 dark:text-rose-300">{index + 1}</div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-black leading-5 text-slate-800 dark:text-white">{requirement.requirement_name}</p>
+                  <div className="mt-2"><StatusBadge value={status} /></div>
+                </div>
+              </div>
+
+              <div className="mt-3 flex-1">
+                {requirement.file_path ? (
+                  <p className="text-[11px] text-slate-400">
+                    {requirement.file_type?.toUpperCase() || 'FILE'} · Submitted {new Date(requirement.updated_at || requirement.created_at).toLocaleDateString()}
+                  </p>
+                ) : <p className="text-[11px] text-slate-400">Waiting for the student to upload this document.</p>}
+                {requirement.feedback && <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">Feedback: {requirement.feedback}</p>}
+              </div>
+
+              {requirement.file_path && (
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3 dark:border-gray-700">
+                  <button onClick={() => onDownload(requirement)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold dark:border-gray-600"><FiDownload /> Download</button>
+                  {status !== 'approved' && <button onClick={() => onReview(requirement, 'approved')} disabled={busy} className="rounded-lg bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-700 disabled:opacity-50">Approve</button>}
+                  {status !== 'rejected' && <button onClick={() => onReview(requirement, 'rejected')} disabled={busy} className="rounded-lg bg-rose-100 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-50">Reject</button>}
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function StudentManagement() {
@@ -117,19 +189,29 @@ function StudentManagement() {
     setEditor({ mode: 'edit', student });
   };
 
-  const nextEditorStep = () => {
+  const validateEditorStep = (step = editorStep) => {
     const requiredByStep = [
       ['student_id', 'first_name', 'last_name', 'email', 'gender', 'birth_date', 'phone', 'address'],
       ['college_id', 'program_id', 'year_level', 'section', 'required_ojt_hours'],
       ['parent_name', 'parent_phone', 'parent_address'],
     ];
-    const missing = requiredByStep[editorStep].some((field) => String(form[field] ?? '').trim() === '');
-    if (missing) return toast.error('Please complete all required fields on this step.');
+    const missing = requiredByStep[step].some((field) => String(form[field] ?? '').trim() === '');
+    if (missing) {
+      toast.error('Please complete all required fields on this step.');
+      return false;
+    }
+    return true;
+  };
+
+  const nextEditorStep = () => {
+    if (!validateEditorStep()) return;
     setEditorStep((current) => Math.min(current + 1, 2));
   };
 
   const saveStudent = async (event) => {
-    event.preventDefault(); setBusy(true);
+    event?.preventDefault();
+    if (editor.mode === 'edit' && (editorStep !== 2 || !validateEditorStep(2))) return;
+    setBusy(true);
     try {
       const payload = editor.mode === 'create'
         ? { full_name: form.student_name.trim(), school_id: form.student_id.trim(), section: form.section.trim() }
@@ -245,7 +327,7 @@ function StudentManagement() {
     </Modal>}
 
     {editor?.mode === 'edit' && <Modal title="Update Student Record" subtitle="Complete the three short steps below. No browser zooming needed." onClose={() => setEditor(null)} size="form">
-      <form onSubmit={saveStudent}>
+      <form onSubmit={(event) => event.preventDefault()}>
         <div className="border-b border-slate-100 bg-slate-50/80 px-5 py-3 dark:border-gray-700 dark:bg-gray-900/50">
           <div className="mx-auto flex max-w-2xl items-center">
             {['Personal & Account', 'Academic & OJT', 'Guardian & Status'].map((label, index) => <div key={label} className="flex min-w-0 flex-1 items-center last:flex-none">
@@ -294,6 +376,7 @@ function StudentManagement() {
 
           {editorStep === 2 && <>
             <h3 className="mb-4 text-sm font-black text-[#800000] dark:text-rose-300">Guardian & Record Status</h3>
+            <p className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">Review the final information, then click <b>Save Changes</b>. This step will not save automatically.</p>
             <div className="grid gap-3 md:grid-cols-3">
               <Select label="Registration Status" name="registration_status" form={form} setForm={setForm}><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></Select>
               <Select label="Internship Status" name="internship_status" form={form} setForm={setForm}><option value="pending">Pending</option><option value="active">Active</option><option value="completed">Completed</option><option value="dropped">Dropped</option></Select>
@@ -314,12 +397,31 @@ function StudentManagement() {
           <span className="text-xs font-bold text-slate-400">Step {editorStep + 1} of 3</span>
           {editorStep < 2
             ? <button type="button" onClick={nextEditorStep} className="rounded-xl bg-[#800000] px-6 py-2.5 text-sm font-black text-white">Next</button>
-            : <button type="submit" disabled={busy} className="rounded-xl bg-[#800000] px-6 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? 'Saving...' : editor.mode === 'create' ? 'Create Student' : 'Save Changes'}</button>}
+            : <button type="button" onClick={() => saveStudent()} disabled={busy} className="rounded-xl bg-[#800000] px-6 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? 'Saving...' : 'Save Changes'}</button>}
         </div>
       </form>
     </Modal>}
 
-    {selected && <Modal title={`${selected.first_name} ${selected.last_name}`} subtitle={`${selected.student_id} · ${selected.user?.email}`} onClose={() => setSelected(null)} size="wide"><div className="grid gap-6 p-6 lg:grid-cols-3"><div className="space-y-5"><div className="rounded-2xl bg-slate-50 p-5 dark:bg-gray-900"><div className="flex flex-wrap gap-2"><StatusBadge value={selected.registration_status} /><StatusBadge value={selected.internship_status} /></div>{selected.registration_feedback && <p className="mt-3 text-xs leading-5 text-rose-600">Review feedback: {selected.registration_feedback}</p>}{selected.registration_status === 'pending' && <div className="mt-4 grid grid-cols-2 gap-2"><button onClick={() => decideRegistration(selected, 'approve')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white">Approve</button><button onClick={() => decideRegistration(selected, 'reject')} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-black text-white">Reject</button></div>}</div><div><div className="mb-2 flex justify-between text-xs"><span>OJT Progress</span><b>{selected.progress?.percent || 0}%</b></div><Progress value={selected.progress?.percent} /><p className="mt-2 text-xs text-slate-400">{selected.progress?.rendered_hours || 0} / {selected.progress?.required_hours || 486} hours · {selected.progress?.attendance_days || 0} attendance days</p></div><div><div className="mb-2 flex justify-between text-xs"><span>Requirements</span><b>{selected.progress?.requirements_percent || 0}%</b></div><Progress value={selected.progress?.requirements_percent} color="bg-blue-500" /><p className="mt-2 text-xs text-slate-400">{selected.progress?.requirements_approved || 0} of {selected.progress?.requirements_total || 0} approved</p></div><button onClick={() => openEdit(selected)} className="w-full rounded-xl border border-slate-200 py-3 text-sm font-black text-[#800000] dark:border-gray-600 dark:text-rose-300">Edit Student Record</button></div><div className="lg:col-span-2"><div className="mb-4 flex items-center justify-between"><h3 className="font-black text-[#430909] dark:text-white">Student Requirements</h3><span className="text-xs text-slate-400">{selected.requirements?.length || 0} record(s)</span></div>{selected.requirements?.length ? <div className="space-y-3">{selected.requirements.map((requirement) => <div key={requirement.id} className="rounded-2xl border border-slate-200 p-4 dark:border-gray-700"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-black text-slate-800 dark:text-white">{requirement.requirement_name}</p><p className="mt-1 text-[11px] text-slate-400">{requirement.file_type?.toUpperCase()} · Submitted {new Date(requirement.created_at).toLocaleDateString()}</p>{requirement.feedback && <p className="mt-2 text-xs text-rose-600">Feedback: {requirement.feedback}</p>}</div><StatusBadge value={requirement.status} /></div><div className="mt-4 flex flex-wrap gap-2"><button onClick={() => downloadRequirement(requirement)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold dark:border-gray-600"><FiDownload /> Download</button><button onClick={() => reviewRequirement(requirement, 'approved')} disabled={busy} className="rounded-lg bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-700">Approve</button><button onClick={() => reviewRequirement(requirement, 'rejected')} disabled={busy} className="rounded-lg bg-rose-100 px-3 py-2 text-xs font-black text-rose-700">Reject</button></div></div>)}</div> : <div className="rounded-2xl border border-dashed border-slate-300 py-12 text-center text-sm text-slate-400 dark:border-gray-600">No requirements submitted.</div>}</div></div></Modal>}
+    {selected && (
+      <Modal title={`${selected.first_name} ${selected.last_name}`} subtitle={`${selected.student_id} · ${selected.user?.email}`} onClose={() => setSelected(null)} size="wide">
+        <div className="grid gap-6 p-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
+          <aside className="space-y-5">
+            <div className="rounded-2xl bg-slate-50 p-5 dark:bg-gray-900">
+              <div className="flex flex-wrap gap-2"><StatusBadge value={selected.registration_status} /><StatusBadge value={selected.internship_status} /></div>
+              {selected.registration_feedback && <p className="mt-3 text-xs leading-5 text-rose-600">Review feedback: {selected.registration_feedback}</p>}
+              {selected.registration_status === 'pending' && <div className="mt-4 grid grid-cols-2 gap-2"><button onClick={() => decideRegistration(selected, 'approve')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white">Approve</button><button onClick={() => decideRegistration(selected, 'reject')} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-black text-white">Reject</button></div>}
+            </div>
+            <div>
+              <div className="mb-2 flex justify-between text-xs"><span>OJT Progress</span><b>{selected.progress?.percent || 0}%</b></div>
+              <Progress value={selected.progress?.percent} />
+              <p className="mt-2 text-xs text-slate-400">{selected.progress?.rendered_hours || 0} / {selected.progress?.required_hours || 486} hours · {selected.progress?.attendance_days || 0} attendance days</p>
+            </div>
+            <button onClick={() => openEdit(selected)} className="w-full rounded-xl border border-slate-200 py-3 text-sm font-black text-[#800000] dark:border-gray-600 dark:text-rose-300">Edit Student Record</button>
+          </aside>
+          <RequirementChecklist requirements={selected.requirements} busy={busy} onDownload={downloadRequirement} onReview={reviewRequirement} />
+        </div>
+      </Modal>
+    )}
 
     {importOpen && <Modal title="Enroll Students via CSV" subtitle="Every valid row is added to the OJT enrollment list without creating an account." onClose={() => setImportOpen(false)}>
       <div className="p-6">

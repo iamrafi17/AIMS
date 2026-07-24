@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\OjtEnrollment;
+use App\Models\InternshipRequirement;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -62,6 +63,8 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'phone' => $user->phone,
+                'address' => $user->address,
                 'role' => $user->role,
                 'avatar' => $user->avatar,
                 'avatar_url' => $user->avatar_url,
@@ -159,6 +162,8 @@ class AuthController extends Controller
                 'internship_year' => $request->internship_year,
             ]);
 
+            InternshipRequirement::ensureForStudent($student->id);
+
             $enrollment->update([
                 'student_record_id' => $student->id,
                 'registered_at' => now(),
@@ -236,6 +241,8 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'phone' => $user->phone,
+                'address' => $user->address,
                 'role' => $user->role,
                 'avatar' => $user->avatar,
                 'avatar_url' => $user->avatar_url,
@@ -296,6 +303,8 @@ class AuthController extends Controller
             $user->update([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
+                'phone' => $validated['phone'] ?? $user->phone,
+                'address' => $validated['address'] ?? $user->address,
             ]);
 
             if ($user->student) {
@@ -312,10 +321,123 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'phone' => $user->phone,
+                'address' => $user->address,
                 'role' => $user->role,
                 'avatar' => $user->avatar,
                 'avatar_url' => $user->avatar_url,
             ],
+        ]);
+    }
+
+    public function updateAccountInformation(Request $request)
+    {
+        $user = $request->user();
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+        ]);
+
+        $user->update($validated);
+
+        return response()->json([
+            'message' => 'Account information updated successfully.',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'address' => $user->address,
+                'role' => $user->role,
+                'avatar' => $user->avatar,
+                'avatar_url' => $user->avatar_url,
+            ],
+        ]);
+    }
+
+    public function updateProfileInformation(Request $request)
+    {
+        $user = $request->user();
+        $student = $user->student;
+
+        if (! $student) {
+            return response()->json(['message' => 'Student profile not found.'], 404);
+        }
+
+        $validated = $request->validate([
+            'first_name' => ['required', 'string', 'max:100'],
+            'middle_name' => ['nullable', 'string', 'max:100'],
+            'last_name' => ['required', 'string', 'max:100'],
+            'gender' => ['required', 'in:male,female'],
+            'birth_date' => ['required', 'date', 'before:today'],
+        ]);
+
+        DB::transaction(function () use ($user, $student, $validated) {
+            $student->update($validated);
+            $user->update([
+                'name' => trim(collect([
+                    $validated['first_name'],
+                    $validated['middle_name'] ?? null,
+                    $validated['last_name'],
+                ])->filter()->implode(' ')),
+            ]);
+        });
+
+        return response()->json([
+            'message' => 'Profile information updated successfully.',
+            'student' => $student->fresh(),
+        ]);
+    }
+
+    public function updateContactInformation(Request $request)
+    {
+        $user = $request->user();
+        $validated = $request->validate([
+            'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
+            'phone' => ['required', 'string', 'max:20'],
+            'address' => ['required', 'string', 'max:1000'],
+        ]);
+
+        DB::transaction(function () use ($user, $validated) {
+            $user->update([
+                'email' => $validated['email'],
+                'phone' => $validated['phone'],
+                'address' => $validated['address'],
+            ]);
+
+            if ($user->student) {
+                $user->student->update([
+                    'phone' => $validated['phone'],
+                    'address' => $validated['address'],
+                ]);
+            }
+        });
+
+        return response()->json([
+            'message' => 'Contact information updated successfully.',
+            'email' => $user->fresh()->email,
+            'phone' => $user->student?->fresh()->phone ?? $user->fresh()->phone,
+            'address' => $user->student?->fresh()->address ?? $user->fresh()->address,
+        ]);
+    }
+
+    public function changePassword(Request $request)
+    {
+        $validated = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password'],
+        ]);
+        $user = $request->user();
+
+        if (! Hash::check($validated['current_password'], $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['The current password is incorrect.'],
+            ]);
+        }
+
+        $user->update(['password' => Hash::make($validated['password'])]);
+
+        return response()->json([
+            'message' => 'Password changed successfully.',
         ]);
     }
 

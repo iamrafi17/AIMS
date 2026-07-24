@@ -29,6 +29,7 @@ function StudentRequirements() {
   };
 
   const handleUpload = async (requirementId, file) => {
+    if (!file) return;
     setUploading(requirementId);
     try {
       const formData = new FormData();
@@ -46,12 +47,28 @@ function StudentRequirements() {
     }
   };
 
+  const handleDownload = async (requirement) => {
+    try {
+      const response = await api.get(`/student/requirements/${requirement.id}/download`, { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = requirement.file_path?.split('/').pop() || `${requirement.requirement_name}.file`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Unable to download this file.');
+    }
+  };
+
   const getStatusIcon = (status) => {
     switch (status) {
       case 'approved':
         return <CheckCircleIcon className="w-5 h-5 text-green-500" />;
       case 'rejected':
         return <XCircleIcon className="w-5 h-5 text-red-500" />;
+      case 'missing':
+        return <DocumentIcon className="w-5 h-5 text-gray-400" />;
       default:
         return <ClockIcon className="w-5 h-5 text-yellow-500" />;
     }
@@ -63,6 +80,8 @@ function StudentRequirements() {
         return 'bg-green-100 text-green-800';
       case 'rejected':
         return 'bg-red-100 text-red-800';
+      case 'missing':
+        return 'bg-gray-100 text-gray-600';
       default:
         return 'bg-yellow-100 text-yellow-800';
     }
@@ -85,6 +104,9 @@ function StudentRequirements() {
           <div className="space-y-4">
             {requirements.map((req) => (
               <div key={req.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                {(() => {
+                  const displayStatus = req.file_path ? req.status : 'missing';
+                  return <>
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
                     <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
@@ -93,7 +115,7 @@ function StudentRequirements() {
                     <div>
                       <h3 className="font-medium text-gray-800">{req.requirement_name}</h3>
                       <p className="text-sm text-gray-500">
-                        Type: {req.file_type.toUpperCase()}
+                        {req.file_path ? `Type: ${req.file_type?.toUpperCase() || 'FILE'}` : 'No file uploaded yet'}
                       </p>
                       {req.feedback && (
                         <p className="text-sm text-red-600 mt-1">
@@ -104,23 +126,18 @@ function StudentRequirements() {
                   </div>
                   
                   <div className="flex items-center gap-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(req.status)}`}>
-                      {req.status}
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(displayStatus)}`}>
+                      {displayStatus}
                     </span>
-                    {getStatusIcon(req.status)}
+                    {getStatusIcon(displayStatus)}
                   </div>
                 </div>
 
                 <div className="mt-4 flex items-center gap-4">
                   {req.file_path ? (
-                    <a
-                      href={`/api/student/requirements/${req.id}/download`}
-                      className="text-sm text-[#800000] hover:text-[#5C0000] font-medium"
-                    >
-                      Download File
-                    </a>
-                  ) : (
-                    <label className="cursor-pointer">
+                    <button type="button" onClick={() => handleDownload(req)} className="text-sm text-[#800000] hover:text-[#5C0000] font-medium">Download File</button>
+                  ) : null}
+                  <label className="cursor-pointer">
                       <input
                         type="file"
                         className="hidden"
@@ -131,11 +148,12 @@ function StudentRequirements() {
                       <span className={`inline-block px-4 py-2 bg-[#800000] hover:bg-[#5C0000] text-white text-sm font-medium rounded-lg transition-colors ${
                         uploading === req.id ? 'opacity-70 cursor-not-allowed' : ''
                       }`}>
-                        {uploading === req.id ? 'Uploading...' : 'Upload File'}
+                        {uploading === req.id ? 'Uploading...' : req.file_path ? 'Replace File' : 'Upload File'}
                       </span>
-                    </label>
-                  )}
+                  </label>
                 </div>
+                  </>;
+                })()}
               </div>
             ))}
           </div>

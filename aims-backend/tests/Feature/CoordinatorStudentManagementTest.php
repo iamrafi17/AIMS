@@ -105,6 +105,27 @@ class CoordinatorStudentManagementTest extends TestCase
         ]);
     }
 
+    public function test_coordinator_can_view_the_complete_official_requirement_checklist(): void
+    {
+        [$coordinator, $college, $program, $hte] = $this->managementContext();
+        $student = $this->createStudent($college, $program, $hte);
+        Sanctum::actingAs($coordinator);
+
+        $response = $this->getJson('/api/coordinator/students/'.$student->id)
+            ->assertOk()
+            ->assertJsonCount(10, 'requirements')
+            ->assertJsonPath('progress.requirements_total', 10)
+            ->assertJsonPath('progress.requirements_approved', 0)
+            ->assertJsonPath('progress.requirements_percent', 0);
+
+        foreach (\App\Models\InternshipRequirement::OFFICIAL_REQUIREMENTS as $requirementName) {
+            $response->assertJsonFragment([
+                'requirement_name' => $requirementName,
+                'file_path' => null,
+            ]);
+        }
+    }
+
     public function test_coordinator_can_import_student_enrollments_without_creating_credentials(): void
     {
         [$coordinator] = $this->managementContext();
