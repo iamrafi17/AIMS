@@ -35,7 +35,7 @@ import CoordinatorProfile from './pages/coordinator/Profile';
 // Program Head Pages
 import ProgramHeadDashboard from './pages/program-head/Dashboard';
 import ProgramHeadDocuments from './pages/program-head/DocumentReview';
-import ProgramHeadTravel from './pages/program-head/TravelMonitoring';
+import ProgramHeadTravel from './pages/program-head/TravelMonitoringManagement';
 import ProgramHeadReports from './pages/program-head/Reports';
 import ProgramHeadAnnouncements from './pages/program-head/Announcements';
 

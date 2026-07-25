@@ -10,11 +10,14 @@ use App\Http\Controllers\Api\CoordinatorDashboardController;
 use App\Http\Controllers\Api\CoordinatorHTEController;
 use App\Http\Controllers\Api\CoordinatorStudentController;
 use App\Http\Controllers\Api\ProgramHeadDashboardController;
+use App\Http\Controllers\Api\ProgramHeadDocumentController;
+use App\Http\Controllers\Api\ProgramHeadTravelController;
 use App\Http\Controllers\Api\PublicPortalController;
 use App\Http\Controllers\Api\StudentAttendanceController;
 use App\Http\Controllers\Api\StudentDashboardController;
 use App\Http\Controllers\Api\StudentRequirementController;
 use App\Http\Controllers\Api\SupervisorDashboardController;
+use App\Http\Controllers\Api\VPAADashboardController;
 use Illuminate\Support\Facades\Route;
 
 // Public Routes
@@ -96,6 +99,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // Program Head Routes
     Route::middleware('role:program_head')->prefix('program-head')->group(function () {
         Route::get('/dashboard', [ProgramHeadDashboardController::class, 'index']);
+        Route::get('/documents', [ProgramHeadDocumentController::class, 'index']);
+        Route::post('/documents/requirements/{requirement}/review', [ProgramHeadDocumentController::class, 'reviewRequirement']);
+        Route::get('/documents/requirements/{requirement}/download', [ProgramHeadDocumentController::class, 'downloadRequirement']);
+        Route::post('/documents/moas/{moa}/review', [ProgramHeadDocumentController::class, 'reviewMoa']);
+        Route::get('/documents/moas/{moa}/download', [ProgramHeadDocumentController::class, 'downloadMoa']);
+        Route::get('/travel', [ProgramHeadTravelController::class, 'index']);
+        Route::put('/travel/checkpoints/{checkpoint}/verify', [ProgramHeadTravelController::class, 'verifyCheckpoint']);
+        Route::get('/travel/checkpoints/{checkpoint}/photo', [ProgramHeadTravelController::class, 'photo']);
     });
 
     // Admin Routes
@@ -110,5 +121,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Supervisor Routes
     Route::middleware('role:supervisor')->prefix('supervisor')->group(function () {
         Route::get('/dashboard', [SupervisorDashboardController::class, 'index']);
+    });
+
+    // VPAA Routes
+    Route::middleware('role:vpaa')->prefix('vpaa')->group(function () {
+        Route::get('/dashboard', [VPAADashboardController::class, 'index']);
     });
 });
