@@ -41,6 +41,10 @@ class Attendance extends Model
         'latitude_out',
         'longitude_out',
         'is_verified',
+        'supervisor_review_status',
+        'supervisor_feedback',
+        'supervisor_reviewed_by',
+        'supervisor_reviewed_at',
         'verified_by',
         'verified_at',
     ];
@@ -68,6 +72,7 @@ class Attendance extends Model
             'longitude_out' => 'decimal:8',
             'is_verified' => 'boolean',
             'verified_at' => 'datetime',
+            'supervisor_reviewed_at' => 'datetime',
             'journal_reviewed_at' => 'datetime',
         ];
     }
@@ -85,5 +90,10 @@ class Attendance extends Model
     public function journalReviewer()
     {
         return $this->belongsTo(User::class, 'journal_reviewed_by');
+    }
+
+    public function supervisorReviewer()
+    {
+        return $this->belongsTo(User::class, 'supervisor_reviewed_by');
     }
 }

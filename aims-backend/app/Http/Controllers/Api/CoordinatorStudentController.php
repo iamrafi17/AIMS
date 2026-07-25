@@ -9,6 +9,7 @@ use App\Models\HTE;
 use App\Models\InternshipRequirement;
 use App\Models\OjtEnrollment;
 use App\Models\Program;
+use App\Models\SystemNotification;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -151,6 +152,16 @@ class CoordinatorStudentController extends Controller
         return response()->json(['message' => 'Student record and login account deleted successfully.']);
     }
 
+    public function deactivate(Student $student)
+    {
+        DB::transaction(function () use ($student) {
+            $student->user?->update(['is_active' => false]);
+            $student->update(['internship_status' => 'dropped']);
+        });
+
+        return response()->json(['message' => 'Student record deactivated. Historical attendance, requirements, and reports were preserved.']);
+    }
+
     public function approveRegistration(Student $student, Request $request)
     {
         $student->update([
@@ -160,6 +171,7 @@ class CoordinatorStudentController extends Controller
             'registration_reviewed_by' => $request->user()->id,
             'registration_reviewed_at' => now(),
         ]);
+        SystemNotification::sendToUser($student->user_id, 'Registration approved', 'Your AIMS registration has been approved. You can now access student internship modules.', 'approval', '/student/dashboard');
 
         return response()->json(['message' => 'Student registration approved.']);
     }
@@ -173,6 +185,7 @@ class CoordinatorStudentController extends Controller
             'registration_reviewed_by' => $request->user()->id,
             'registration_reviewed_at' => now(),
         ]);
+        SystemNotification::sendToUser($student->user_id, 'Registration needs correction', $validated['reason'], 'warning', '/student/profile');
 
         return response()->json(['message' => 'Student registration rejected.']);
     }
@@ -198,6 +211,7 @@ class CoordinatorStudentController extends Controller
             'reviewed_by' => $request->user()->id,
             'reviewed_at' => now(),
         ]);
+        SystemNotification::sendToUser($student->user_id, 'Requirement '.$validated['decision'], $requirement->requirement_name.' was '.$validated['decision'].'.'.(! empty($validated['feedback']) ? ' '.$validated['feedback'] : ''), 'requirement', '/student/requirements');
 
         return response()->json([
             'message' => 'Requirement '.$validated['decision'].'.',

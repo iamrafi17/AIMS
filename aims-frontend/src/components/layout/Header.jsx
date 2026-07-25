@@ -1,4 +1,6 @@
-import { useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { Bars3Icon, BellIcon, SunIcon, MoonIcon } from '@heroicons/react/24/outline';
@@ -14,14 +16,25 @@ const pageNames = {
   announcements: 'Announcements',
   requirements: 'Requirements',
   profile: 'Profile',
+  notifications: 'Notifications',
 };
 
 function Header({ onMenuClick, sidebarOpen }) {
   const { user } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [unread, setUnread] = useState(0);
   const pageKey = location.pathname.split('/').filter(Boolean).at(-1);
   const pageTitle = pageNames[pageKey] || 'AIMS Portal';
+  const rolePath = user?.role === 'program_head' ? 'program-head' : user?.role;
+
+  useEffect(() => {
+    if (!user) return;
+    api.get('/notifications', { params: { unread: 1 } })
+      .then((response) => setUnread(response.data.unread_count || 0))
+      .catch(() => {});
+  }, [location.pathname, user]);
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-xl dark:border-gray-700 dark:bg-gray-800/90">
@@ -65,9 +78,9 @@ function Header({ onMenuClick, sidebarOpen }) {
           </button>
 
           {/* Notifications */}
-          <button className="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+          <button onClick={() => navigate(`/${rolePath}/notifications`)} className="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors" aria-label={`${unread} unread notifications`}>
             <BellIcon className="w-6 h-6 text-gray-600 dark:text-gray-300" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            {unread > 0 && <span className="absolute right-0 top-0 grid min-h-5 min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">{unread > 9 ? '9+' : unread}</span>}
           </button>
 
           {/* User avatar */}

@@ -38,6 +38,7 @@ import ProgramHeadDocuments from './pages/program-head/DocumentReview';
 import ProgramHeadTravel from './pages/program-head/TravelMonitoringManagement';
 import ProgramHeadReports from './pages/program-head/Reports';
 import ProgramHeadAnnouncements from './pages/program-head/Announcements';
+import ProgramHeadStudentMonitoring from './pages/program-head/StudentMonitoring';
 
 // VPAA Pages
 import VPAADashboard from './pages/vpaa/Dashboard';
@@ -60,6 +61,7 @@ import SupervisorProgress from './pages/supervisor/StudentProgress';
 import SupervisorEvaluations from './pages/supervisor/Evaluations';
 import SupervisorAttendance from './pages/supervisor/AttendanceReview';
 import SupervisorAnnouncements from './pages/supervisor/Announcements';
+import Notifications from './pages/shared/Notifications';
 
 function ThemedToaster() {
   const { darkMode } = useTheme();
@@ -102,6 +104,7 @@ function App() {
                   <Route path="/student/travel" element={<StudentTravel />} />
                   <Route path="/student/announcements" element={<StudentAnnouncements />} />
                   <Route path="/student/profile" element={<StudentProfile />} />
+                  <Route path="/student/notifications" element={<Notifications />} />
                 </Route>
 
                 {/* Coordinator Routes */}
@@ -114,15 +117,19 @@ function App() {
                   <Route path="/coordinator/reports" element={<CoordinatorReports />} />
                   <Route path="/coordinator/announcements" element={<CoordinatorAnnouncements />} />
                   <Route path="/coordinator/profile" element={<CoordinatorProfile />} />
+                  <Route path="/coordinator/notifications" element={<Notifications />} />
                 </Route>
 
                 {/* Program Head Routes */}
                 <Route element={<RoleBasedRoute allowedRoles={['program_head']} />}>
                   <Route path="/program-head/dashboard" element={<ProgramHeadDashboard />} />
                   <Route path="/program-head/documents" element={<ProgramHeadDocuments />} />
+                  <Route path="/program-head/students" element={<ProgramHeadStudentMonitoring />} />
                   <Route path="/program-head/travel" element={<ProgramHeadTravel />} />
                   <Route path="/program-head/reports" element={<ProgramHeadReports />} />
                   <Route path="/program-head/announcements" element={<ProgramHeadAnnouncements />} />
+                  <Route path="/program-head/profile" element={<CoordinatorProfile />} />
+                  <Route path="/program-head/notifications" element={<Notifications />} />
                 </Route>
 
                 {/* VPAA Routes */}
@@ -132,6 +139,9 @@ function App() {
                   <Route path="/vpaa/moas" element={<VPAAMOA />} />
                   <Route path="/vpaa/announcements" element={<VPAAAnnouncements />} />
                   <Route path="/vpaa/reports" element={<VPAAReports />} />
+                  <Route path="/vpaa/travel" element={<ProgramHeadTravel apiBase="/vpaa/travel" />} />
+                  <Route path="/vpaa/profile" element={<CoordinatorProfile />} />
+                  <Route path="/vpaa/notifications" element={<Notifications />} />
                 </Route>
 
                 {/* Admin Routes */}
@@ -142,6 +152,9 @@ function App() {
                   <Route path="/admin/system" element={<AdminSystem />} />
                   <Route path="/admin/audit" element={<AdminAudit />} />
                   <Route path="/admin/reports" element={<AdminReports />} />
+                  <Route path="/admin/profile" element={<CoordinatorProfile />} />
+                  <Route path="/admin/notifications" element={<Notifications />} />
+                  <Route path="/admin/announcements" element={<StudentAnnouncements />} />
                 </Route>
 
                 {/* Supervisor Routes */}
@@ -151,6 +164,8 @@ function App() {
                   <Route path="/supervisor/evaluations" element={<SupervisorEvaluations />} />
                   <Route path="/supervisor/attendance" element={<SupervisorAttendance />} />
                   <Route path="/supervisor/announcements" element={<SupervisorAnnouncements />} />
+                  <Route path="/supervisor/profile" element={<CoordinatorProfile />} />
+                  <Route path="/supervisor/notifications" element={<Notifications />} />
                 </Route>
               </Route>
             </Route>

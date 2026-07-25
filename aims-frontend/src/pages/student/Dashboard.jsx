@@ -8,6 +8,7 @@ import {
   FiCheckCircle,
   FiChevronDown,
   FiClock,
+  FiClipboard,
   FiFileText,
   FiGlobe,
   FiHome,
@@ -563,6 +564,24 @@ function StudentDashboard() {
           </div>
         </div>
       </section>
+
+      {dashboardData?.tasks?.length > 0 && (
+        <section className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#800000]/10 text-[#800000]"><FiClipboard /></div>
+            <div><h3 className="font-black text-[#430909] dark:text-white">Assigned HTE Tasks</h3><p className="text-xs text-slate-400">Current deliverables from your HTE supervisor</p></div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {dashboardData.tasks.map((task) => (
+              <article key={task.id} className="rounded-2xl border border-slate-100 p-4 dark:border-gray-700">
+                <div className="flex items-start justify-between gap-3"><h4 className="font-black text-slate-800 dark:text-white">{task.title}</h4><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${task.priority === 'high' ? 'bg-rose-100 text-rose-700' : task.priority === 'low' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{task.priority}</span></div>
+                <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{task.description || 'No additional instructions.'}</p>
+                <p className="mt-3 text-xs font-bold text-[#800000] dark:text-rose-300">{task.due_date ? `Due ${new Date(task.due_date).toLocaleDateString()}` : 'No fixed deadline'} · {task.status.replace('_', ' ')}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="rounded-xl bg-white p-6 shadow-sm dark:bg-gray-800">
         <div className="mb-4 flex items-center justify-between">

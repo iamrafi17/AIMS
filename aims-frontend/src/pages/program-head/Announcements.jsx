@@ -1,15 +1,5 @@
-import { BellIcon } from '@heroicons/react/24/outline';
+import AnnouncementCenter from '../../components/announcements/AnnouncementCenter';
 
-function ProgramHeadAnnouncements() {
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">Announcements</h1>
-      <div className="bg-white rounded-xl shadow-sm p-6 text-center py-12">
-        <BellIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-        <p className="text-gray-500">No announcements yet</p>
-      </div>
-    </div>
-  );
+export default function ProgramHeadAnnouncements() {
+  return <AnnouncementCenter />;
 }
-
-export default ProgramHeadAnnouncements;

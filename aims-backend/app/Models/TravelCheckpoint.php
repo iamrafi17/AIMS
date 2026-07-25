@@ -11,7 +11,9 @@ class TravelCheckpoint extends Model
 
     protected $fillable = [
         'travel_log_id',
+        'sequence',
         'checkpoint_name',
+        'expected_at',
         'latitude',
         'longitude',
         'photo_path',
@@ -26,6 +28,7 @@ class TravelCheckpoint extends Model
         return [
             'latitude' => 'decimal:8',
             'longitude' => 'decimal:8',
+            'expected_at' => 'datetime',
             'is_verified' => 'boolean',
             'verified_at' => 'datetime',
         ];

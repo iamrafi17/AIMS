@@ -11,7 +11,12 @@ class TravelLog extends Model
 
     protected $fillable = [
         'student_id',
+        'created_by',
         'session_code',
+        'destination',
+        'purpose',
+        'route_notes',
+        'scheduled_at',
         'start_time',
         'end_time',
         'status',
@@ -22,6 +27,7 @@ class TravelLog extends Model
         return [
             'start_time' => 'datetime',
             'end_time' => 'datetime',
+            'scheduled_at' => 'datetime',
         ];
     }
 
@@ -33,5 +39,15 @@ class TravelLog extends Model
     public function checkpoints()
     {
         return $this->hasMany(TravelCheckpoint::class);
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function companions()
+    {
+        return $this->hasMany(TravelCompanion::class);
     }
 }

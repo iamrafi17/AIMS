@@ -176,7 +176,7 @@ function DocumentReview() {
 
   const submitDecision = async (event) => {
     event.preventDefault();
-    if (decision.kind === 'requirement' && decision.decision === 'rejected' && !feedback.trim()) {
+    if (decision.decision === 'rejected' && !feedback.trim()) {
       toast.error('Feedback is required when rejecting a requirement.');
       return;
     }
@@ -186,7 +186,7 @@ function DocumentReview() {
       const endpoint = decision.kind === 'requirement'
         ? `/program-head/documents/requirements/${decision.document.id}/review`
         : `/program-head/documents/moas/${decision.document.id}/review`;
-      const payload = { decision: decision.decision, ...(decision.kind === 'requirement' ? { feedback: feedback.trim() || null } : {}) };
+      const payload = { decision: decision.decision, feedback: feedback.trim() || null };
       const response = await api.post(endpoint, payload);
 
       if (decision.kind === 'requirement') {
@@ -453,7 +453,7 @@ function DocumentReview() {
             <div className={`grid h-14 w-14 place-items-center rounded-2xl text-2xl ${decision.decision === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'}`}>{decision.decision === 'approved' ? <FiCheckCircle /> : <FiXCircle />}</div>
             <h3 className="mt-4 font-black text-slate-800 dark:text-white">{decision.kind === 'requirement' ? decision.document.requirement_name : decision.document.hte}</h3>
             <p className="mt-2 text-xs leading-5 text-slate-400">{decision.decision === 'approved' ? 'This document will be marked approved and included in compliance totals.' : 'This document will be marked rejected and returned for corrective action.'}</p>
-            {decision.kind === 'requirement' && decision.decision === 'rejected' && <label className="mt-5 block"><span className="mb-2 block text-xs font-black text-slate-600 dark:text-gray-200">Rejection feedback <span className="text-rose-500">*</span></span><textarea required rows="4" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="Explain what must be corrected or resubmitted..." className={inputClass} /></label>}
+            {decision.decision === 'rejected' && <label className="mt-5 block"><span className="mb-2 block text-xs font-black text-slate-600 dark:text-gray-200">Rejection feedback <span className="text-rose-500">*</span></span><textarea required rows="4" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="Explain what must be corrected or resubmitted..." className={inputClass} /></label>}
             <div className="mt-6 flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end dark:border-gray-700"><button type="button" onClick={() => setDecision(null)} disabled={busy} className="rounded-xl border border-slate-200 px-5 py-3 text-xs font-black text-slate-600 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">Cancel</button><button type="submit" disabled={busy} className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-xs font-black text-white disabled:opacity-50 ${decision.decision === 'approved' ? 'bg-emerald-600' : 'bg-rose-600'}`}>{busy ? <FiRefreshCw className="animate-spin" /> : decision.decision === 'approved' ? <FiCheck /> : <FiX />} Confirm {decision.decision === 'approved' ? 'Approval' : 'Rejection'}</button></div>
           </form>
         </Modal>

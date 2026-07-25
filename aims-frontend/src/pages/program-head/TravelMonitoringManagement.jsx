@@ -149,7 +149,7 @@ function RouteMap({ session }) {
   );
 }
 
-function TravelMonitoringManagement() {
+function TravelMonitoringManagement({ apiBase = '/program-head/travel' }) {
   const [data, setData] = useState(emptyData);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -168,7 +168,7 @@ function TravelMonitoringManagement() {
 
   useEffect(() => {
     let mounted = true;
-    api.get('/program-head/travel')
+    api.get(apiBase)
       .then((response) => {
         if (mounted) applyResponse(response);
       })
@@ -179,12 +179,12 @@ function TravelMonitoringManagement() {
         if (mounted) setLoading(false);
       });
     return () => { mounted = false; };
-  }, []);
+  }, [apiBase]);
 
   const refreshTravel = async () => {
     setRefreshing(true);
     try {
-      const response = await api.get('/program-head/travel');
+      const response = await api.get(apiBase);
       applyResponse(response);
       toast.success('Travel monitoring data refreshed.');
     } catch (error) {
@@ -214,7 +214,7 @@ function TravelMonitoringManagement() {
   const verifyCheckpoint = async (checkpoint, verified) => {
     setBusyCheckpointId(checkpoint.id);
     try {
-      const response = await api.put(`/program-head/travel/checkpoints/${checkpoint.id}/verify`, { verified });
+      const response = await api.put(`${apiBase}/checkpoints/${checkpoint.id}/verify`, { verified });
       const updated = response.data.checkpoint;
       const wasVerified = checkpoint.is_verified;
       setData((current) => ({

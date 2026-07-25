@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ApprovalRecord;
 use App\Models\College;
 use App\Models\Holiday;
 use App\Models\HTE;
 use App\Models\MOA;
 use App\Models\Student;
+use App\Models\User;
+use App\Models\SystemNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -27,13 +30,14 @@ class CoordinatorHTEController extends Controller
 
         return response()->json([
             'htes' => $htes->map(fn (HTE $hte) => $this->htePayload($hte)),
-            'deployments' => Student::with(['user', 'college', 'program', 'hte'])
+            'deployments' => Student::with(['user', 'college', 'program', 'hte', 'supervisor:id,name,email'])
                 ->where('registration_status', 'approved')
                 ->orderBy('last_name')
                 ->get(),
             'holidays' => Holiday::orderByDesc('date')->get(),
             'moas' => $moas->map(fn (MOA $moa) => $this->moaPayload($moa)),
             'colleges' => College::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
+            'supervisors' => User::where('role', 'supervisor')->where('is_active', true)->orderBy('name')->get(['id', 'name', 'email']),
             'summary' => [
                 'total_htes' => $htes->count(),
                 'active_htes' => $htes->where('is_active', true)->count(),
@@ -94,6 +98,7 @@ class CoordinatorHTEController extends Controller
     {
         $validated = $request->validate([
             'hte_id' => ['nullable', 'exists:htes,id'],
+            'supervisor_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'supervisor')],
             'ojt_start_date' => ['nullable', 'date'],
             'ojt_end_date' => ['nullable', 'date', 'after_or_equal:ojt_start_date'],
             'required_ojt_hours' => ['required', 'numeric', 'between:1,2000'],
@@ -107,11 +112,38 @@ class CoordinatorHTEController extends Controller
             'allow_past_attendance' => ['required', 'boolean'],
         ]);
 
-        $student->update($validated);
+        if ($validated['hte_id']) {
+            $student->update([
+                ...$validated,
+                'schedule_status' => 'pending',
+            ]);
+            ApprovalRecord::submit(
+                ApprovalRecord::TYPE_DEPLOYMENT,
+                $student->id,
+                $request->user()->id,
+            );
+            SystemNotification::sendToRole('vpaa', 'Deployment request submitted', $student->student_id.' deployment is ready for final review.', 'approval', '/vpaa/approvals');
+        } else {
+            $student->update([
+                ...$validated,
+                'schedule_status' => 'pending',
+            ]);
+
+            ApprovalRecord::query()
+                ->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)
+                ->where('subject_id', $student->id)
+                ->where('status', 'pending')
+                ->update([
+                    'status' => 'rejected',
+                    'remarks' => 'Deployment request withdrawn by the coordinator.',
+                    'decided_by' => $request->user()->id,
+                    'decided_at' => now(),
+                ]);
+        }
 
         return response()->json([
             'message' => $validated['hte_id'] ? 'Student deployment and schedule updated.' : 'Student undeployed successfully.',
-            'student' => $student->fresh()->load(['user', 'college', 'program', 'hte']),
+            'student' => $student->fresh()->load(['user', 'college', 'program', 'hte', 'supervisor:id,name,email']),
         ]);
     }
 

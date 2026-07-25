@@ -18,6 +18,10 @@ class MOA extends Model
         'effective_date',
         'expiration_date',
         'status',
+        'program_status',
+        'program_feedback',
+        'program_reviewed_by',
+        'program_reviewed_at',
         'approved_by',
         'approved_at',
     ];
@@ -28,6 +32,7 @@ class MOA extends Model
             'effective_date' => 'date',
             'expiration_date' => 'date',
             'approved_at' => 'datetime',
+            'program_reviewed_at' => 'datetime',
         ];
     }
 
@@ -44,5 +49,10 @@ class MOA extends Model
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function programReviewer()
+    {
+        return $this->belongsTo(User::class, 'program_reviewed_by');
     }
 }

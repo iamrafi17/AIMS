@@ -22,7 +22,7 @@ export function AuthProvider({ children }) {
       const response = await api.get('/user');
       setUser(response.data.user);
       setStudent(response.data.student);
-    } catch (error) {
+    } catch {
       localStorage.removeItem('token');
     } finally {
       setLoading(false);
@@ -44,7 +44,7 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       await api.post('/logout');
-    } catch (error) {
+    } catch {
       // Ignore logout errors
     } finally {
       localStorage.removeItem('token');

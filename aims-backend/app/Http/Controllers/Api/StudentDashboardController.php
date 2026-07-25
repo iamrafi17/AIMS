@@ -91,6 +91,12 @@ class StudentDashboardController extends Controller
         $todayAttendance = Attendance::where('student_id', $student->id)
             ->whereDate('date', $today)
             ->first();
+        $tasks = $student->tasks()
+            ->whereIn('status', ['assigned', 'in_progress'])
+            ->orderByRaw('due_date is null')
+            ->orderBy('due_date')
+            ->limit(6)
+            ->get(['id', 'title', 'description', 'due_date', 'priority', 'status']);
 
         return response()->json([
             'student' => [
@@ -131,6 +137,7 @@ class StudentDashboardController extends Controller
             'rendered_hours' => round($renderedHours, 2),
             'pending_requirements' => $pendingRequirements,
             'announcements' => $announcements,
+            'tasks' => $tasks,
             'today_attendance' => $todayAttendance ? [
                 'time_in' => $todayAttendance->time_in,
                 'time_out' => $todayAttendance->time_out,

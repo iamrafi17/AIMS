@@ -14,7 +14,11 @@ class SupervisorDashboardController extends Controller
     {
         $supervisorId = $request->user()->id;
         $evaluations = Evaluation::where('supervisor_id', $supervisorId)->get();
-        $studentIds = $evaluations->pluck('student_id')->unique()->values();
+        $studentIds = Student::where('supervisor_id', $supervisorId)
+            ->pluck('id')
+            ->merge($evaluations->pluck('student_id'))
+            ->unique()
+            ->values();
 
         $students = Student::with([
             'user',

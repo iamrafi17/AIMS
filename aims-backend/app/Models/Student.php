@@ -28,6 +28,7 @@ class Student extends Model
         'parent_address',
         'parent_phone',
         'hte_id',
+        'supervisor_id',
         'internship_semester',
         'internship_year',
         'internship_status',
@@ -80,6 +81,16 @@ class Student extends Model
     public function hte()
     {
         return $this->belongsTo(HTE::class);
+    }
+
+    public function supervisor()
+    {
+        return $this->belongsTo(User::class, 'supervisor_id');
+    }
+
+    public function tasks()
+    {
+        return $this->hasMany(InternshipTask::class);
     }
 
     public function attendance()

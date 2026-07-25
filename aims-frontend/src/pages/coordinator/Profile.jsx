@@ -70,6 +70,20 @@ function SectionHeader({ icon, title, description, editing, onToggle }) {
 
 function CoordinatorProfile() {
   const { user, refreshUser } = useAuth();
+  const roleLabel = {
+    coordinator: 'Internship Coordinator',
+    program_head: 'Program Head',
+    vpaa: 'Vice President for Academic Affairs',
+    admin: 'System Administrator',
+    supervisor: 'HTE Supervisor',
+  }[user?.role] || 'AIMS User';
+  const roleAccountLabel = {
+    coordinator: 'Coordinator',
+    program_head: 'Program Head',
+    vpaa: 'VPAA',
+    admin: 'Administrator',
+    supervisor: 'Supervisor',
+  }[user?.role] || 'Account';
   const photoInput = useRef(null);
   const [account, setAccount] = useState({ name: '' });
   const [contact, setContact] = useState({ email: '', phone: '', address: '' });
@@ -206,7 +220,7 @@ function CoordinatorProfile() {
   return (
     <div className="space-y-6">
       <header>
-        <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Coordinator account</p>
+        <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">{roleAccountLabel} account</p>
         <h1 className="mt-1 text-2xl font-black text-[#430909] dark:text-white">My Profile</h1>
         <p className="mt-1 text-sm text-slate-400">Manage your coordinator identity, contact details, photo, and account security.</p>
       </header>
@@ -221,10 +235,10 @@ function CoordinatorProfile() {
               </button>
               <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadPhoto} className="hidden" />
             </div>
-            <h2 className="mt-5 text-xl font-black">{user?.name || 'Coordinator'}</h2>
+            <h2 className="mt-5 text-xl font-black">{user?.name || roleAccountLabel}</h2>
             <p className="mt-1 break-all text-sm text-white/65">{user?.email}</p>
             <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#f5d77f]">
-              <SmallIcon icon={BriefcaseIcon} /> Internship Coordinator
+              <SmallIcon icon={BriefcaseIcon} /> {roleLabel}
             </span>
           </div>
 
@@ -254,20 +268,20 @@ function CoordinatorProfile() {
 
         <main className="min-w-0 space-y-6">
           <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6 dark:border-gray-700 dark:bg-gray-800">
-            <SectionHeader icon={UserCircleIcon} title="Coordinator Information" description="Update the name displayed throughout the coordinator portal." editing={editingAccount} onToggle={toggleAccount} />
+            <SectionHeader icon={UserCircleIcon} title={`${roleAccountLabel} Information`} description="Update the name displayed throughout your AIMS portal." editing={editingAccount} onToggle={toggleAccount} />
             <form onSubmit={saveAccount}>
               <div className="grid gap-4 md:grid-cols-2">
                 <Field label="Full Name" icon={IdentificationIcon}>
                   <input value={account.name} onChange={(event) => setAccount({ name: event.target.value })} disabled={!editingAccount} className={inputClass} required />
                 </Field>
                 <Field label="System Role" icon={BriefcaseIcon}>
-                  <input value="Internship Coordinator" disabled className={inputClass} />
+                  <input value={roleLabel} disabled className={inputClass} />
                 </Field>
               </div>
               {editingAccount && (
                 <div className="mt-6 flex justify-end">
                   <button disabled={busy === 'account'} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-60">
-                    <SmallIcon icon={CheckIcon} /> {busy === 'account' ? 'Saving...' : 'Save Coordinator Information'}
+                    <SmallIcon icon={CheckIcon} /> {busy === 'account' ? 'Saving...' : `Save ${roleAccountLabel} Information`}
                   </button>
                 </div>
               )}

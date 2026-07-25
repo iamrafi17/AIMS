@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ApprovalRecord;
 use App\Models\InternshipRequirement;
 use App\Models\MOA;
+use App\Models\SystemNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -23,7 +25,7 @@ class ProgramHeadDocumentController extends Controller
             ->latest('updated_at')
             ->get();
 
-        $moas = MOA::with(['hte', 'college', 'approver'])
+        $moas = MOA::with(['hte', 'college', 'approver', 'programReviewer'])
             ->latest('updated_at')
             ->get();
 
@@ -57,6 +59,7 @@ class ProgramHeadDocumentController extends Controller
             'decision' => ['required', 'in:approved,rejected'],
             'feedback' => ['nullable', 'required_if:decision,rejected', 'string', 'max:2000'],
         ]);
+        $wasApproved = $requirement->status === 'approved';
 
         $requirement->update([
             'status' => $validated['decision'],
@@ -64,6 +67,15 @@ class ProgramHeadDocumentController extends Controller
             'reviewed_by' => $request->user()->id,
             'reviewed_at' => now(),
         ]);
+
+        if ($validated['decision'] === 'approved' && ! $wasApproved) {
+            ApprovalRecord::submit(
+                ApprovalRecord::TYPE_DOCUMENT,
+                $requirement->id,
+                $request->user()->id,
+            );
+            SystemNotification::sendToRole('vpaa', 'Document endorsed for final review', $requirement->requirement_name.' has been endorsed by a Program Head.', 'approval', '/vpaa/approvals');
+        }
 
         return response()->json([
             'message' => 'Requirement '.$validated['decision'].'.',
@@ -90,17 +102,25 @@ class ProgramHeadDocumentController extends Controller
     {
         $validated = $request->validate([
             'decision' => ['required', 'in:approved,rejected'],
+            'feedback' => ['nullable', 'required_if:decision,rejected', 'string', 'max:2000'],
         ]);
 
         $moa->update([
-            'status' => $validated['decision'],
-            'approved_by' => $request->user()->id,
-            'approved_at' => now(),
+            'program_status' => $validated['decision'] === 'approved' ? 'endorsed' : 'rejected',
+            'program_feedback' => $validated['feedback'] ?? null,
+            'program_reviewed_by' => $request->user()->id,
+            'program_reviewed_at' => now(),
+            'status' => $validated['decision'] === 'approved' ? 'pending' : 'rejected',
         ]);
 
+        if ($validated['decision'] === 'approved') {
+            ApprovalRecord::submit(ApprovalRecord::TYPE_MOA, $moa->id, $request->user()->id);
+            SystemNotification::sendToRole('vpaa', 'MOA endorsed for final approval', ($moa->hte?->name ?? 'An HTE').' MOA is ready for executive review.', 'approval', '/vpaa/moas');
+        }
+
         return response()->json([
-            'message' => 'MOA '.$validated['decision'].'.',
-            'moa' => $this->moaPayload($moa->fresh(['hte', 'college', 'approver']), now()->startOfDay()),
+            'message' => $validated['decision'] === 'approved' ? 'MOA endorsed to the VPAA for final approval.' : 'MOA rejected.',
+            'moa' => $this->moaPayload($moa->fresh(['hte', 'college', 'approver', 'programReviewer']), now()->startOfDay()),
         ]);
     }
 
@@ -148,6 +168,8 @@ class ProgramHeadDocumentController extends Controller
             'effective_date' => $moa->effective_date->toDateString(),
             'expiration_date' => $moa->expiration_date->toDateString(),
             'status' => $moa->status,
+            'program_status' => $moa->program_status,
+            'program_feedback' => $moa->program_feedback,
             'computed_status' => $expired ? 'expired' : $moa->status,
             'days_remaining' => (int) $today->diffInDays($moa->expiration_date, false),
             'reviewed_at' => $moa->approved_at?->toIso8601String(),
