@@ -16,12 +16,15 @@ class RegistrationEnrollmentTest extends TestCase
     public function test_enrolled_student_creates_their_own_credentials_during_registration(): void
     {
         $coordinator = User::factory()->create(['role' => 'coordinator']);
-        $college = College::create(['name' => 'Computing', 'code' => 'CICS', 'is_active' => true]);
+        $college = College::create(['name' => 'Computing', 'code' => 'CICS', 'required_ojt_hours' => 600, 'is_active' => true]);
         $program = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
+        $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
         OjtEnrollment::create([
             'school_id' => '2026-REG-001',
             'full_name' => 'Maria Dela Santos',
             'section' => 'BSIT 4A',
+            'college_id' => $college->id,
+            'program_id' => $program->id,
             'source' => 'csv',
             'added_by' => $coordinator->id,
         ]);
@@ -29,7 +32,8 @@ class RegistrationEnrollmentTest extends TestCase
         $this->getJson('/api/registration/enrollment/2026-REG-001')
             ->assertOk()
             ->assertJsonPath('full_name', 'Maria Dela Santos')
-            ->assertJsonPath('section', 'BSIT 4A');
+            ->assertJsonPath('section', 'BSIT 4A')
+            ->assertJsonPath('required_ojt_hours', 600);
 
         $payload = [
             'student_id' => '2026-REG-001',
@@ -68,6 +72,7 @@ class RegistrationEnrollmentTest extends TestCase
             'first_name' => 'Maria Dela',
             'last_name' => 'Santos',
             'section' => 'BSIT 4A',
+            'required_ojt_hours' => 600,
         ]);
         $this->assertDatabaseHas('ojt_enrollments', [
             'school_id' => '2026-REG-001',

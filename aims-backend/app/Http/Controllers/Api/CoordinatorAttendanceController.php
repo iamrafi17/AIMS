@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Support\ProgramAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -22,7 +23,8 @@ class CoordinatorAttendanceController extends Controller
         ]);
 
         $query = $this->applyFilters(
-            Attendance::with(['student.user', 'student.program', 'student.hte', 'verifier', 'journalReviewer']),
+            Attendance::with(['student.user', 'student.program', 'student.hte', 'verifier', 'journalReviewer'])
+                ->whereHas('student', fn (Builder $student) => $student->where('program_id', ProgramAccess::programId($request->user()))),
             $request
         );
 
@@ -55,8 +57,10 @@ class CoordinatorAttendanceController extends Controller
         ]);
     }
 
-    public function show(Attendance $attendance)
+    public function show(Request $request, Attendance $attendance)
     {
+        ProgramAccess::authorizeAttendance($request->user(), $attendance);
+
         return response()->json($this->recordPayload(
             $attendance->load(['student.user', 'student.program', 'student.hte', 'verifier', 'journalReviewer'])
         ));
@@ -64,6 +68,7 @@ class CoordinatorAttendanceController extends Controller
 
     public function update(Request $request, Attendance $attendance)
     {
+        ProgramAccess::authorizeAttendance($request->user(), $attendance);
         $validated = $request->validate([
             'status' => ['required', 'in:present,late,absent,holiday'],
             'work_mode' => ['required', 'in:wfo,wfh,field'],
@@ -101,8 +106,9 @@ class CoordinatorAttendanceController extends Controller
         ]);
     }
 
-    public function destroy(Attendance $attendance)
+    public function destroy(Request $request, Attendance $attendance)
     {
+        ProgramAccess::authorizeAttendance($request->user(), $attendance);
         $attendance->delete();
 
         return response()->json(['message' => 'Attendance log deleted successfully.']);
@@ -110,6 +116,7 @@ class CoordinatorAttendanceController extends Controller
 
     public function verify(Request $request, Attendance $attendance)
     {
+        ProgramAccess::authorizeAttendance($request->user(), $attendance);
         $validated = $request->validate(['verified' => ['sometimes', 'boolean']]);
         $verified = $validated['verified'] ?? true;
 
@@ -127,6 +134,7 @@ class CoordinatorAttendanceController extends Controller
 
     public function reviewJournal(Request $request, Attendance $attendance)
     {
+        ProgramAccess::authorizeAttendance($request->user(), $attendance);
         if (! $this->hasJournal($attendance)) {
             throw ValidationException::withMessages(['journal' => 'This attendance record has no journal entry to review.']);
         }

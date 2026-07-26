@@ -22,7 +22,11 @@ class VPAAApprovalManagementTest extends TestCase
     {
         Storage::fake('public');
         [$student] = $this->studentContext();
-        $programHead = User::factory()->create(['role' => 'program_head']);
+        $programHead = User::factory()->create([
+            'role' => 'program_head',
+            'college_id' => $student->college_id,
+            'program_id' => $student->program_id,
+        ]);
         $vpaa = User::factory()->create(['role' => 'vpaa']);
         Storage::disk('public')->put('requirements/endorsed.pdf', 'endorsed document');
 
@@ -81,7 +85,11 @@ class VPAAApprovalManagementTest extends TestCase
     public function test_coordinator_deployment_request_can_be_approved_by_vpaa(): void
     {
         [$student, $hte] = $this->studentContext();
-        $coordinator = User::factory()->create(['role' => 'coordinator']);
+        $coordinator = User::factory()->create([
+            'role' => 'coordinator',
+            'college_id' => $student->college_id,
+            'program_id' => $student->program_id,
+        ]);
         $vpaa = User::factory()->create(['role' => 'vpaa']);
 
         Sanctum::actingAs($coordinator);
@@ -142,6 +150,8 @@ class VPAAApprovalManagementTest extends TestCase
             'is_active' => true,
         ]);
         $hte = HTE::create([
+            'college_id' => $college->id,
+            'program_id' => $program->id,
             'name' => 'Marinduque Technology Partner',
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'HTE Supervisor',

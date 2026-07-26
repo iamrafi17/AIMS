@@ -152,7 +152,10 @@ class CoordinatorHTEManagementTest extends TestCase
         $studentUser = User::factory()->create(['role' => 'student']);
         $college = College::create(['name' => 'Computing', 'code' => 'CICS', 'is_active' => true]);
         $program = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
+        $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
         $hte = HTE::create([
+            'college_id' => $college->id,
+            'program_id' => $program->id,
             'name' => 'Partner Company',
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Supervisor',

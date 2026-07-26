@@ -9,6 +9,7 @@ import {
   FiFileText,
   FiPlus,
   FiSearch,
+  FiSettings,
   FiTrash2,
   FiUpload,
   FiUserCheck,
@@ -17,6 +18,7 @@ import {
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
+import RequirementManagerModal from './RequirementManagerModal';
 
 const emptyForm = {
   student_name: '', student_id: '', first_name: '', middle_name: '', last_name: '', email: '', password: '', gender: 'female', birth_date: '', address: '', phone: '',
@@ -150,6 +152,7 @@ function StudentManagement() {
   const [form, setForm] = useState(emptyForm);
   const [selected, setSelected] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -267,7 +270,7 @@ function StudentManagement() {
   };
 
   return <div className="space-y-6">
-    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Coordinator Portal</p><h1 className="mt-1 text-2xl font-black text-[#430909] dark:text-white">Student Management</h1><p className="mt-1 text-sm text-slate-400">Records, approvals, requirements, and internship progress</p></div><div className="flex gap-2"><button onClick={() => { setImportOpen(true); setImportResult(null); setImportFile(null); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-[#800000] dark:border-gray-700 dark:bg-gray-800 dark:text-rose-300"><FiUpload /> Import CSV</button><button onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-4 py-2.5 text-xs font-black text-white"><FiPlus /> Add Manually</button></div></div>
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Coordinator Portal</p><h1 className="mt-1 text-2xl font-black text-[#430909] dark:text-white">Student Management</h1><p className="mt-1 text-sm text-slate-400">Records, approvals, requirements, and internship progress</p></div><div className="flex flex-wrap gap-2"><button onClick={() => setRequirementsOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-[#d4af37]/50 bg-[#d4af37]/10 px-4 py-2.5 text-xs font-black text-[#6b4f00] dark:text-amber-300"><FiSettings /> Customize Requirements</button><button onClick={() => { setImportOpen(true); setImportResult(null); setImportFile(null); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-[#800000] dark:border-gray-700 dark:bg-gray-800 dark:text-rose-300"><FiUpload /> Import CSV</button><button onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-4 py-2.5 text-xs font-black text-white"><FiPlus /> Add Manually</button></div></div>
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{[
       ['Total Students', summary.total, FiUsers, 'text-[#800000]'], ['Pending Review', summary.pending, FiFileText, 'text-amber-600'], ['Approved', summary.approved, FiCheck, 'text-emerald-600'], ['Rejected', summary.rejected, FiX, 'text-rose-600'], ['Active Interns', summary.active, FiUserCheck, 'text-blue-600'],
@@ -445,6 +448,7 @@ function StudentManagement() {
         </div>
       </div>
     </Modal>}
+    {requirementsOpen && <RequirementManagerModal onClose={() => setRequirementsOpen(false)} onChanged={() => { fetchStudents(); if (selected) viewStudent(selected.id); }} />}
   </div>;
 }
 

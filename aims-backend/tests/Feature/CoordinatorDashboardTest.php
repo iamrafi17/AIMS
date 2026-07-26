@@ -25,7 +25,10 @@ class CoordinatorDashboardTest extends TestCase
         $studentUser = User::factory()->create(['role' => 'student']);
         $college = College::create(['name' => 'Computing', 'code' => 'CC', 'is_active' => true]);
         $program = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
+        $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
         $hte = HTE::create([
+            'college_id' => $college->id,
+            'program_id' => $program->id,
             'name' => 'Partner Company',
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Supervisor',
@@ -80,6 +83,7 @@ class CoordinatorDashboardTest extends TestCase
         MOA::create([
             'hte_id' => $hte->id,
             'college_id' => $college->id,
+            'program_id' => $program->id,
             'file_path' => 'moas/partner.pdf',
             'effective_date' => now()->subMonth(),
             'expiration_date' => now()->addYear(),

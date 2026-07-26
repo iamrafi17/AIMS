@@ -7,13 +7,15 @@ use App\Models\ApprovalRecord;
 use App\Models\InternshipRequirement;
 use App\Models\MOA;
 use App\Models\SystemNotification;
+use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class ProgramHeadDocumentController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $programId = ProgramAccess::programId($request->user());
         $requirements = InternshipRequirement::with([
             'student.user',
             'student.program',
@@ -21,11 +23,13 @@ class ProgramHeadDocumentController extends Controller
             'student.hte',
             'reviewer',
         ])
+            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
             ->whereNotNull('file_path')
             ->latest('updated_at')
             ->get();
 
         $moas = MOA::with(['hte', 'college', 'approver', 'programReviewer'])
+            ->where('program_id', $programId)
             ->latest('updated_at')
             ->get();
 
@@ -51,6 +55,7 @@ class ProgramHeadDocumentController extends Controller
 
     public function reviewRequirement(Request $request, InternshipRequirement $requirement)
     {
+        ProgramAccess::authorizeRequirement($request->user(), $requirement);
         if (! $requirement->file_path) {
             return response()->json(['message' => 'The student has not uploaded this requirement yet.'], 422);
         }
@@ -89,8 +94,9 @@ class ProgramHeadDocumentController extends Controller
         ]);
     }
 
-    public function downloadRequirement(InternshipRequirement $requirement)
+    public function downloadRequirement(Request $request, InternshipRequirement $requirement)
     {
+        ProgramAccess::authorizeRequirement($request->user(), $requirement);
         if (! $requirement->file_path || ! Storage::disk('public')->exists($requirement->file_path)) {
             return response()->json(['message' => 'Requirement file not found.'], 404);
         }
@@ -100,6 +106,7 @@ class ProgramHeadDocumentController extends Controller
 
     public function reviewMoa(Request $request, MOA $moa)
     {
+        ProgramAccess::authorizeMoa($request->user(), $moa);
         $validated = $request->validate([
             'decision' => ['required', 'in:approved,rejected'],
             'feedback' => ['nullable', 'required_if:decision,rejected', 'string', 'max:2000'],
@@ -124,8 +131,9 @@ class ProgramHeadDocumentController extends Controller
         ]);
     }
 
-    public function downloadMoa(MOA $moa)
+    public function downloadMoa(Request $request, MOA $moa)
     {
+        ProgramAccess::authorizeMoa($request->user(), $moa);
         if (! Storage::disk('public')->exists($moa->file_path)) {
             return response()->json(['message' => 'MOA file not found.'], 404);
         }

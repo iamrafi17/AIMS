@@ -4,17 +4,18 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Student;
-use App\Models\TravelCheckpoint;
-use App\Models\TravelLog;
 use App\Models\SystemNotification;
+use App\Models\TravelLog;
+use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class CoordinatorTravelController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $programId = ProgramAccess::programId($request->user());
         $sessions = TravelLog::with([
             'student.program',
             'student.hte',
@@ -22,11 +23,13 @@ class CoordinatorTravelController extends Controller
             'companions',
             'checkpoints' => fn ($query) => $query->orderBy('sequence'),
             'checkpoints.verifier:id,name',
-        ])->latest('scheduled_at')->get();
+        ])->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->latest('scheduled_at')->get();
 
         return response()->json([
             'sessions' => $sessions,
             'students' => Student::with(['program:id,code', 'hte:id,name'])
+                ->where('program_id', $programId)
                 ->where('registration_status', 'approved')
                 ->orderBy('last_name')
                 ->get(['id', 'student_id', 'first_name', 'middle_name', 'last_name', 'program_id', 'hte_id']),
@@ -55,6 +58,7 @@ class CoordinatorTravelController extends Controller
                 'status' => 'scheduled',
             ]);
             $this->syncChildren($session, $data);
+
             return $session;
         });
         SystemNotification::sendToUser(
@@ -70,6 +74,7 @@ class CoordinatorTravelController extends Controller
 
     public function update(Request $request, TravelLog $travel)
     {
+        ProgramAccess::authorizeTravel($request->user(), $travel);
         abort_if($travel->status === 'completed', 422, 'Completed travel sessions cannot be edited.');
         $data = $this->sessionData($request);
         DB::transaction(function () use ($travel, $data) {
@@ -80,16 +85,18 @@ class CoordinatorTravelController extends Controller
         return response()->json(['message' => 'Travel session updated successfully.']);
     }
 
-    public function destroy(TravelLog $travel)
+    public function destroy(Request $request, TravelLog $travel)
     {
+        ProgramAccess::authorizeTravel($request->user(), $travel);
         abort_if($travel->status === 'active', 422, 'End or cancel the active session before deleting it.');
         $travel->delete();
 
         return response()->json(['message' => 'Travel session deleted.']);
     }
 
-    public function cancel(TravelLog $travel)
+    public function cancel(Request $request, TravelLog $travel)
     {
+        ProgramAccess::authorizeTravel($request->user(), $travel);
         abort_if($travel->status === 'completed', 422, 'Completed sessions cannot be cancelled.');
         $travel->update(['status' => 'cancelled', 'end_time' => now()]);
 
@@ -98,8 +105,10 @@ class CoordinatorTravelController extends Controller
 
     private function sessionData(Request $request): array
     {
+        $programId = ProgramAccess::programId($request->user());
+
         return $request->validate([
-            'student_id' => ['required', 'exists:students,id'],
+            'student_id' => ['required', Rule::exists('students', 'id')->where('program_id', $programId)],
             'destination' => ['required', 'string', 'max:255'],
             'purpose' => ['required', 'string', 'max:3000'],
             'route_notes' => ['nullable', 'string', 'max:3000'],

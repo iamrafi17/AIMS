@@ -7,20 +7,29 @@ use App\Models\Attendance;
 use App\Models\InternshipRequirement;
 use App\Models\Student;
 use App\Models\TravelLog;
+use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 
 class ProgramHeadDashboardController extends Controller
 {
     public function index(Request $request)
     {
-        $students = Student::with(['program', 'hte', 'attendance', 'requirements'])->get();
+        $programId = ProgramAccess::programId($request->user());
+        $students = Student::with(['program', 'hte', 'attendance', 'requirements'])
+            ->where('program_id', $programId)->get();
         $monthAttendance = Attendance::whereMonth('date', now()->month)
             ->whereYear('date', now()->year)
+            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
             ->get();
-        $recentAttendance = Attendance::whereDate('date', '>=', now()->subDays(6)->toDateString())->get();
-        $requirements = InternshipRequirement::all();
+        $recentAttendance = Attendance::whereDate('date', '>=', now()->subDays(6)->toDateString())
+            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->get();
+        $requirements = InternshipRequirement::activeDefinitionOrLegacy()
+            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->get();
         $monthTravel = TravelLog::whereMonth('start_time', now()->month)
             ->whereYear('start_time', now()->year)
+            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
             ->get();
 
         $present = $monthAttendance->where('status', 'present')->count();
@@ -93,6 +102,10 @@ class ProgramHeadDashboardController extends Controller
 
         return response()->json([
             'generated_at' => now()->toIso8601String(),
+            'scope' => [
+                'college' => $request->user()->college,
+                'program' => $request->user()->program,
+            ],
             'overview' => [
                 'total_students' => $students->count(),
                 'active' => $activeStudents->count(),
@@ -122,7 +135,9 @@ class ProgramHeadDashboardController extends Controller
                 'completion_rate' => $requirementTotal > 0 ? round(($approvedRequirements / $requirementTotal) * 100, 1) : 0,
             ],
             'travel' => [
-                'active' => TravelLog::where('status', 'active')->count(),
+                'active' => TravelLog::where('status', 'active')
+                    ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+                    ->count(),
                 'total_this_month' => $monthTravel->count(),
                 'completed_this_month' => $monthTravel->where('status', 'completed')->count(),
                 'cancelled_this_month' => $monthTravel->where('status', 'cancelled')->count(),

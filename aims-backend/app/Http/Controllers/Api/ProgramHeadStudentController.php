@@ -6,13 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\InternshipRequirement;
 use App\Models\Student;
+use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 
 class ProgramHeadStudentController extends Controller
 {
     public function index(Request $request)
     {
+        $programId = ProgramAccess::programId($request->user());
         $query = Student::with(['user', 'college', 'program', 'hte', 'supervisor:id,name', 'attendance', 'requirements'])
+            ->where('program_id', $programId)
             ->orderBy('last_name');
 
         if ($request->filled('search')) {
@@ -23,12 +26,17 @@ class ProgramHeadStudentController extends Controller
                     ->orWhere('last_name', 'like', "%{$search}%");
             });
         }
-        if ($request->filled('program_id')) $query->where('program_id', $request->input('program_id'));
-        if ($request->filled('status')) $query->where('internship_status', $request->input('status'));
+        if ($request->filled('status')) {
+            $query->where('internship_status', $request->input('status'));
+        }
 
         $students = $query->get()->map(fn (Student $student) => $this->payload($student));
 
         return response()->json([
+            'scope' => [
+                'college' => $request->user()->college,
+                'program' => $request->user()->program,
+            ],
             'students' => $students,
             'summary' => [
                 'total' => $students->count(),
@@ -48,7 +56,8 @@ class ProgramHeadStudentController extends Controller
                 + (float) $record->overtime_hours;
         });
         $required = max((float) $student->required_ojt_hours, 1);
-        $official = $student->requirements->whereIn('requirement_name', InternshipRequirement::OFFICIAL_REQUIREMENTS);
+        InternshipRequirement::ensureForStudent($student->id);
+        $activeRequirements = InternshipRequirement::activeChecklistForStudent($student->id);
 
         return [
             'id' => $student->id,
@@ -67,8 +76,8 @@ class ProgramHeadStudentController extends Controller
             'required_hours' => round($required, 1),
             'progress' => round(min(($hours / $required) * 100, 100), 1),
             'attendance_days' => $student->attendance->whereIn('status', ['present', 'late'])->count(),
-            'requirements_approved' => $official->where('status', 'approved')->count(),
-            'requirements_total' => $official->count(),
+            'requirements_approved' => $activeRequirements->where('status', 'approved')->count(),
+            'requirements_total' => $activeRequirements->count(),
         ];
     }
 }

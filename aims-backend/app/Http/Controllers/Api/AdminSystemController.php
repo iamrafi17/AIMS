@@ -39,7 +39,7 @@ class AdminSystemController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:10', 'unique:colleges,code'],
-            'description' => ['nullable', 'string', 'max:1000'],
+            'required_ojt_hours' => ['required', 'numeric', 'between:1,2000'],
             'is_active' => ['nullable', 'boolean'],
         ]);
 
@@ -54,7 +54,7 @@ class AdminSystemController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:10', Rule::unique('colleges', 'code')->ignore($college)],
-            'description' => ['nullable', 'string', 'max:1000'],
+            'required_ojt_hours' => ['required', 'numeric', 'between:1,2000'],
             'is_active' => ['required', 'boolean'],
         ]);
         $college->update($data);
@@ -76,7 +76,6 @@ class AdminSystemController extends Controller
             'college_id' => ['required', 'exists:colleges,id'],
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:20', 'unique:programs,code'],
-            'description' => ['nullable', 'string', 'max:1000'],
             'is_active' => ['nullable', 'boolean'],
         ]);
 
@@ -89,7 +88,6 @@ class AdminSystemController extends Controller
             'college_id' => ['required', 'exists:colleges,id'],
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:20', Rule::unique('programs', 'code')->ignore($program)],
-            'description' => ['nullable', 'string', 'max:1000'],
             'is_active' => ['required', 'boolean'],
         ]);
         $program->update($data);
@@ -191,6 +189,7 @@ class AdminSystemController extends Controller
             'requirements_by_status' => $requirements,
             'monthly_attendance' => collect(range(5, 0))->map(function (int $monthsAgo) {
                 $date = now()->subMonths($monthsAgo);
+
                 return [
                     'label' => $date->format('M'),
                     'total' => Attendance::whereYear('date', $date->year)->whereMonth('date', $date->month)->count(),

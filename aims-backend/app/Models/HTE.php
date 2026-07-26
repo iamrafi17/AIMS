@@ -12,6 +12,8 @@ class HTE extends Model
     protected $table = 'htes';
 
     protected $fillable = [
+        'college_id',
+        'program_id',
         'name',
         'address',
         'contact_person',
@@ -44,6 +46,16 @@ class HTE extends Model
     public function students()
     {
         return $this->hasMany(Student::class, 'hte_id');
+    }
+
+    public function college()
+    {
+        return $this->belongsTo(College::class);
+    }
+
+    public function program()
+    {
+        return $this->belongsTo(Program::class);
     }
 
     public function colleges()

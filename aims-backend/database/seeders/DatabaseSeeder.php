@@ -47,6 +47,8 @@ class DatabaseSeeder extends Seeder
         // Seed HTEs
         $htes = [
             [
+                'college_id' => 1,
+                'program_id' => 1,
                 'name' => 'Tech Solutions Inc.',
                 'address' => '123 Tech Street, Santa Cruz, Laguna',
                 'contact_person' => 'John Doe',
@@ -56,6 +58,8 @@ class DatabaseSeeder extends Seeder
                 'longitude' => 121.4168,
             ],
             [
+                'college_id' => 1,
+                'program_id' => 1,
                 'name' => 'Digital Innovations Corp.',
                 'address' => '456 Innovation Ave, Santa Cruz, Laguna',
                 'contact_person' => 'Jane Smith',
@@ -81,24 +85,32 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'Coordinator User',
                 'email' => 'coordinator@marsu.edu.ph',
+                'staff_id' => 'CO-2026-001',
                 'password' => Hash::make('password'),
                 'role' => 'coordinator',
+                'college_id' => 1,
+                'program_id' => 1,
             ],
             [
                 'name' => 'Program Head User',
                 'email' => 'prohead@marsu.edu.ph',
+                'staff_id' => 'PH-2026-001',
                 'password' => Hash::make('password'),
                 'role' => 'program_head',
+                'college_id' => 1,
+                'program_id' => 1,
             ],
             [
                 'name' => 'VPAA User',
                 'email' => 'vpaa@marsu.edu.ph',
+                'staff_id' => 'VP-2026-001',
                 'password' => Hash::make('password'),
                 'role' => 'vpaa',
             ],
             [
                 'name' => 'Supervisor User',
                 'email' => 'supervisor@marsu.edu.ph',
+                'staff_id' => 'SV-2026-001',
                 'password' => Hash::make('password'),
                 'role' => 'supervisor',
             ],
@@ -145,6 +157,7 @@ class DatabaseSeeder extends Seeder
         MOA::create([
             'hte_id' => 1,
             'college_id' => 1,
+            'program_id' => 1,
             'file_path' => 'seed/moa-tech-solutions.pdf',
             'effective_date' => now()->startOfYear(),
             'expiration_date' => now()->addYears(2)->endOfYear(),
@@ -156,6 +169,7 @@ class DatabaseSeeder extends Seeder
         MOA::create([
             'hte_id' => 2,
             'college_id' => 1,
+            'program_id' => 1,
             'file_path' => 'seed/moa-digital-innovations.pdf',
             'effective_date' => now()->startOfYear(),
             'expiration_date' => now()->addYears(2)->endOfYear(),

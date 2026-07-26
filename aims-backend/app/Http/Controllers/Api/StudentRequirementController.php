@@ -15,14 +15,14 @@ class StudentRequirementController extends Controller
         InternshipRequirement::ensureForStudent($student->id);
 
         $requirements = InternshipRequirement::where('student_id', $student->id)
+            ->whereHas('definition', fn ($query) => $query->where('is_active', true))
+            ->with('definition')
+            ->join('program_requirements', 'program_requirements.id', '=', 'internship_requirements.program_requirement_id')
+            ->orderBy('program_requirements.sort_order')
+            ->select('internship_requirements.*')
             ->get();
 
-        return response()->json(
-            collect(InternshipRequirement::OFFICIAL_REQUIREMENTS)
-                ->map(fn ($name) => $requirements->firstWhere('requirement_name', $name))
-                ->filter()
-                ->values()
-        );
+        return response()->json($requirements);
     }
 
     public function upload(Request $request, $id)
@@ -35,6 +35,7 @@ class StudentRequirementController extends Controller
 
         $requirement = InternshipRequirement::where('id', $id)
             ->where('student_id', $student->id)
+            ->whereHas('definition', fn ($query) => $query->where('is_active', true))
             ->first();
 
         if (! $requirement) {
@@ -75,7 +76,7 @@ class StudentRequirementController extends Controller
             ->where('student_id', $student->id)
             ->first();
 
-        if (!$requirement || !$requirement->file_path) {
+        if (! $requirement || ! $requirement->file_path) {
             return response()->json(['message' => 'File not found'], 404);
         }
 

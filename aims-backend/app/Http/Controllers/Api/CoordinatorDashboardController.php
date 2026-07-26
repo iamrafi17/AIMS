@@ -10,15 +10,18 @@ use App\Models\InternshipRequirement;
 use App\Models\MOA;
 use App\Models\Student;
 use App\Models\TravelLog;
+use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 
 class CoordinatorDashboardController extends Controller
 {
     public function index(Request $request)
     {
-        $students = Student::query()->get();
+        $programId = ProgramAccess::programId($request->user());
+        $students = Student::where('program_id', $programId)->get();
         $monthAttendance = Attendance::whereMonth('date', now()->month)
             ->whereYear('date', now()->year)
+            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
             ->get();
 
         $present = $monthAttendance->where('status', 'present')->count();
@@ -39,22 +42,28 @@ class CoordinatorDashboardController extends Controller
             return (blank($record->am_activity) ? 0 : 1) + (blank($record->pm_activity) ? 0 : 1);
         });
 
-        $requirements = InternshipRequirement::all();
+        $requirements = InternshipRequirement::activeDefinitionOrLegacy()
+            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->get();
         $approvedRequirements = $requirements->where('status', 'approved')->count();
         $requirementTotal = $requirements->count();
 
-        $moas = MOA::with('hte')->get();
+        $moas = MOA::with('hte')->where('program_id', $programId)->get();
         $approvedMoas = $moas->filter(fn (MOA $moa) => $moa->status === 'approved' && $moa->expiration_date->gte(now()->startOfDay()));
         $expiredMoas = $moas->filter(fn (MOA $moa) => $moa->status === 'expired' || $moa->expiration_date->lt(now()->startOfDay()));
         $expiringMoas = $approvedMoas->filter(fn (MOA $moa) => $moa->expiration_date->lte(now()->addDays(30)->endOfDay()));
 
         $monthTravel = TravelLog::whereMonth('start_time', now()->month)
             ->whereYear('start_time', now()->year)
+            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
             ->get();
-        $activeTravel = TravelLog::where('status', 'active')->count();
+        $activeTravel = TravelLog::where('status', 'active')
+            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->count();
 
-        $activeInterns = Student::with(['college', 'program', 'hte', 'attendance', 'requirements'])
+        $activeInterns = Student::with(['college', 'program', 'hte', 'attendance', 'requirements.definition'])
             ->where('internship_status', 'active')
+            ->where('program_id', $programId)
             ->orderBy('last_name')
             ->limit(8)
             ->get()
@@ -62,8 +71,11 @@ class CoordinatorDashboardController extends Controller
                 $hours = $student->attendance->sum(fn (Attendance $record) => $this->renderedHours($record));
                 $requiredHours = max((float) $student->required_ojt_hours, 0);
                 $lastAttendance = $student->attendance->sortByDesc('date')->first();
-                $requirementCount = $student->requirements->count();
-                $approved = $student->requirements->where('status', 'approved')->count();
+                $activeRequirements = $student->requirements->filter(
+                    fn (InternshipRequirement $requirement) => ! $requirement->program_requirement_id || $requirement->definition?->is_active
+                );
+                $requirementCount = $activeRequirements->count();
+                $approved = $activeRequirements->where('status', 'approved')->count();
 
                 return [
                     'id' => $student->id,
@@ -83,7 +95,10 @@ class CoordinatorDashboardController extends Controller
         $pendingRegistrations = $students->where('registration_status', 'pending')->count();
         $missingJournals = max($expectedJournals - $submittedJournals, 0);
         $pendingRequirements = $requirements->where('status', 'pending')->count();
-        $todayAbsent = Attendance::whereDate('date', now()->toDateString())->where('status', 'absent')->count();
+        $todayAbsent = Attendance::whereDate('date', now()->toDateString())
+            ->where('status', 'absent')
+            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->count();
 
         $alerts = collect([
             $pendingRegistrations > 0 ? ['type' => 'warning', 'title' => 'Pending registrations', 'message' => $pendingRegistrations.' student registration(s) need review.', 'count' => $pendingRegistrations, 'link' => '/coordinator/students'] : null,
@@ -102,6 +117,10 @@ class CoordinatorDashboardController extends Controller
 
         return response()->json([
             'generated_at' => now()->toIso8601String(),
+            'scope' => [
+                'college' => $request->user()->college,
+                'program' => $request->user()->program,
+            ],
             'overview' => [
                 'total_students' => $students->count(),
                 'active' => $students->where('internship_status', 'active')->count(),
@@ -134,8 +153,8 @@ class CoordinatorDashboardController extends Controller
                 'completion_rate' => $requirementTotal > 0 ? round(($approvedRequirements / $requirementTotal) * 100, 1) : 0,
             ],
             'hte_moa' => [
-                'total_htes' => HTE::count(),
-                'active_htes' => HTE::where('is_active', true)->count(),
+                'total_htes' => HTE::where('program_id', $programId)->count(),
+                'active_htes' => HTE::where('program_id', $programId)->where('is_active', true)->count(),
                 'assigned_htes' => $students->whereNotNull('hte_id')->pluck('hte_id')->unique()->count(),
                 'moa_approved' => $approvedMoas->count(),
                 'moa_pending' => $moas->where('status', 'pending')->count(),

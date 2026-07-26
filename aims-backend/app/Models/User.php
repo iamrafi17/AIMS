@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\StaffId;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -15,10 +16,13 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'staff_id',
         'phone',
         'address',
         'password',
         'role',
+        'college_id',
+        'program_id',
         'avatar',
         'is_active',
         'last_login_at',
@@ -39,9 +43,44 @@ class User extends Authenticatable
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::creating(function (User $user): void {
+            if (StaffId::isStaffRole($user->role) && ! $user->staff_id) {
+                $user->staff_id = StaffId::generate($user->role);
+            }
+        });
+
+        static::updating(function (User $user): void {
+            if (! $user->isDirty('role')) {
+                return;
+            }
+
+            if (! StaffId::isStaffRole($user->role)) {
+                $user->staff_id = null;
+
+                return;
+            }
+
+            if (! StaffId::belongsToRole($user->staff_id, $user->role)) {
+                $user->staff_id = StaffId::generate($user->role);
+            }
+        });
+    }
+
     public function student()
     {
         return $this->hasOne(Student::class);
+    }
+
+    public function college()
+    {
+        return $this->belongsTo(College::class);
+    }
+
+    public function program()
+    {
+        return $this->belongsTo(Program::class);
     }
 
     public function supervisedStudents()

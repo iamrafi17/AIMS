@@ -12,13 +12,14 @@ class College extends Model
     protected $fillable = [
         'name',
         'code',
-        'description',
+        'required_ojt_hours',
         'is_active',
     ];
 
     protected function casts(): array
     {
         return [
+            'required_ojt_hours' => 'decimal:2',
             'is_active' => 'boolean',
         ];
     }

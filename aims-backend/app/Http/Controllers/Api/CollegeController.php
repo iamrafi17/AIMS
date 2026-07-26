@@ -12,6 +12,7 @@ class CollegeController extends Controller
     public function index()
     {
         $colleges = College::where('is_active', true)->get();
+
         return response()->json($colleges);
     }
 
@@ -23,16 +24,17 @@ class CollegeController extends Controller
     public function programs(College $college)
     {
         $programs = $college->programs()->where('is_active', true)->get();
+
         return response()->json($programs);
     }
 
-    public function htes(College $college)
+    public function htes(Request $request, College $college)
     {
         $htes = HTE::where('is_active', true)
-            ->whereHas('colleges', function ($query) use ($college) {
-                $query->where('colleges.id', $college->id);
-            })
+            ->where('college_id', $college->id)
+            ->when($request->integer('program_id'), fn ($query, int $programId) => $query->where('program_id', $programId))
             ->get();
+
         return response()->json($htes);
     }
 }

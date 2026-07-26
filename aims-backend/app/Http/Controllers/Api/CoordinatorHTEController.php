@@ -9,8 +9,9 @@ use App\Models\Holiday;
 use App\Models\HTE;
 use App\Models\MOA;
 use App\Models\Student;
-use App\Models\User;
 use App\Models\SystemNotification;
+use App\Models\User;
+use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -18,25 +19,37 @@ use Illuminate\Validation\ValidationException;
 
 class CoordinatorHTEController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $htes = HTE::with(['students.program', 'students.college', 'moas.college', 'moas.approver'])
-            ->withCount('students')
+        $programId = ProgramAccess::programId($request->user());
+        $htes = HTE::where('program_id', $programId)
+            ->with([
+                'students' => fn ($query) => $query->where('program_id', $programId),
+                'students.program',
+                'students.college',
+                'moas' => fn ($query) => $query->where('program_id', $programId),
+                'moas.college',
+                'moas.approver',
+            ])
+            ->withCount(['students' => fn ($query) => $query->where('program_id', $programId)])
             ->orderBy('name')
             ->get();
-        $moas = MOA::with(['hte', 'college', 'approver'])->latest('expiration_date')->get();
+        $moas = MOA::with(['hte', 'college', 'program', 'approver'])
+            ->where('program_id', $programId)
+            ->latest('expiration_date')->get();
         $today = now()->startOfDay();
         $validMoas = $moas->filter(fn (MOA $moa) => $moa->status === 'approved' && $moa->expiration_date->gte($today));
 
         return response()->json([
             'htes' => $htes->map(fn (HTE $hte) => $this->htePayload($hte)),
             'deployments' => Student::with(['user', 'college', 'program', 'hte', 'supervisor:id,name,email'])
+                ->where('program_id', $programId)
                 ->where('registration_status', 'approved')
                 ->orderBy('last_name')
                 ->get(),
-            'holidays' => Holiday::orderByDesc('date')->get(),
+            'holidays' => Holiday::where('program_id', $programId)->orderByDesc('date')->get(),
             'moas' => $moas->map(fn (MOA $moa) => $this->moaPayload($moa)),
-            'colleges' => College::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
+            'colleges' => College::whereKey($request->user()->college_id)->where('is_active', true)->get(['id', 'name', 'code']),
             'supervisors' => User::where('role', 'supervisor')->where('is_active', true)->orderBy('name')->get(['id', 'name', 'email']),
             'summary' => [
                 'total_htes' => $htes->count(),
@@ -54,8 +67,10 @@ class CoordinatorHTEController extends Controller
         ]);
     }
 
-    public function show(HTE $hte)
+    public function show(Request $request, HTE $hte)
     {
+        ProgramAccess::authorizeHte($request->user(), $hte);
+
         return response()->json($this->htePayload(
             $hte->load(['students.user', 'students.program', 'students.college', 'moas.college', 'moas.approver'])
         ));
@@ -63,7 +78,12 @@ class CoordinatorHTEController extends Controller
 
     public function store(Request $request)
     {
-        $hte = HTE::create($request->validate($this->hteRules()));
+        $programId = ProgramAccess::programId($request->user());
+        $hte = HTE::create([
+            ...$request->validate($this->hteRules($request)),
+            'college_id' => $request->user()->college_id,
+            'program_id' => $programId,
+        ]);
 
         return response()->json([
             'message' => 'HTE record created successfully.',
@@ -73,7 +93,8 @@ class CoordinatorHTEController extends Controller
 
     public function update(Request $request, HTE $hte)
     {
-        $hte->update($request->validate($this->hteRules($hte)));
+        ProgramAccess::authorizeHte($request->user(), $hte);
+        $hte->update($request->validate($this->hteRules($request, $hte)));
 
         return response()->json([
             'message' => 'HTE record updated successfully.',
@@ -81,8 +102,9 @@ class CoordinatorHTEController extends Controller
         ]);
     }
 
-    public function destroy(HTE $hte)
+    public function destroy(Request $request, HTE $hte)
     {
+        ProgramAccess::authorizeHte($request->user(), $hte);
         if ($hte->students()->exists()) {
             throw ValidationException::withMessages(['hte' => 'Reassign or undeploy all students before deleting this HTE.']);
         }
@@ -96,8 +118,10 @@ class CoordinatorHTEController extends Controller
 
     public function deploy(Request $request, Student $student)
     {
+        $programId = ProgramAccess::programId($request->user());
+        ProgramAccess::authorizeStudent($request->user(), $student);
         $validated = $request->validate([
-            'hte_id' => ['nullable', 'exists:htes,id'],
+            'hte_id' => ['nullable', Rule::exists('htes', 'id')->where('program_id', $programId)],
             'supervisor_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'supervisor')],
             'ojt_start_date' => ['nullable', 'date'],
             'ojt_end_date' => ['nullable', 'date', 'after_or_equal:ojt_start_date'],
@@ -149,20 +173,26 @@ class CoordinatorHTEController extends Controller
 
     public function storeHoliday(Request $request)
     {
-        $holiday = Holiday::create($request->validate($this->holidayRules()));
+        $holiday = Holiday::create([
+            ...$request->validate($this->holidayRules()),
+            'college_id' => $request->user()->college_id,
+            'program_id' => ProgramAccess::programId($request->user()),
+        ]);
 
         return response()->json(['message' => 'Holiday added successfully.', 'holiday' => $holiday], 201);
     }
 
     public function updateHoliday(Request $request, Holiday $holiday)
     {
+        ProgramAccess::authorizeHoliday($request->user(), $holiday);
         $holiday->update($request->validate($this->holidayRules()));
 
         return response()->json(['message' => 'Holiday updated successfully.', 'holiday' => $holiday->fresh()]);
     }
 
-    public function destroyHoliday(Holiday $holiday)
+    public function destroyHoliday(Request $request, Holiday $holiday)
     {
+        ProgramAccess::authorizeHoliday($request->user(), $holiday);
         $holiday->delete();
 
         return response()->json(['message' => 'Holiday deleted successfully.']);
@@ -170,9 +200,10 @@ class CoordinatorHTEController extends Controller
 
     public function storeMoa(Request $request)
     {
+        $programId = ProgramAccess::programId($request->user());
         $validated = $request->validate([
-            'hte_id' => ['required', 'exists:htes,id'],
-            'college_id' => ['required', 'exists:colleges,id'],
+            'hte_id' => ['required', Rule::exists('htes', 'id')->where('program_id', $programId)],
+            'college_id' => ['nullable', Rule::in([(int) $request->user()->college_id])],
             'effective_date' => ['required', 'date'],
             'expiration_date' => ['required', 'date', 'after:effective_date'],
             'file' => ['required', 'file', 'mimes:pdf', 'max:10240'],
@@ -180,7 +211,9 @@ class CoordinatorHTEController extends Controller
         $path = $request->file('file')->store('moas', 'public');
 
         $moa = MOA::create([
-            ...collect($validated)->except('file')->all(),
+            ...collect($validated)->except(['file', 'college_id'])->all(),
+            'college_id' => $request->user()->college_id,
+            'program_id' => $programId,
             'file_path' => $path,
             'status' => 'pending',
         ]);
@@ -193,8 +226,8 @@ class CoordinatorHTEController extends Controller
 
     public function updateMoa(Request $request, MOA $moa)
     {
+        ProgramAccess::authorizeMoa($request->user(), $moa);
         $validated = $request->validate([
-            'college_id' => ['required', 'exists:colleges,id'],
             'effective_date' => ['required', 'date'],
             'expiration_date' => ['required', 'date', 'after:effective_date'],
         ]);
@@ -211,8 +244,9 @@ class CoordinatorHTEController extends Controller
         ]);
     }
 
-    public function downloadMoa(MOA $moa)
+    public function downloadMoa(Request $request, MOA $moa)
     {
+        ProgramAccess::authorizeMoa($request->user(), $moa);
         if (! Storage::disk('public')->exists($moa->file_path)) {
             return response()->json(['message' => 'MOA file not found.'], 404);
         }
@@ -220,18 +254,19 @@ class CoordinatorHTEController extends Controller
         return Storage::disk('public')->download($moa->file_path);
     }
 
-    public function destroyMoa(MOA $moa)
+    public function destroyMoa(Request $request, MOA $moa)
     {
+        ProgramAccess::authorizeMoa($request->user(), $moa);
         Storage::disk('public')->delete($moa->file_path);
         $moa->delete();
 
         return response()->json(['message' => 'MOA record deleted successfully.']);
     }
 
-    private function hteRules(?HTE $hte = null): array
+    private function hteRules(Request $request, ?HTE $hte = null): array
     {
         return [
-            'name' => ['required', 'string', 'max:255', Rule::unique('htes', 'name')->ignore($hte?->id)],
+            'name' => ['required', 'string', 'max:255', Rule::unique('htes', 'name')->where('program_id', ProgramAccess::programId($request->user()))->ignore($hte?->id)],
             'address' => ['required', 'string', 'max:1000'],
             'contact_person' => ['required', 'string', 'max:255'],
             'contact_email' => ['required', 'email', 'max:255'],

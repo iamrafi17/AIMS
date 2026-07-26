@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -24,6 +25,7 @@ class InternshipRequirement extends Model
 
     protected $fillable = [
         'student_id',
+        'program_requirement_id',
         'requirement_name',
         'file_path',
         'file_type',
@@ -45,9 +47,22 @@ class InternshipRequirement extends Model
         return $this->belongsTo(Student::class);
     }
 
+    public function definition()
+    {
+        return $this->belongsTo(ProgramRequirement::class, 'program_requirement_id');
+    }
+
     public function reviewer()
     {
         return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function scopeActiveDefinitionOrLegacy(Builder $query): Builder
+    {
+        return $query->where(function (Builder $nested) {
+            $nested->whereNull('program_requirement_id')
+                ->orWhereHas('definition', fn (Builder $definition) => $definition->where('is_active', true));
+        });
     }
 
     public static function ensureForStudent(int $studentId): void
@@ -62,27 +77,61 @@ class InternshipRequirement extends Model
             return;
         }
 
-        $now = now();
-        $existing = static::query()
-            ->whereIn('student_id', $studentIds)
-            ->whereIn('requirement_name', self::OFFICIAL_REQUIREMENTS)
-            ->get(['student_id', 'requirement_name'])
-            ->mapWithKeys(fn ($requirement) => [$requirement->student_id.'|'.$requirement->requirement_name => true]);
+        $students = Student::query()
+            ->whereIn('id', $studentIds)
+            ->get(['id', 'program_id'])
+            ->groupBy('program_id');
 
-        $rows = $studentIds
-            ->flatMap(fn ($studentId) => collect(self::OFFICIAL_REQUIREMENTS)->map(fn ($name) => [
-                'student_id' => $studentId,
-                'requirement_name' => $name,
-                'status' => 'pending',
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]))
-            ->reject(fn ($row) => $existing->has($row['student_id'].'|'.$row['requirement_name']))
-            ->values()
-            ->all();
+        foreach ($students as $programId => $programStudents) {
+            ProgramRequirement::ensureDefaultsForProgram((int) $programId);
+            $definitions = ProgramRequirement::query()
+                ->where('program_id', $programId)
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->get();
 
-        if ($rows) {
-            static::query()->insertOrIgnore($rows);
+            foreach ($programStudents as $student) {
+                foreach ($definitions as $definition) {
+                    $requirement = static::query()
+                        ->where('student_id', $student->id)
+                        ->where(function ($query) use ($definition) {
+                            $query->where('program_requirement_id', $definition->id)
+                                ->orWhere(function ($legacy) use ($definition) {
+                                    $legacy->whereNull('program_requirement_id')
+                                        ->where('requirement_name', $definition->name);
+                                });
+                        })
+                        ->first();
+
+                    if ($requirement) {
+                        if (! $requirement->program_requirement_id) {
+                            $requirement->update(['program_requirement_id' => $definition->id]);
+                        }
+
+                        continue;
+                    }
+
+                    static::query()->create([
+                        'student_id' => $student->id,
+                        'program_requirement_id' => $definition->id,
+                        'requirement_name' => $definition->name,
+                        'status' => 'pending',
+                    ]);
+                }
+            }
         }
+    }
+
+    public static function activeChecklistForStudent(int $studentId)
+    {
+        return static::query()
+            ->with(['definition', 'reviewer'])
+            ->where('student_id', $studentId)
+            ->whereHas('definition', fn ($query) => $query->where('is_active', true))
+            ->join('program_requirements', 'program_requirements.id', '=', 'internship_requirements.program_requirement_id')
+            ->orderBy('program_requirements.sort_order')
+            ->orderBy('program_requirements.id')
+            ->select('internship_requirements.*')
+            ->get();
     }
 }

@@ -14,8 +14,8 @@ import api from '../../services/api';
 import { LoadingPanel, MetricCard, PageIntro } from '../../components/common/PortalUI';
 
 const baseForms = {
-  college: { name: '', code: '', description: '', is_active: true },
-  program: { college_id: '', name: '', code: '', description: '', is_active: true },
+  college: { name: '', code: '', required_ojt_hours: 486, is_active: true },
+  program: { college_id: '', name: '', code: '', is_active: true },
   section: { program_id: '', name: '', year_level: 4, academic_year: '2026-2027', is_active: true },
 };
 
@@ -70,13 +70,18 @@ function AcademicModal({ type, item, colleges, programs, onClose, onSaved }) {
             <label className="sm:col-span-2"><span className="mb-2 block text-sm font-bold">{type === 'section' ? 'Section name' : `${type} name`}</span><input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" /></label>
             {type !== 'section' && <label><span className="mb-2 block text-sm font-bold">Code</span><input required value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value.toUpperCase() })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 uppercase dark:border-slate-700" /></label>}
           </div>
-          {type === 'section' ? (
+          {type === 'college' && (
+            <label className="block">
+              <span className="mb-2 block text-sm font-bold">Required Internship Hours</span>
+              <input type="number" min="1" max="2000" step="0.5" required value={form.required_ojt_hours} onChange={(event) => setForm({ ...form, required_ojt_hours: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" />
+              <span className="mt-1 block text-xs text-slate-500">New students enrolled under this college will automatically inherit this requirement.</span>
+            </label>
+          )}
+          {type === 'section' && (
             <div className="grid gap-4 sm:grid-cols-2">
               <label><span className="mb-2 block text-sm font-bold">Year level</span><select value={form.year_level} onChange={(event) => setForm({ ...form, year_level: Number(event.target.value) })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700"><option value="4">4th year</option><option value="5">5th year</option></select></label>
               <label><span className="mb-2 block text-sm font-bold">Academic year</span><input required pattern="\d{4}-\d{4}" value={form.academic_year} onChange={(event) => setForm({ ...form, academic_year: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" /></label>
             </div>
-          ) : (
-            <label className="block"><span className="mb-2 block text-sm font-bold">Description</span><textarea value={form.description || ''} onChange={(event) => setForm({ ...form, description: event.target.value })} className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" /></label>
           )}
           <label className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800"><input type="checkbox" checked={Boolean(form.is_active)} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} className="h-5 w-5 accent-[#800000]" /><span className="font-bold">Active and available for enrollment</span></label>
         </div>
@@ -141,7 +146,7 @@ export default function AdminAcademic() {
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-800/70"><tr><th className="px-6 py-4">Record</th><th className="px-6 py-4">{type === 'section' ? 'Academic details' : 'Code / Parent'}</th><th className="px-6 py-4">Connected</th><th className="px-6 py-4">Status</th><th className="px-6 py-4 text-right">Actions</th></tr></thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {records.map((item) => <tr key={item.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                <td className="px-6 py-4"><p className="font-black text-slate-900 dark:text-white">{item.name}</p><p className="mt-1 max-w-xs truncate text-xs text-slate-500">{item.description || (item.program ? item.program.name : 'Official academic record')}</p></td>
+                <td className="px-6 py-4"><p className="font-black text-slate-900 dark:text-white">{item.name}</p><p className="mt-1 max-w-xs truncate text-xs text-slate-500">{type === 'college' ? `${Number(item.required_ojt_hours || 486)} required internship hours` : type === 'program' ? item.college?.name || 'Academic program' : item.program?.name || 'Official academic record'}</p></td>
                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.code || (item.program ? `${item.program.code} · Year ${item.year_level} · ${item.academic_year}` : item.college?.code)}</td>
                 <td className="px-6 py-4 text-sm font-bold text-slate-700 dark:text-slate-200">{type === 'college' ? `${item.programs_count} programs · ${item.students_count} students` : type === 'program' ? `${item.students_count} students` : item.program?.code}</td>
                 <td className="px-6 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${item.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>{item.is_active ? 'Active' : 'Inactive'}</span></td>

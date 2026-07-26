@@ -13,7 +13,6 @@ class Program extends Model
         'college_id',
         'name',
         'code',
-        'description',
         'is_active',
     ];
 
@@ -32,5 +31,10 @@ class Program extends Model
     public function students()
     {
         return $this->hasMany(Student::class);
+    }
+
+    public function requirements()
+    {
+        return $this->hasMany(ProgramRequirement::class);
     }
 }

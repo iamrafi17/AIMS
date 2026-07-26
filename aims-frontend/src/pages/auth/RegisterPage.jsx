@@ -113,14 +113,14 @@ function RegisterPage() {
 
     Promise.all([
       api.get(`/colleges/${formData.college_id}/programs`),
-      api.get(`/colleges/${formData.college_id}/htes`),
+      api.get(`/colleges/${formData.college_id}/htes`, { params: { program_id: formData.program_id || undefined } }),
     ])
       .then(([programResponse, hteResponse]) => {
         setPrograms(programResponse.data);
         setHtes(hteResponse.data);
       })
       .catch(() => toast.error('Unable to load programs or partner HTEs.'));
-  }, [formData.college_id]);
+  }, [formData.college_id, formData.program_id]);
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
@@ -128,7 +128,7 @@ function RegisterPage() {
     setFormData((current) => ({
       ...current,
       ...(name === 'college_id' ? { program_id: '', hte_id: '' } : {}),
-      ...(name === 'student_id' ? { full_name: '', first_name: '', last_name: '', section: '' } : {}),
+      ...(name === 'student_id' ? { full_name: '', first_name: '', last_name: '', section: '', college_id: '', program_id: '', hte_id: '' } : {}),
       [name]: type === 'checkbox' ? checked : value,
     }));
     if (name === 'student_id') setEnrollmentVerified(false);
@@ -149,11 +149,14 @@ function RegisterPage() {
         first_name: response.data.first_name,
         last_name: response.data.last_name,
         section: response.data.section,
+        college_id: response.data.college?.id || '',
+        program_id: response.data.program?.id || '',
+        hte_id: '',
       }));
       setEnrollmentVerified(true);
       toast.success('OJT enrollment verified.');
     } catch (error) {
-      setFormData((current) => ({ ...current, full_name: '', first_name: '', last_name: '', section: '' }));
+      setFormData((current) => ({ ...current, full_name: '', first_name: '', last_name: '', section: '', college_id: '', program_id: '', hte_id: '' }));
       toast.error(error.response?.data?.message || 'School ID was not found in the OJT enrollment list.');
     } finally {
       setEnrollmentLoading(false);
@@ -245,16 +248,16 @@ function RegisterPage() {
       case 2:
         return (
           <>
-            <StepHeader eyebrow="Step 2 of 6" title="Academic information" description="Choose your current college and academic program at MarSU." />
+            <StepHeader eyebrow="Step 2 of 6" title="Academic information" description="Your official college, program, and section are loaded from the coordinator's OJT enrollment list." />
             <div className="grid gap-5 sm:grid-cols-2">
               <Field label="Department / College" className="sm:col-span-2">
-                <select name="college_id" value={formData.college_id} onChange={handleChange} required className={inputClass} disabled={dataLoading}>
+                <select name="college_id" value={formData.college_id} onChange={handleChange} required className={inputClass} disabled>
                   <option value="">{dataLoading ? 'Loading colleges...' : 'Select your college'}</option>
                   {colleges.map((college) => <option key={college.id} value={college.id}>{college.name}</option>)}
                 </select>
               </Field>
               <Field label="Program" className="sm:col-span-2">
-                <select name="program_id" value={formData.program_id} onChange={handleChange} required className={inputClass} disabled={!formData.college_id}>
+                <select name="program_id" value={formData.program_id} onChange={handleChange} required className={inputClass} disabled>
                   <option value="">{formData.college_id ? 'Select your program' : 'Select a college first'}</option>
                   {programs.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
                 </select>

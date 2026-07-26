@@ -1,21 +1,22 @@
 <?php
 
 use App\Http\Controllers\Api\AdminDashboardController;
-use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AdminSystemController;
+use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AnnouncementController;
-use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CollegeController;
 use App\Http\Controllers\Api\CoordinatorAttendanceController;
 use App\Http\Controllers\Api\CoordinatorDashboardController;
 use App\Http\Controllers\Api\CoordinatorHTEController;
+use App\Http\Controllers\Api\CoordinatorRequirementController;
 use App\Http\Controllers\Api\CoordinatorStudentController;
 use App\Http\Controllers\Api\CoordinatorTravelController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProgramHeadDashboardController;
 use App\Http\Controllers\Api\ProgramHeadDocumentController;
-use App\Http\Controllers\Api\ProgramHeadTravelController;
 use App\Http\Controllers\Api\ProgramHeadStudentController;
+use App\Http\Controllers\Api\ProgramHeadTravelController;
 use App\Http\Controllers\Api\PublicPortalController;
 use App\Http\Controllers\Api\StudentAttendanceController;
 use App\Http\Controllers\Api\StudentDashboardController;
@@ -23,8 +24,8 @@ use App\Http\Controllers\Api\StudentRequirementController;
 use App\Http\Controllers\Api\StudentTravelController;
 use App\Http\Controllers\Api\SupervisorDashboardController;
 use App\Http\Controllers\Api\SupervisorManagementController;
-use App\Http\Controllers\Api\VPAADashboardController;
 use App\Http\Controllers\Api\VPAAApprovalController;
+use App\Http\Controllers\Api\VPAADashboardController;
 use App\Http\Controllers\Api\VPAAMOAController;
 use Illuminate\Support\Facades\Route;
 
@@ -104,6 +105,11 @@ Route::middleware(['auth:sanctum', 'audit'])->group(function () {
         Route::get('/htes/{hte}', [CoordinatorHTEController::class, 'show']);
         Route::put('/htes/{hte}', [CoordinatorHTEController::class, 'update']);
         Route::delete('/htes/{hte}', [CoordinatorHTEController::class, 'destroy']);
+        Route::get('/requirements', [CoordinatorRequirementController::class, 'index']);
+        Route::post('/requirements', [CoordinatorRequirementController::class, 'store']);
+        Route::put('/requirements/order', [CoordinatorRequirementController::class, 'reorder']);
+        Route::put('/requirements/{programRequirement}', [CoordinatorRequirementController::class, 'update']);
+        Route::delete('/requirements/{programRequirement}', [CoordinatorRequirementController::class, 'destroy']);
         Route::get('/students/options', [CoordinatorStudentController::class, 'options']);
         Route::get('/students/enrollments', [CoordinatorStudentController::class, 'enrollments']);
         Route::post('/students/import', [CoordinatorStudentController::class, 'importCsv']);

@@ -97,13 +97,17 @@ function StudentRequirements() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">Internship Requirements</h1>
+      <div>
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-[#a8750b]">Program checklist</p>
+        <h1 className="mt-1 text-2xl font-black text-[#430909] dark:text-white">Internship Requirements</h1>
+        <p className="mt-1 text-sm text-slate-500">Upload the documents configured by your internship coordinator.</p>
+      </div>
 
-      <div className="bg-white rounded-xl shadow-sm p-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         {requirements.length > 0 ? (
           <div className="space-y-4">
             {requirements.map((req) => (
-              <div key={req.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+              <div key={req.id} className="rounded-xl border border-slate-200 p-4 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60">
                 {(() => {
                   const displayStatus = req.file_path ? req.status : 'missing';
                   return <>
@@ -113,10 +117,11 @@ function StudentRequirements() {
                       <DocumentIcon className="w-5 h-5 text-gray-500" />
                     </div>
                     <div>
-                      <h3 className="font-medium text-gray-800">{req.requirement_name}</h3>
+                      <h3 className="font-bold text-gray-800 dark:text-white">{req.requirement_name}</h3>
                       <p className="text-sm text-gray-500">
                         {req.file_path ? `Type: ${req.file_type?.toUpperCase() || 'FILE'}` : 'No file uploaded yet'}
                       </p>
+                      {req.definition?.instructions && <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-500 dark:text-slate-400">{req.definition.instructions}</p>}
                       {req.feedback && (
                         <p className="text-sm text-red-600 mt-1">
                           Feedback: {req.feedback}

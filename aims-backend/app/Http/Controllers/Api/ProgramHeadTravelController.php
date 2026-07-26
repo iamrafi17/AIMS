@@ -5,20 +5,28 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\TravelCheckpoint;
 use App\Models\TravelLog;
+use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class ProgramHeadTravelController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $sessions = TravelLog::with([
+        $sessionsQuery = TravelLog::with([
             'student.user',
             'student.program',
             'student.college',
             'student.hte',
             'checkpoints.verifier',
-        ])
+        ]);
+
+        if ($request->user()->role === 'program_head') {
+            $programId = ProgramAccess::programId($request->user());
+            $sessionsQuery->whereHas('student', fn ($query) => $query->where('program_id', $programId));
+        }
+
+        $sessions = $sessionsQuery
             ->latest('start_time')
             ->get();
 
@@ -42,6 +50,9 @@ class ProgramHeadTravelController extends Controller
 
     public function verifyCheckpoint(Request $request, TravelCheckpoint $checkpoint)
     {
+        if ($request->user()->role === 'program_head') {
+            ProgramAccess::authorizeCheckpoint($request->user(), $checkpoint);
+        }
         $validated = $request->validate([
             'verified' => ['sometimes', 'boolean'],
         ]);
@@ -59,8 +70,11 @@ class ProgramHeadTravelController extends Controller
         ]);
     }
 
-    public function photo(TravelCheckpoint $checkpoint)
+    public function photo(Request $request, TravelCheckpoint $checkpoint)
     {
+        if ($request->user()->role === 'program_head') {
+            ProgramAccess::authorizeCheckpoint($request->user(), $checkpoint);
+        }
         if (! $checkpoint->photo_path || ! Storage::disk('public')->exists($checkpoint->photo_path)) {
             return response()->json(['message' => 'Verification photo not found.'], 404);
         }

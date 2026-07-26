@@ -14,6 +14,7 @@ class MOA extends Model
     protected $fillable = [
         'hte_id',
         'college_id',
+        'program_id',
         'file_path',
         'effective_date',
         'expiration_date',
@@ -44,6 +45,11 @@ class MOA extends Model
     public function college()
     {
         return $this->belongsTo(College::class);
+    }
+
+    public function program()
+    {
+        return $this->belongsTo(Program::class);
     }
 
     public function approver()

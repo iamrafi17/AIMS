@@ -77,6 +77,7 @@ class StudentDashboardController extends Controller
 
         // Get pending requirements
         $pendingRequirements = InternshipRequirement::where('student_id', $student->id)
+            ->activeDefinitionOrLegacy()
             ->where('status', 'pending')
             ->count();
 
@@ -102,8 +103,8 @@ class StudentDashboardController extends Controller
             'student' => [
                 'full_name' => $student->full_name,
                 'student_id' => $student->student_id,
-                'college' => $student->college->name,
-                'program' => $student->program->name,
+                'college' => $student->college?->name ?? 'Not assigned',
+                'program' => $student->program?->name ?? 'Not assigned',
                 'year_level' => $student->year_level,
                 'section' => $student->section,
                 'hte' => $student->hte?->name,

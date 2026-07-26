@@ -93,12 +93,12 @@ function LoginPage() {
           <div>
             <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-[#a8750b]">Secure portal access</p>
             <h2 className="mt-3 text-3xl font-black tracking-tight text-[#430909] sm:text-4xl">Welcome back</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-500">Enter your university email or Student ID to continue to AIMS.</p>
+            <p className="mt-3 text-sm leading-6 text-slate-500">Enter your university email, Staff ID, or Student ID to continue to AIMS.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="mt-9 space-y-5">
             <div>
-              <label htmlFor="login" className="mb-2 block text-sm font-extrabold text-slate-700">Username / Student ID</label>
+              <label htmlFor="login" className="mb-2 block text-sm font-extrabold text-slate-700">Email / Staff ID / Student ID</label>
               <div className="relative">
                 <FiUser className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -110,7 +110,7 @@ function LoginPage() {
                   onChange={(event) => setIdentifier(event.target.value)}
                   required
                   className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#800000]/45 focus:ring-4 focus:ring-[#800000]/8"
-                  placeholder="Email address or Student ID"
+                  placeholder="Email, Staff ID, or Student ID"
                 />
               </div>
             </div>

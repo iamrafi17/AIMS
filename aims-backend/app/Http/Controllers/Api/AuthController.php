@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\OjtEnrollment;
+use App\Models\HTE;
 use App\Models\InternshipRequirement;
+use App\Models\OjtEnrollment;
 use App\Models\Student;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -25,11 +27,16 @@ class AuthController extends Controller
             'device_name' => 'required|string',
         ]);
 
+        $identifier = trim($request->login);
+
         $user = User::query()
             ->with('student')
-            ->where('email', $request->login)
-            ->orWhereHas('student', function ($query) use ($request) {
-                $query->where('student_id', $request->login);
+            ->where(function ($query) use ($identifier) {
+                $query->where('email', $identifier)
+                    ->orWhere('staff_id', strtoupper($identifier))
+                    ->orWhereHas('student', function ($studentQuery) use ($identifier) {
+                        $studentQuery->where('student_id', $identifier);
+                    });
             })
             ->first();
 
@@ -64,9 +71,12 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'staff_id' => $user->staff_id,
                 'phone' => $user->phone,
                 'address' => $user->address,
                 'role' => $user->role,
+                'college' => $user->college,
+                'program' => $user->program,
                 'avatar' => $user->avatar,
                 'avatar_url' => $user->avatar_url,
             ],
@@ -98,8 +108,8 @@ class AuthController extends Controller
             'address' => 'required|string',
             'phone' => 'required|string|max:20',
             'email' => 'required|email|unique:users,email',
-            'college_id' => 'required|exists:colleges,id',
-            'program_id' => 'required|exists:programs,id',
+            'college_id' => 'nullable|exists:colleges,id',
+            'program_id' => 'nullable|exists:programs,id',
             'year_level' => 'required|integer|between:4,5',
             'section' => 'required|string|max:50',
             'parent_name' => 'required|string|max:255',
@@ -131,6 +141,18 @@ class AuthController extends Controller
                 ]);
             }
 
+            if (! $enrollment->college_id || ! $enrollment->program_id) {
+                throw ValidationException::withMessages([
+                    'student_id' => ['Your official OJT enrollment has no academic program assignment. Contact your coordinator.'],
+                ]);
+            }
+
+            if ($request->hte_id && ! HTE::whereKey($request->hte_id)->where('program_id', $enrollment->program_id)->exists()) {
+                throw ValidationException::withMessages([
+                    'hte_id' => ['The selected HTE is not available for your enrolled program.'],
+                ]);
+            }
+
             [$firstName, $lastName] = $this->splitEnrollmentName($enrollment->full_name);
 
             $user = User::create([
@@ -150,10 +172,11 @@ class AuthController extends Controller
                 'birth_date' => $request->birth_date,
                 'address' => $request->address,
                 'phone' => $request->phone,
-                'college_id' => $request->college_id,
-                'program_id' => $request->program_id,
+                'college_id' => $enrollment->college_id,
+                'program_id' => $enrollment->program_id,
                 'year_level' => $request->year_level,
                 'section' => $enrollment->section,
+                'required_ojt_hours' => $enrollment->college?->required_ojt_hours ?? 486,
                 'parent_name' => $request->parent_name,
                 'parent_relationship' => $request->parent_relationship,
                 'parent_address' => $request->parent_address,
@@ -190,7 +213,9 @@ class AuthController extends Controller
 
     public function enrollment(string $schoolId)
     {
-        $enrollment = OjtEnrollment::where('school_id', trim($schoolId))->first();
+        $enrollment = OjtEnrollment::with(['college:id,name,code,required_ojt_hours', 'program:id,college_id,name,code'])
+            ->where('school_id', trim($schoolId))
+            ->first();
 
         if (! $enrollment) {
             return response()->json([
@@ -212,6 +237,9 @@ class AuthController extends Controller
             'first_name' => $firstName,
             'last_name' => $lastName,
             'section' => $enrollment->section,
+            'college' => $enrollment->college,
+            'program' => $enrollment->program,
+            'required_ojt_hours' => (float) ($enrollment->college?->required_ojt_hours ?? 486),
         ]);
     }
 
@@ -242,9 +270,12 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'staff_id' => $user->staff_id,
                 'phone' => $user->phone,
                 'address' => $user->address,
                 'role' => $user->role,
+                'college' => $user->college,
+                'program' => $user->program,
                 'avatar' => $user->avatar,
                 'avatar_url' => $user->avatar_url,
                 'is_active' => $user->is_active,
@@ -307,7 +338,7 @@ class AuthController extends Controller
         if (
             ! $record
             || ! Hash::check($validated['token'], $record->token)
-            || now()->diffInMinutes(\Carbon\Carbon::parse($record->created_at)) > 60
+            || now()->diffInMinutes(Carbon::parse($record->created_at)) > 60
         ) {
             throw ValidationException::withMessages(['token' => ['This password reset token is invalid or expired.']]);
         }
@@ -354,6 +385,7 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'staff_id' => $user->staff_id,
                 'phone' => $user->phone,
                 'address' => $user->address,
                 'role' => $user->role,
@@ -378,6 +410,7 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'staff_id' => $user->staff_id,
                 'phone' => $user->phone,
                 'address' => $user->address,
                 'role' => $user->role,

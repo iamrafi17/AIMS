@@ -21,7 +21,7 @@ class UniversityDashboardController extends Controller
             ->whereYear('date', now()->year)
             ->get();
         $recentAttendance = Attendance::whereDate('date', '>=', now()->subDays(6)->toDateString())->get();
-        $requirements = InternshipRequirement::all();
+        $requirements = InternshipRequirement::activeDefinitionOrLegacy()->get();
         $evaluations = Evaluation::all();
         $monthTravel = TravelLog::whereMonth('start_time', now()->month)
             ->whereYear('start_time', now()->year)

@@ -6,6 +6,7 @@ use App\Models\College;
 use App\Models\HTE;
 use App\Models\InternshipRequirement;
 use App\Models\Program;
+use App\Models\ProgramRequirement;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -118,12 +119,98 @@ class CoordinatorStudentManagementTest extends TestCase
             ->assertJsonPath('progress.requirements_approved', 0)
             ->assertJsonPath('progress.requirements_percent', 0);
 
-        foreach (\App\Models\InternshipRequirement::OFFICIAL_REQUIREMENTS as $requirementName) {
+        foreach (InternshipRequirement::OFFICIAL_REQUIREMENTS as $requirementName) {
             $response->assertJsonFragment([
                 'requirement_name' => $requirementName,
                 'file_path' => null,
             ]);
         }
+    }
+
+    public function test_coordinator_can_customize_the_program_requirement_checklist(): void
+    {
+        [$coordinator, $college, $program, $hte] = $this->managementContext();
+        $student = $this->createStudent($college, $program, $hte);
+        Sanctum::actingAs($coordinator);
+
+        $this->getJson('/api/coordinator/requirements')
+            ->assertOk()
+            ->assertJsonCount(10, 'requirements');
+
+        $created = $this->postJson('/api/coordinator/requirements', [
+            'name' => 'Barangay Clearance',
+            'instructions' => 'Upload a clear, recently issued copy.',
+        ])->assertCreated()
+            ->assertJsonPath('requirement.name', 'Barangay Clearance')
+            ->assertJsonPath('requirement.is_active', true);
+
+        $definitionId = $created->json('requirement.id');
+        $this->assertDatabaseHas('program_requirements', [
+            'id' => $definitionId,
+            'program_id' => $program->id,
+            'name' => 'Barangay Clearance',
+        ]);
+        $this->assertDatabaseHas('internship_requirements', [
+            'student_id' => $student->id,
+            'program_requirement_id' => $definitionId,
+            'requirement_name' => 'Barangay Clearance',
+        ]);
+
+        Sanctum::actingAs($student->user);
+        $studentChecklist = $this->getJson('/api/student/requirements')
+            ->assertOk()
+            ->assertJsonCount(11)
+            ->assertJsonFragment([
+                'name' => 'Barangay Clearance',
+                'instructions' => 'Upload a clear, recently issued copy.',
+            ]);
+
+        $requirementId = collect($studentChecklist->json())->firstWhere('program_requirement_id', $definitionId)['id'];
+        $this->post('/api/student/requirements/'.$requirementId.'/upload', [
+            'file' => UploadedFile::fake()->create('clearance.pdf', 100, 'application/pdf'),
+        ], ['Accept' => 'application/json'])->assertOk();
+
+        Sanctum::actingAs($coordinator);
+        $this->deleteJson('/api/coordinator/requirements/'.$definitionId)
+            ->assertOk();
+
+        $this->assertDatabaseHas('program_requirements', [
+            'id' => $definitionId,
+            'is_active' => false,
+        ]);
+        $this->assertDatabaseHas('internship_requirements', [
+            'id' => $requirementId,
+            'program_requirement_id' => $definitionId,
+        ]);
+
+        Sanctum::actingAs($student->user);
+        $this->getJson('/api/student/requirements')
+            ->assertOk()
+            ->assertJsonCount(10)
+            ->assertJsonMissing(['requirement_name' => 'Barangay Clearance']);
+    }
+
+    public function test_coordinator_cannot_customize_another_programs_requirement(): void
+    {
+        [$coordinator, $college] = $this->managementContext();
+        $otherProgram = Program::create([
+            'college_id' => $college->id,
+            'name' => 'Information Systems',
+            'code' => 'BSIS',
+            'is_active' => true,
+        ]);
+        $definition = ProgramRequirement::create([
+            'program_id' => $otherProgram->id,
+            'key' => 'custom-other',
+            'name' => 'Other Program Document',
+            'sort_order' => 1,
+        ]);
+        Sanctum::actingAs($coordinator);
+
+        $this->putJson('/api/coordinator/requirements/'.$definition->id, [
+            'name' => 'Changed Document',
+            'is_active' => true,
+        ])->assertNotFound();
     }
 
     public function test_coordinator_can_import_student_enrollments_without_creating_credentials(): void
@@ -156,7 +243,10 @@ class CoordinatorStudentManagementTest extends TestCase
         $coordinator = User::factory()->create(['role' => 'coordinator']);
         $college = College::create(['name' => 'Computing', 'code' => 'CICS', 'is_active' => true]);
         $program = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
+        $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
         $hte = HTE::create([
+            'college_id' => $college->id,
+            'program_id' => $program->id,
             'name' => 'Partner HTE',
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Supervisor',

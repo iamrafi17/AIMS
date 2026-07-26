@@ -9,9 +9,10 @@ use App\Models\HTE;
 use App\Models\InternshipRequirement;
 use App\Models\OjtEnrollment;
 use App\Models\Program;
-use App\Models\SystemNotification;
 use App\Models\Student;
+use App\Models\SystemNotification;
 use App\Models\User;
+use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -24,7 +25,9 @@ class CoordinatorStudentController extends Controller
 {
     public function index(Request $request)
     {
+        $programId = ProgramAccess::programId($request->user());
         $students = Student::with(['user', 'college', 'program', 'hte', 'attendance'])
+            ->where('program_id', $programId)
             ->when($request->search, function ($query, $search) {
                 $query->where(function ($nested) use ($search) {
                     $nested->where('first_name', 'like', '%'.$search.'%')
@@ -46,30 +49,35 @@ class CoordinatorStudentController extends Controller
         return response()->json([
             ...$students->toArray(),
             'summary' => [
-                'total' => Student::count(),
-                'pending' => Student::where('registration_status', 'pending')->count(),
-                'approved' => Student::where('registration_status', 'approved')->count(),
-                'rejected' => Student::where('registration_status', 'rejected')->count(),
-                'active' => Student::where('internship_status', 'active')->count(),
+                'total' => Student::where('program_id', $programId)->count(),
+                'pending' => Student::where('program_id', $programId)->where('registration_status', 'pending')->count(),
+                'approved' => Student::where('program_id', $programId)->where('registration_status', 'approved')->count(),
+                'rejected' => Student::where('program_id', $programId)->where('registration_status', 'rejected')->count(),
+                'active' => Student::where('program_id', $programId)->where('internship_status', 'active')->count(),
             ],
         ]);
     }
 
-    public function options()
+    public function options(Request $request)
     {
+        $programId = ProgramAccess::programId($request->user());
+        $collegeId = (int) $request->user()->college_id;
+
         return response()->json([
-            'colleges' => College::with(['programs' => fn ($query) => $query->where('is_active', true)])
-                ->where('is_active', true)->orderBy('name')->get(),
-            'htes' => HTE::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'colleges' => College::with(['programs' => fn ($query) => $query->whereKey($programId)->where('is_active', true)])
+                ->whereKey($collegeId)->where('is_active', true)->get(),
+            'htes' => HTE::where('program_id', $programId)->where('is_active', true)->orderBy('name')->get(['id', 'name']),
         ]);
     }
 
     public function enrollments(Request $request)
     {
+        $programId = ProgramAccess::programId($request->user());
         $search = trim((string) $request->query('search', ''));
 
         return response()->json([
             'data' => OjtEnrollment::with(['student.user'])
+                ->where('program_id', $programId)
                 ->when($search, function ($query) use ($search) {
                     $query->where(function ($nested) use ($search) {
                         $nested->where('school_id', 'like', '%'.$search.'%')
@@ -81,15 +89,16 @@ class CoordinatorStudentController extends Controller
                 ->limit(500)
                 ->get(),
             'summary' => [
-                'total' => OjtEnrollment::count(),
-                'awaiting_registration' => OjtEnrollment::whereNull('registered_at')->count(),
-                'registered' => OjtEnrollment::whereNotNull('registered_at')->count(),
+                'total' => OjtEnrollment::where('program_id', $programId)->count(),
+                'awaiting_registration' => OjtEnrollment::where('program_id', $programId)->whereNull('registered_at')->count(),
+                'registered' => OjtEnrollment::where('program_id', $programId)->whereNotNull('registered_at')->count(),
             ],
         ]);
     }
 
     public function store(Request $request)
     {
+        $programId = ProgramAccess::programId($request->user());
         $validated = $request->validate([
             'full_name' => ['required', 'string', 'max:255'],
             'school_id' => ['required', 'string', 'max:20', Rule::unique('ojt_enrollments', 'school_id'), Rule::unique('students', 'student_id')],
@@ -100,6 +109,8 @@ class CoordinatorStudentController extends Controller
             'school_id' => trim($validated['school_id']),
             'full_name' => preg_replace('/\s+/', ' ', trim($validated['full_name'])),
             'section' => trim($validated['section']),
+            'college_id' => $request->user()->college_id,
+            'program_id' => $programId,
             'source' => 'manual',
             'added_by' => $request->user()->id,
         ]);
@@ -110,8 +121,9 @@ class CoordinatorStudentController extends Controller
         ], 201);
     }
 
-    public function show(Student $student)
+    public function show(Request $request, Student $student)
     {
+        ProgramAccess::authorizeStudent($request->user(), $student);
         InternshipRequirement::ensureForStudent($student->id);
 
         return response()->json($this->studentPayload($student->load(['user', 'college', 'program', 'hte', 'attendance', 'requirements.reviewer'])));
@@ -119,16 +131,16 @@ class CoordinatorStudentController extends Controller
 
     public function update(Request $request, Student $student)
     {
-        $validated = $request->validate($this->studentRules($student));
-        $this->validateProgramCollege($validated);
+        ProgramAccess::authorizeStudent($request->user(), $student);
+        $validated = $request->validate($this->studentRules($student, $request->user()));
 
-        DB::transaction(function () use ($validated, $student) {
+        DB::transaction(function () use ($validated, $student, $request) {
             $student->user->update([
                 'name' => trim($validated['first_name'].' '.$validated['last_name']),
                 'email' => $validated['email'],
                 ...(! empty($validated['password']) ? ['password' => Hash::make($validated['password'])] : []),
             ]);
-            $student->update($this->studentAttributes($validated, $student->user_id));
+            $student->update($this->studentAttributes($validated, $student->user_id, $request->user()));
         });
 
         return response()->json([
@@ -137,8 +149,9 @@ class CoordinatorStudentController extends Controller
         ]);
     }
 
-    public function destroy(Student $student)
+    public function destroy(Request $request, Student $student)
     {
+        ProgramAccess::authorizeStudent($request->user(), $student);
         $paths = $student->requirements()->pluck('file_path')->filter();
         $avatar = $student->user?->avatar;
         $user = $student->user;
@@ -152,8 +165,9 @@ class CoordinatorStudentController extends Controller
         return response()->json(['message' => 'Student record and login account deleted successfully.']);
     }
 
-    public function deactivate(Student $student)
+    public function deactivate(Request $request, Student $student)
     {
+        ProgramAccess::authorizeStudent($request->user(), $student);
         DB::transaction(function () use ($student) {
             $student->user?->update(['is_active' => false]);
             $student->update(['internship_status' => 'dropped']);
@@ -164,6 +178,7 @@ class CoordinatorStudentController extends Controller
 
     public function approveRegistration(Student $student, Request $request)
     {
+        ProgramAccess::authorizeStudent($request->user(), $student);
         $student->update([
             'registration_status' => 'approved',
             'internship_status' => $student->internship_status === 'pending' ? 'active' : $student->internship_status,
@@ -178,6 +193,7 @@ class CoordinatorStudentController extends Controller
 
     public function rejectRegistration(Student $student, Request $request)
     {
+        ProgramAccess::authorizeStudent($request->user(), $student);
         $validated = $request->validate(['reason' => ['required', 'string', 'max:2000']]);
         $student->update([
             'registration_status' => 'rejected',
@@ -192,6 +208,8 @@ class CoordinatorStudentController extends Controller
 
     public function reviewRequirement(Request $request, Student $student, InternshipRequirement $requirement)
     {
+        ProgramAccess::authorizeStudent($request->user(), $student);
+        ProgramAccess::authorizeRequirement($request->user(), $requirement);
         if ($requirement->student_id !== $student->id) {
             return response()->json(['message' => 'Requirement does not belong to this student.'], 404);
         }
@@ -219,8 +237,10 @@ class CoordinatorStudentController extends Controller
         ]);
     }
 
-    public function downloadRequirement(Student $student, InternshipRequirement $requirement)
+    public function downloadRequirement(Request $request, Student $student, InternshipRequirement $requirement)
     {
+        ProgramAccess::authorizeStudent($request->user(), $student);
+        ProgramAccess::authorizeRequirement($request->user(), $requirement);
         if ($requirement->student_id !== $student->id || ! $requirement->file_path || ! Storage::disk('public')->exists($requirement->file_path)) {
             return response()->json(['message' => 'Requirement file not found.'], 404);
         }
@@ -230,6 +250,7 @@ class CoordinatorStudentController extends Controller
 
     public function importCsv(Request $request)
     {
+        $programId = ProgramAccess::programId($request->user());
         $request->validate(['file' => ['required', 'file', 'mimes:csv,txt', 'max:5120']]);
         $handle = fopen($request->file('file')->getRealPath(), 'r');
         $headers = array_map(fn ($header) => Str::snake(trim((string) $header)), fgetcsv($handle) ?: []);
@@ -271,6 +292,8 @@ class CoordinatorStudentController extends Controller
                     'school_id' => $payload['school_id'],
                     'full_name' => preg_replace('/\s+/', ' ', trim($payload['full_name'])),
                     'section' => $payload['section'],
+                    'college_id' => $request->user()->college_id,
+                    'program_id' => $programId,
                     'source' => 'csv',
                     'added_by' => $request->user()->id,
                 ]);
@@ -289,14 +312,14 @@ class CoordinatorStudentController extends Controller
         ]);
     }
 
-    private function studentRules(?Student $student = null): array
+    private function studentRules(?Student $student, User $coordinator): array
     {
         return [
             'student_id' => ['required', 'string', 'max:20', Rule::unique('students')->ignore($student?->id)],
             'first_name' => ['required', 'string', 'max:100'], 'last_name' => ['required', 'string', 'max:100'], 'middle_name' => ['nullable', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($student?->user_id)], 'password' => [$student ? 'nullable' : 'nullable', 'string', 'min:8'],
             'gender' => ['required', 'in:male,female,other'], 'birth_date' => ['required', 'date', 'before:today'], 'address' => ['required', 'string', 'max:1000'], 'phone' => ['required', 'string', 'max:20'],
-            'college_id' => ['required', 'exists:colleges,id'], 'program_id' => ['required', 'exists:programs,id'], 'year_level' => ['required', 'integer', 'between:1,5'], 'section' => ['required', 'string', 'max:50'],
+            'college_id' => ['nullable', Rule::in([(int) $coordinator->college_id])], 'program_id' => ['nullable', Rule::in([(int) $coordinator->program_id])], 'year_level' => ['required', 'integer', 'between:1,5'], 'section' => ['required', 'string', 'max:50'],
             'parent_name' => ['required', 'string', 'max:255'], 'parent_relationship' => ['nullable', 'string', 'max:50'], 'parent_address' => ['required', 'string', 'max:1000'], 'parent_phone' => ['required', 'string', 'max:20'],
             'hte_id' => ['nullable', 'exists:htes,id'], 'internship_semester' => ['nullable', 'string', 'max:30'], 'internship_year' => ['nullable', 'string', 'max:20'],
             'registration_status' => ['nullable', 'in:pending,approved,rejected'], 'internship_status' => ['nullable', 'in:pending,active,completed,dropped'],
@@ -312,11 +335,11 @@ class CoordinatorStudentController extends Controller
         }
     }
 
-    private function studentAttributes(array $data, int $userId): array
+    private function studentAttributes(array $data, int $userId, User $coordinator): array
     {
         return [
             'user_id' => $userId, 'student_id' => $data['student_id'], 'first_name' => $data['first_name'], 'last_name' => $data['last_name'], 'middle_name' => $data['middle_name'] ?? null,
-            'gender' => $data['gender'], 'birth_date' => $data['birth_date'], 'address' => $data['address'], 'phone' => $data['phone'], 'college_id' => $data['college_id'], 'program_id' => $data['program_id'],
+            'gender' => $data['gender'], 'birth_date' => $data['birth_date'], 'address' => $data['address'], 'phone' => $data['phone'], 'college_id' => $coordinator->college_id, 'program_id' => $coordinator->program_id,
             'year_level' => $data['year_level'], 'section' => $data['section'], 'parent_name' => $data['parent_name'], 'parent_relationship' => $data['parent_relationship'] ?? null,
             'parent_address' => $data['parent_address'], 'parent_phone' => $data['parent_phone'], 'hte_id' => $data['hte_id'] ?? null,
             'internship_semester' => $data['internship_semester'] ?? null, 'internship_year' => $data['internship_year'] ?? null,
@@ -331,15 +354,11 @@ class CoordinatorStudentController extends Controller
     {
         $hours = $student->attendance->sum(fn (Attendance $record) => $this->renderedHours($record));
         $required = max((float) $student->required_ojt_hours, 0);
-        $requirementOrder = array_flip(InternshipRequirement::OFFICIAL_REQUIREMENTS);
-        $officialRequirements = $student->requirements
-            ->whereIn('requirement_name', InternshipRequirement::OFFICIAL_REQUIREMENTS)
-            ->sortBy(fn (InternshipRequirement $requirement) => $requirementOrder[$requirement->requirement_name])
-            ->values();
-        $approvedRequirements = $officialRequirements->where('status', 'approved')->count();
-        $requirementTotal = $officialRequirements->count();
+        $activeRequirements = InternshipRequirement::activeChecklistForStudent($student->id);
+        $approvedRequirements = $activeRequirements->where('status', 'approved')->count();
+        $requirementTotal = $activeRequirements->count();
         $studentData = $student->toArray();
-        $studentData['requirements'] = $officialRequirements->toArray();
+        $studentData['requirements'] = $activeRequirements->toArray();
 
         return [
             ...$studentData,
