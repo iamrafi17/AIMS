@@ -7,7 +7,6 @@ use App\Models\TravelCheckpoint;
 use App\Models\TravelLog;
 use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class ProgramHeadTravelController extends Controller
 {
@@ -75,11 +74,12 @@ class ProgramHeadTravelController extends Controller
         if ($request->user()->role === 'program_head') {
             ProgramAccess::authorizeCheckpoint($request->user(), $checkpoint);
         }
-        if (! $checkpoint->photo_path || ! Storage::disk('public')->exists($checkpoint->photo_path)) {
+        $path = $this->publicStoragePath($checkpoint->photo_path);
+        if (! $path || ! $this->publicDisk()->exists($path)) {
             return response()->json(['message' => 'Verification photo not found.'], 404);
         }
 
-        return response()->file(Storage::disk('public')->path($checkpoint->photo_path));
+        return response()->file($this->publicDisk()->path($path));
     }
 
     private function sessionPayload(TravelLog $session): array
@@ -137,14 +137,16 @@ class ProgramHeadTravelController extends Controller
 
     private function checkpointPayload(TravelCheckpoint $checkpoint): array
     {
+        $photoPath = $this->publicStoragePath($checkpoint->photo_path);
+
         return [
             'id' => $checkpoint->id,
             'travel_log_id' => $checkpoint->travel_log_id,
             'checkpoint_name' => $checkpoint->checkpoint_name,
             'latitude' => (float) $checkpoint->latitude,
             'longitude' => (float) $checkpoint->longitude,
-            'photo_path' => $checkpoint->photo_path,
-            'photo_url' => $checkpoint->photo_path ? url(Storage::disk('public')->url($checkpoint->photo_path)) : null,
+            'photo_path' => $photoPath,
+            'photo_url' => $photoPath ? $this->publicDisk()->url($photoPath) : null,
             'notes' => $checkpoint->notes,
             'is_verified' => (bool) $checkpoint->is_verified,
             'verified_by' => $checkpoint->verifier?->name,

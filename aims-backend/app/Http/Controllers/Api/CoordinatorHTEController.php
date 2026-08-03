@@ -13,7 +13,7 @@ use App\Models\SystemNotification;
 use App\Models\User;
 use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -109,9 +109,11 @@ class CoordinatorHTEController extends Controller
             throw ValidationException::withMessages(['hte' => 'Reassign or undeploy all students before deleting this HTE.']);
         }
 
-        $paths = $hte->moas()->pluck('file_path')->filter();
+        $paths = $hte->moas()->pluck('file_path')
+            ->map(fn ($path) => $this->publicStoragePath($path))
+            ->filter();
         $hte->delete();
-        $paths->each(fn (string $path) => Storage::disk('public')->delete($path));
+        $paths->each(fn (string $path) => $this->publicDisk()->delete($path));
 
         return response()->json(['message' => 'HTE record deleted successfully.']);
     }
@@ -247,17 +249,26 @@ class CoordinatorHTEController extends Controller
     public function downloadMoa(Request $request, MOA $moa)
     {
         ProgramAccess::authorizeMoa($request->user(), $moa);
-        if (! Storage::disk('public')->exists($moa->file_path)) {
+
+        $path = $this->publicStoragePath($moa->file_path);
+
+        if (! $path || ! $this->publicDisk()->exists($path)) {
             return response()->json(['message' => 'MOA file not found.'], 404);
         }
 
-        return Storage::disk('public')->download($moa->file_path);
+        $moa->loadMissing('hte:id,name');
+        $hteName = Str::slug($moa->hte?->name ?? 'agreement') ?: 'agreement';
+
+        return $this->publicDisk()->download($path, "MOA-{$hteName}-{$moa->id}.pdf");
     }
 
     public function destroyMoa(Request $request, MOA $moa)
     {
         ProgramAccess::authorizeMoa($request->user(), $moa);
-        Storage::disk('public')->delete($moa->file_path);
+        $path = $this->publicStoragePath($moa->file_path);
+        if ($path) {
+            $this->publicDisk()->delete($path);
+        }
         $moa->delete();
 
         return response()->json(['message' => 'MOA record deleted successfully.']);

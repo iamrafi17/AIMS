@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiCheckCircle, FiEye, FiEyeOff, FiLock, FiUser } from 'react-icons/fi';
 import toast from 'react-hot-toast';
-import { useAuth } from '../../context/AuthContext';
+import useAuth from '../../context/useAuth';
 import heroImage from '../../assets/aims-portal-hero.png';
 import marsuLogo from '../../assets/marsu-logo.png';
 

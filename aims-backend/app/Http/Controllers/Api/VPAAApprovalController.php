@@ -9,7 +9,6 @@ use App\Models\Student;
 use App\Models\SystemNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class VPAAApprovalController extends Controller
@@ -151,11 +150,12 @@ class VPAAApprovalController extends Controller
         }
 
         $requirement = InternshipRequirement::findOrFail($approval->subject_id);
-        if (! $requirement->file_path || ! Storage::disk('public')->exists($requirement->file_path)) {
+        $path = $this->publicStoragePath($requirement->file_path);
+        if (! $path || ! $this->publicDisk()->exists($path)) {
             return response()->json(['message' => 'Endorsed document file not found.'], 404);
         }
 
-        return Storage::disk('public')->download($requirement->file_path);
+        return $this->publicDisk()->download($path);
     }
 
     private function documentPayload(ApprovalRecord $approval, InternshipRequirement $requirement): array

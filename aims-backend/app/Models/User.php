@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\StaffId;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
@@ -90,9 +91,15 @@ class User extends Authenticatable
 
     public function getAvatarUrlAttribute(): ?string
     {
-        return $this->avatar
-            ? url(Storage::disk('public')->url($this->avatar))
-            : null;
+        $path = ltrim(str_replace('\\', '/', trim((string) $this->avatar)), '/');
+        if ($path === '') {
+            return null;
+        }
+
+        /** @var FilesystemAdapter $disk */
+        $disk = Storage::disk('public');
+
+        return $disk->url($path);
     }
 
     public function isAdmin()

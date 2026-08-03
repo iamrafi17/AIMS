@@ -46,7 +46,7 @@ class Evaluation extends Model
 
     public function getAverageRatingAttribute()
     {
-        return ($this->work_quality + $this->communication + $this->professionalism + 
+        return ($this->work_quality + $this->communication + $this->professionalism +
                 $this->attendance + $this->technical_skills + $this->teamwork) / 6;
     }
 }

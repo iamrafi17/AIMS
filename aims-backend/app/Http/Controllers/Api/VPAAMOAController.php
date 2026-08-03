@@ -8,7 +8,6 @@ use App\Models\MOA;
 use App\Models\SystemNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class VPAAMOAController extends Controller
@@ -69,9 +68,10 @@ class VPAAMOAController extends Controller
     {
         abort_unless($approval->subject_type === ApprovalRecord::TYPE_MOA, 404);
         $moa = MOA::findOrFail($approval->subject_id);
-        abort_unless(Storage::disk('public')->exists($moa->file_path), 404);
+        $path = $this->publicStoragePath($moa->file_path);
+        abort_unless($path && $this->publicDisk()->exists($path), 404);
 
-        return Storage::disk('public')->download($moa->file_path);
+        return $this->publicDisk()->download($path);
     }
 
     private function payload(ApprovalRecord $approval, MOA $moa): array

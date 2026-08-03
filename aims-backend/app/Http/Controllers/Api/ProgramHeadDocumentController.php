@@ -9,7 +9,6 @@ use App\Models\MOA;
 use App\Models\SystemNotification;
 use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class ProgramHeadDocumentController extends Controller
 {
@@ -97,11 +96,12 @@ class ProgramHeadDocumentController extends Controller
     public function downloadRequirement(Request $request, InternshipRequirement $requirement)
     {
         ProgramAccess::authorizeRequirement($request->user(), $requirement);
-        if (! $requirement->file_path || ! Storage::disk('public')->exists($requirement->file_path)) {
+        $path = $this->publicStoragePath($requirement->file_path);
+        if (! $path || ! $this->publicDisk()->exists($path)) {
             return response()->json(['message' => 'Requirement file not found.'], 404);
         }
 
-        return Storage::disk('public')->download($requirement->file_path);
+        return $this->publicDisk()->download($path);
     }
 
     public function reviewMoa(Request $request, MOA $moa)
@@ -134,11 +134,12 @@ class ProgramHeadDocumentController extends Controller
     public function downloadMoa(Request $request, MOA $moa)
     {
         ProgramAccess::authorizeMoa($request->user(), $moa);
-        if (! Storage::disk('public')->exists($moa->file_path)) {
+        $path = $this->publicStoragePath($moa->file_path);
+        if (! $path || ! $this->publicDisk()->exists($path)) {
             return response()->json(['message' => 'MOA file not found.'], 404);
         }
 
-        return Storage::disk('public')->download($moa->file_path);
+        return $this->publicDisk()->download($path);
     }
 
     private function requirementPayload(InternshipRequirement $requirement): array

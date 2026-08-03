@@ -22,7 +22,7 @@ import {
 } from 'react-icons/fi';
 import { BellIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
-import { useAuth } from '../../context/AuthContext';
+import useAuth from '../../context/useAuth';
 import api from '../../services/api';
 
 const statusOptions = [

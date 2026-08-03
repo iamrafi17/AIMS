@@ -1,67 +1,69 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
-import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { ThemeProvider } from './context/ThemeContext';
+import useTheme from './context/useTheme';
 import PrivateRoute from './routes/PrivateRoute';
 import RoleBasedRoute from './routes/RoleBasedRoute';
 
 // Auth Pages
-import LoginPage from './pages/auth/LoginPage';
-import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
-import RegisterPage from './pages/auth/RegisterPage';
-import LandingPage from './pages/public/LandingPage';
+const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'));
+const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
+const LandingPage = lazy(() => import('./pages/public/LandingPage'));
 
 // Layout
 import DashboardLayout from './layouts/DashboardLayout';
 
 // Student Pages
-import StudentDashboard from './pages/student/Dashboard';
-import StudentAttendance from './pages/student/Attendance';
-import StudentRequirements from './pages/student/Requirements';
-import StudentTravel from './pages/student/Travel';
-import StudentAnnouncements from './pages/student/Announcements';
-import StudentProfile from './pages/student/Profile';
+const StudentDashboard = lazy(() => import('./pages/student/Dashboard'));
+const StudentAttendance = lazy(() => import('./pages/student/Attendance'));
+const StudentRequirements = lazy(() => import('./pages/student/Requirements'));
+const StudentTravel = lazy(() => import('./pages/student/Travel'));
+const StudentAnnouncements = lazy(() => import('./pages/student/Announcements'));
+const StudentProfile = lazy(() => import('./pages/student/Profile'));
 
 // Coordinator Pages
-import CoordinatorDashboard from './pages/coordinator/Dashboard';
-import CoordinatorStudents from './pages/coordinator/StudentManagement';
-import CoordinatorAttendance from './pages/coordinator/AttendanceManagement';
-import CoordinatorHTE from './pages/coordinator/HTEManagement';
-import CoordinatorTravel from './pages/coordinator/TravelMonitoring';
-import CoordinatorReports from './pages/coordinator/Reports';
-import CoordinatorAnnouncements from './pages/coordinator/Announcements';
-import CoordinatorProfile from './pages/coordinator/Profile';
+const CoordinatorDashboard = lazy(() => import('./pages/coordinator/Dashboard'));
+const CoordinatorStudents = lazy(() => import('./pages/coordinator/StudentManagement'));
+const CoordinatorAttendance = lazy(() => import('./pages/coordinator/AttendanceManagement'));
+const CoordinatorHTE = lazy(() => import('./pages/coordinator/HTEManagement'));
+const CoordinatorTravel = lazy(() => import('./pages/coordinator/TravelMonitoring'));
+const CoordinatorReports = lazy(() => import('./pages/coordinator/Reports'));
+const CoordinatorAnnouncements = lazy(() => import('./pages/coordinator/Announcements'));
+const CoordinatorProfile = lazy(() => import('./pages/coordinator/Profile'));
 
 // Program Head Pages
-import ProgramHeadDashboard from './pages/program-head/Dashboard';
-import ProgramHeadDocuments from './pages/program-head/DocumentReview';
-import ProgramHeadTravel from './pages/program-head/TravelMonitoringManagement';
-import ProgramHeadReports from './pages/program-head/Reports';
-import ProgramHeadAnnouncements from './pages/program-head/Announcements';
-import ProgramHeadStudentMonitoring from './pages/program-head/StudentMonitoring';
+const ProgramHeadDashboard = lazy(() => import('./pages/program-head/Dashboard'));
+const ProgramHeadDocuments = lazy(() => import('./pages/program-head/DocumentReview'));
+const ProgramHeadTravel = lazy(() => import('./pages/program-head/TravelMonitoringManagement'));
+const ProgramHeadReports = lazy(() => import('./pages/program-head/Reports'));
+const ProgramHeadAnnouncements = lazy(() => import('./pages/program-head/Announcements'));
+const ProgramHeadStudentMonitoring = lazy(() => import('./pages/program-head/StudentMonitoring'));
 
 // VPAA Pages
-import VPAADashboard from './pages/vpaa/Dashboard';
-import VPAAApprovals from './pages/vpaa/Approvals';
-import VPAAMOA from './pages/vpaa/MOAApproval';
-import VPAAAnnouncements from './pages/vpaa/Announcements';
-import VPAAReports from './pages/vpaa/Reports';
+const VPAADashboard = lazy(() => import('./pages/vpaa/Dashboard'));
+const VPAAApprovals = lazy(() => import('./pages/vpaa/Approvals'));
+const VPAAMOA = lazy(() => import('./pages/vpaa/MOAApproval'));
+const VPAAAnnouncements = lazy(() => import('./pages/vpaa/Announcements'));
+const VPAAReports = lazy(() => import('./pages/vpaa/Reports'));
 
 // Admin Pages
-import AdminDashboard from './pages/admin/Dashboard';
-import AdminUsers from './pages/admin/UserManagement';
-import AdminAcademic from './pages/admin/AcademicManagement';
-import AdminSystem from './pages/admin/SystemSettings';
-import AdminAudit from './pages/admin/AuditLogs';
-import AdminReports from './pages/admin/Reports';
+const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
+const AdminUsers = lazy(() => import('./pages/admin/UserManagement'));
+const AdminAcademic = lazy(() => import('./pages/admin/AcademicManagement'));
+const AdminSystem = lazy(() => import('./pages/admin/SystemSettings'));
+const AdminAudit = lazy(() => import('./pages/admin/AuditLogs'));
+const AdminReports = lazy(() => import('./pages/admin/Reports'));
 
 // Supervisor Pages
-import SupervisorDashboard from './pages/supervisor/Dashboard';
-import SupervisorProgress from './pages/supervisor/StudentProgress';
-import SupervisorEvaluations from './pages/supervisor/Evaluations';
-import SupervisorAttendance from './pages/supervisor/AttendanceReview';
-import SupervisorAnnouncements from './pages/supervisor/Announcements';
-import Notifications from './pages/shared/Notifications';
+const SupervisorDashboard = lazy(() => import('./pages/supervisor/Dashboard'));
+const SupervisorProgress = lazy(() => import('./pages/supervisor/StudentProgress'));
+const SupervisorEvaluations = lazy(() => import('./pages/supervisor/Evaluations'));
+const SupervisorAttendance = lazy(() => import('./pages/supervisor/AttendanceReview'));
+const SupervisorAnnouncements = lazy(() => import('./pages/supervisor/Announcements'));
+const Notifications = lazy(() => import('./pages/shared/Notifications'));
 
 function ThemedToaster() {
   const { darkMode } = useTheme();
@@ -80,13 +82,22 @@ function ThemedToaster() {
   );
 }
 
+function PageLoader() {
+  return (
+    <div className="grid min-h-screen place-items-center bg-slate-50 dark:bg-gray-950">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#800000]" />
+    </div>
+  );
+}
+
 function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
         <Router>
           <ThemedToaster />
-          <Routes>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -172,7 +183,8 @@ function App() {
 
             {/* 404 */}
             <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+            </Routes>
+          </Suspense>
         </Router>
       </AuthProvider>
     </ThemeProvider>

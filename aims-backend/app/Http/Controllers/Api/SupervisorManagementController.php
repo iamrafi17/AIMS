@@ -73,11 +73,21 @@ class SupervisorManagementController extends Controller
         $query = Attendance::with(['student.user', 'student.program', 'student.hte'])
             ->whereIn('student_id', $studentIds)->latest('date');
 
-        if ($request->filled('student_id')) $query->where('student_id', $request->input('student_id'));
-        if ($request->filled('status')) $query->where('status', $request->input('status'));
-        if ($request->filled('review_status')) $query->where('supervisor_review_status', $request->input('review_status'));
-        if ($request->filled('date_from')) $query->whereDate('date', '>=', $request->input('date_from'));
-        if ($request->filled('date_to')) $query->whereDate('date', '<=', $request->input('date_to'));
+        if ($request->filled('student_id')) {
+            $query->where('student_id', $request->input('student_id'));
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+        if ($request->filled('review_status')) {
+            $query->where('supervisor_review_status', $request->input('review_status'));
+        }
+        if ($request->filled('date_from')) {
+            $query->whereDate('date', '>=', $request->input('date_from'));
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('date', '<=', $request->input('date_to'));
+        }
 
         return response()->json([
             'records' => $query->paginate(20),
@@ -156,6 +166,7 @@ class SupervisorManagementController extends Controller
         $hours = $student->attendance->sum(function (Attendance $record) {
             $regular = collect([[$record->am_time_in, $record->am_time_out], [$record->pm_time_in, $record->pm_time_out]])
                 ->sum(fn ($slot) => $slot[0] && $slot[1] ? $slot[0]->diffInSeconds($slot[1]) / 3600 : 0);
+
             return $regular + (float) $record->overtime_hours;
         });
         $required = max((float) $student->required_ojt_hours, 1);

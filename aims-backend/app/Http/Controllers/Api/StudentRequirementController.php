@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\InternshipRequirement;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class StudentRequirementController extends Controller
 {
@@ -46,7 +45,7 @@ class StudentRequirementController extends Controller
         $extension = $file->getClientOriginalExtension();
         $fileType = in_array($extension, ['pdf']) ? 'pdf' : (in_array($extension, ['jpg', 'jpeg', 'png']) ? 'image' : 'document');
 
-        $oldPath = $requirement->file_path;
+        $oldPath = $this->publicStoragePath($requirement->file_path);
         $path = $file->store('requirements/'.$student->id, 'public');
 
         $requirement->update([
@@ -59,7 +58,7 @@ class StudentRequirementController extends Controller
         ]);
 
         if ($oldPath && $oldPath !== $path) {
-            Storage::disk('public')->delete($oldPath);
+            $this->publicDisk()->delete($oldPath);
         }
 
         return response()->json([
@@ -76,10 +75,11 @@ class StudentRequirementController extends Controller
             ->where('student_id', $student->id)
             ->first();
 
-        if (! $requirement || ! $requirement->file_path) {
+        $path = $this->publicStoragePath($requirement?->file_path);
+        if (! $requirement || ! $path || ! $this->publicDisk()->exists($path)) {
             return response()->json(['message' => 'File not found'], 404);
         }
 
-        return Storage::disk('public')->download($requirement->file_path);
+        return $this->publicDisk()->download($path);
     }
 }

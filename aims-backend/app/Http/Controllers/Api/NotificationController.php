@@ -11,7 +11,9 @@ class NotificationController extends Controller
     public function index(Request $request)
     {
         $query = SystemNotification::where('user_id', $request->user()->id)->latest();
-        if ($request->boolean('unread')) $query->whereNull('read_at');
+        if ($request->boolean('unread')) {
+            $query->whereNull('read_at');
+        }
 
         return response()->json([
             'unread_count' => SystemNotification::where('user_id', $request->user()->id)->whereNull('read_at')->count(),

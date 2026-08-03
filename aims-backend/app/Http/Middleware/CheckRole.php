@@ -9,7 +9,7 @@ class CheckRole
 {
     public function handle(Request $request, Closure $next, ...$roles)
     {
-        if (!$request->user() || !$request->user()->hasRole($roles)) {
+        if (! $request->user() || ! $request->user()->hasRole($roles)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 

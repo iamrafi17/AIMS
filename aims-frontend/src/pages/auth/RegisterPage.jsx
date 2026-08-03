@@ -16,7 +16,7 @@ import {
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
+import useAuth from '../../context/useAuth';
 import marsuLogo from '../../assets/marsu-logo.png';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#800000]/45 focus:ring-4 focus:ring-[#800000]/8 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500';

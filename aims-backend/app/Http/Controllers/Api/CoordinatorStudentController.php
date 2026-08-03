@@ -16,7 +16,6 @@ use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -152,14 +151,16 @@ class CoordinatorStudentController extends Controller
     public function destroy(Request $request, Student $student)
     {
         ProgramAccess::authorizeStudent($request->user(), $student);
-        $paths = $student->requirements()->pluck('file_path')->filter();
-        $avatar = $student->user?->avatar;
+        $paths = $student->requirements()->pluck('file_path')
+            ->map(fn ($path) => $this->publicStoragePath($path))
+            ->filter();
+        $avatar = $this->publicStoragePath($student->user?->avatar);
         $user = $student->user;
 
         DB::transaction(fn () => $user ? $user->delete() : $student->delete());
-        $paths->each(fn ($path) => Storage::disk('public')->delete($path));
+        $paths->each(fn ($path) => $this->publicDisk()->delete($path));
         if ($avatar) {
-            Storage::disk('public')->delete($avatar);
+            $this->publicDisk()->delete($avatar);
         }
 
         return response()->json(['message' => 'Student record and login account deleted successfully.']);
@@ -241,11 +242,12 @@ class CoordinatorStudentController extends Controller
     {
         ProgramAccess::authorizeStudent($request->user(), $student);
         ProgramAccess::authorizeRequirement($request->user(), $requirement);
-        if ($requirement->student_id !== $student->id || ! $requirement->file_path || ! Storage::disk('public')->exists($requirement->file_path)) {
+        $path = $this->publicStoragePath($requirement->file_path);
+        if ($requirement->student_id !== $student->id || ! $path || ! $this->publicDisk()->exists($path)) {
             return response()->json(['message' => 'Requirement file not found.'], 404);
         }
 
-        return Storage::disk('public')->download($requirement->file_path);
+        return $this->publicDisk()->download($path);
     }
 
     public function importCsv(Request $request)

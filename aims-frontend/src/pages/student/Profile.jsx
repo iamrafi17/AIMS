@@ -19,7 +19,7 @@ import {
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import UserAvatar from '../../components/UserAvatar';
-import { useAuth } from '../../context/AuthContext';
+import useAuth from '../../context/useAuth';
 import api from '../../services/api';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-[#800000]/45 focus:ring-4 focus:ring-[#800000]/8 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-700 dark:disabled:text-gray-400';

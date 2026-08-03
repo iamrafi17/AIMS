@@ -8,6 +8,7 @@ use App\Models\MOA;
 use App\Models\Program;
 use App\Models\Student;
 use App\Models\User;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -125,7 +126,13 @@ class CoordinatorHTEManagementTest extends TestCase
             ->assertJsonPath('moa.status', 'pending');
 
         $moa = MOA::firstOrFail();
-        Storage::disk('public')->assertExists($moa->file_path);
+        /** @var FilesystemAdapter $publicDisk */
+        $publicDisk = Storage::disk('public');
+        $publicDisk->assertExists($moa->file_path);
+
+        $this->get("/api/coordinator/htes/moas/{$moa->id}/download")
+            ->assertOk()
+            ->assertDownload("MOA-partner-company-{$moa->id}.pdf");
 
         $moa->update([
             'status' => 'approved',

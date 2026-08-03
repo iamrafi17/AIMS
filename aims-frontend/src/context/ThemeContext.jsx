@@ -1,6 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-
-const ThemeContext = createContext(null);
+import { useCallback, useEffect, useRef, useState } from 'react';
+import ThemeContext from './theme-context';
 
 export function ThemeProvider({ children }) {
   const transitionTimer = useRef(null);
@@ -46,12 +45,4 @@ export function ThemeProvider({ children }) {
       {children}
     </ThemeContext.Provider>
   );
-}
-
-export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error('useTheme must be used within a ThemeProvider');
-  }
-  return context;
 }

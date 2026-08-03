@@ -20,7 +20,9 @@ class SystemNotification extends Model
 
     public static function sendToUser(?int $userId, string $title, string $message, string $type = 'information', ?string $actionUrl = null): ?self
     {
-        if (! $userId) return null;
+        if (! $userId) {
+            return null;
+        }
 
         return static::create([
             'user_id' => $userId,
