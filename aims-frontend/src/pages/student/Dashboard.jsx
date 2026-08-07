@@ -1,20 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  FiAlertCircle,
   FiBriefcase,
   FiCalendar,
   FiCheck,
   FiCheckCircle,
-  FiChevronDown,
   FiClock,
   FiClipboard,
   FiFileText,
   FiGlobe,
   FiHome,
-  FiLock,
-  FiMapPin,
-  FiRefreshCw,
   FiSun,
   FiTrendingUp,
   FiX,
@@ -122,25 +117,6 @@ function formatOjtDate(value) {
     day: 'numeric',
     year: 'numeric',
   });
-}
-
-function SelectControl({ label, value, onChange, disabled, children }) {
-  return (
-    <label className="block min-w-[150px] flex-1">
-      <span className="mb-1.5 block text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-400">{label}</span>
-      <span className="relative block">
-        <select
-          value={value}
-          onChange={onChange}
-          disabled={disabled}
-          className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-3 pr-9 text-sm font-bold text-slate-700 outline-none transition focus:border-[#800000]/40 focus:ring-4 focus:ring-[#800000]/5 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800"
-        >
-          {children}
-        </select>
-        <FiChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-      </span>
-    </label>
-  );
 }
 
 function ActivityModal({ period, activity, setActivity, submitting, onCancel, onSubmit }) {
@@ -362,6 +338,8 @@ function StudentDashboard() {
   const progress = dashboardData?.ojt_progress || {};
   const weeklyHours = progress.weekly_hours || [];
   const weeklyScale = Math.max(...weeklyHours.map((item) => Number(item.hours) || 0), 8);
+  const completedSlots = displaySlots.filter((slot) => slot.completed).length;
+  const clockProgress = displaySlots.length ? Math.round((completedSlots / displaySlots.length) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -376,102 +354,82 @@ function StudentDashboard() {
         </div>
       </div>
 
-      <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-lg shadow-slate-900/[0.04] dark:border-gray-700 dark:bg-gray-800">
-        <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.12),transparent_38%),linear-gradient(135deg,#fff,#fffaf7)] p-6 dark:border-gray-700 dark:bg-none dark:bg-gray-800 lg:p-8">
-          <div className="flex flex-col justify-between gap-6 xl:flex-row xl:items-start">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#800000] text-xl text-white shadow-lg shadow-[#800000]/15"><FiClock /></div>
-                <div><h2 className="text-xl font-black text-[#430909]">Quick Smart Clock</h2><p className="text-xs font-semibold text-slate-400">Tamper-proof time synced with the AIMS server</p></div>
-              </div>
-              <div className="mt-6 flex flex-wrap items-end gap-x-4 gap-y-2">
-                <p className="font-mono text-4xl font-black tracking-tight text-[#800000] sm:text-5xl">{clockLoading ? '--:--:--' : formattedTime}</p>
-                <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-extrabold text-emerald-700"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> LIVE SERVER TIME</span>
-              </div>
-              <p className="mt-2 text-sm font-semibold text-slate-500">{formattedDate} · Philippine Time</p>
-            </div>
+      <section className="quick-smart-clock relative isolate mx-auto flex min-h-[25rem] w-full max-w-4xl flex-col overflow-hidden rounded-[1.5rem] bg-gradient-to-br from-[#720b0b] via-[#800000] to-[#520505] px-5 py-4 text-white shadow-xl shadow-[#430909]/20 sm:px-6 sm:py-5 lg:min-h-[420px]">
+        <div className="pointer-events-none absolute -right-28 -top-32 h-80 w-80 rounded-full bg-white/[0.055] blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-[#d4af37]/10 blur-3xl" />
 
-            <div className="flex max-w-2xl flex-wrap gap-3 xl:justify-end">
-              <SelectControl label="Status" value={status} onChange={(event) => setStatus(event.target.value)} disabled={settingsLocked}>
-                {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </SelectControl>
-              {status === 'present' && (
-                <>
-                  <SelectControl label="Work Mode" value={workMode} onChange={(event) => setWorkMode(event.target.value)} disabled={settingsLocked}>
-                    {workModeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </SelectControl>
-                  <SelectControl label="Session Type" value={sessionType} onChange={(event) => setSessionType(event.target.value)} disabled={settingsLocked}>
-                    {sessionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </SelectControl>
-                </>
-              )}
-            </div>
+        <header className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-center gap-3">
+            <FiClock className="h-6 w-6 shrink-0" aria-hidden="true" />
+            <h2 className="text-lg font-black tracking-tight sm:text-xl">Quick Smart Clock</h2>
           </div>
 
-          {settingsLocked && (
-            <div className="mt-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold leading-5 text-amber-800"><FiLock className="mt-0.5 shrink-0" /> Today’s status, work mode, and session type are locked because an attendance record has already been saved.</div>
-          )}
-        </div>
+          <div className="grid w-[118px] max-w-[118px] self-end gap-1.5 sm:self-auto">
+            <label className="flex h-[34px] min-h-0 w-[118px] max-w-[118px] items-center gap-1.5 overflow-hidden rounded-xl border border-white/35 bg-white/15 px-2.5 shadow-sm backdrop-blur">
+              <FiCheckCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <select value={status} onChange={(event) => setStatus(event.target.value)} disabled={settingsLocked} aria-label="Attendance status" className="h-full min-h-0 w-full min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-center text-xs font-black text-white outline-none">
+                {statusOptions.map((option) => <option key={option.value} value={option.value} className="bg-[#720b0b] text-white">{option.label}</option>)}
+              </select>
+            </label>
+            {status === 'present' && <>
+              <label className="flex h-[34px] min-h-0 w-[118px] max-w-[118px] items-center gap-1.5 overflow-hidden rounded-xl border border-white/35 bg-white/15 px-2.5 shadow-sm backdrop-blur">
+                <FiBriefcase className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <select value={workMode} onChange={(event) => setWorkMode(event.target.value)} disabled={settingsLocked} aria-label="Work mode" className="h-full min-h-0 w-full min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-center text-xs font-black text-white outline-none">
+                  {workModeOptions.map((option) => <option key={option.value} value={option.value} className="bg-[#720b0b] text-white">{option.label}</option>)}
+                </select>
+              </label>
+              <label className="flex h-[34px] min-h-0 w-[118px] max-w-[118px] items-center gap-1.5 overflow-hidden rounded-xl border border-white/35 bg-white/15 px-2.5 shadow-sm backdrop-blur">
+                <FiClock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <select value={sessionType} onChange={(event) => setSessionType(event.target.value)} disabled={settingsLocked} aria-label="Session type" className="h-full min-h-0 w-full min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-center text-xs font-black text-white outline-none">
+                  {sessionOptions.map((option) => <option key={option.value} value={option.value} className="bg-[#720b0b] text-white">{option.label}</option>)}
+                </select>
+              </label>
+            </>}
+          </div>
+        </header>
 
-        <div className="p-6 lg:p-8">
-          {status === 'present' ? (
-            <>
-              <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-bold text-slate-500">
-                <span className="inline-flex items-center gap-2"><FiCheckCircle className="text-emerald-500" /> Present</span>
-                <span className="inline-flex items-center gap-2">{workModeOptions.find((option) => option.value === workMode)?.label}</span>
-                <span className="inline-flex items-center gap-2">{sessionOptions.find((option) => option.value === sessionType)?.description}</span>
-              </div>
+        <div className="relative mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center py-3 text-center">
+          <time className="font-mono text-[clamp(2.5rem,5vw,3.5rem)] font-black leading-none tracking-[-0.075em] tabular-nums">
+            {clockLoading ? '--:--:--' : formattedTime}
+          </time>
+          <p className="mt-2 text-sm font-bold text-white/70 sm:text-base">{formattedDate}</p>
 
-              <div className={`grid gap-3 ${displaySlots.length === 4 ? 'sm:grid-cols-4' : 'sm:grid-cols-2'}`}>
-                {displaySlots.map((slot, index) => {
-                  const isCurrent = !slot.completed && slot.key === nextKey && !complete;
-                  return (
-                    <div key={slot.key} className={`relative rounded-2xl border p-4 transition ${slot.completed ? 'border-emerald-200 bg-emerald-50/60' : isCurrent ? 'border-[#800000]/35 bg-[#800000]/[0.025] shadow-[0_0_0_4px_rgba(128,0,0,0.05)]' : 'border-slate-200 bg-slate-50/60'}`}>
-                      {isCurrent && <span className="absolute -right-1 -top-1 h-3 w-3 animate-ping rounded-full bg-[#800000]/60" />}
-                      <div className={`grid h-9 w-9 place-items-center rounded-full text-sm font-black ${slot.completed ? 'bg-emerald-500 text-white' : isCurrent ? 'border-2 border-[#800000] bg-white text-[#800000]' : 'border-2 border-slate-200 bg-white text-slate-400'}`}>
-                        {slot.completed ? <FiCheck /> : slot.number || index + 1}
-                      </div>
-                      <p className="mt-3 text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-400">{slot.period}</p>
-                      <p className="mt-0.5 text-sm font-black text-slate-700">{slot.label.replace(` (${slot.period})`, '')}</p>
-                      <p className={`mt-2 text-xs font-bold ${slot.completed ? 'text-emerald-700' : isCurrent ? 'text-[#800000]' : 'text-slate-400'}`}>
-                        {slot.completed
-                          ? new Date(slot.time).toLocaleTimeString('en-PH', { timeZone: clockState?.timezone || 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                          : isCurrent ? 'Next action' : 'Not yet recorded'}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          ) : (
-            <div className={`rounded-2xl border p-5 ${status === 'absent' ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'}`}>
-              <div className="flex items-start gap-3">
-                {status === 'absent' ? <FiAlertCircle className="mt-0.5 text-xl text-rose-600" /> : <FiSun className="mt-0.5 text-xl text-amber-600" />}
-                <div><p className="font-black text-slate-800">{status === 'absent' ? 'Mark today as absent' : 'Mark today as holiday / no work'}</p><p className="mt-1 text-sm leading-6 text-slate-500">This saves today with zero rendered hours. GPS and time slots are not required.</p></div>
-              </div>
-            </div>
+          {status === 'present' && displaySlots.length > 0 && (
+            <ol className={'mt-5 grid w-full max-w-xs gap-2 ' + (displaySlots.length === 4 ? 'grid-cols-4' : 'grid-cols-2')} aria-label="Clock progress">
+              {displaySlots.map((slot, index) => {
+                const isCurrent = !slot.completed && slot.key === nextKey && !complete;
+                const period = slot.period || (slot.key?.startsWith('am_') ? 'AM' : 'PM');
+                const action = slot.label?.includes('Out') ? 'Out' : 'In';
+                return <li key={slot.key} className="flex min-w-0 flex-col items-center">
+                  <span className={'grid h-10 w-10 place-items-center rounded-full border-2 text-sm font-black ' + (slot.completed ? 'border-[#f2cf70] bg-[#f2cf70] text-[#430909]' : isCurrent ? 'border-white bg-white/20 text-white' : 'border-white/20 bg-black/10 text-white/70')}>
+                    {slot.completed ? <FiCheck aria-label="Completed" /> : slot.number || index + 1}
+                  </span>
+                  <span className="mt-1.5 text-[11px] font-black text-white/75 sm:text-xs">{period} {action}</span>
+                </li>;
+              })}
+            </ol>
           )}
+
+          {status !== 'present' && <div className="mt-6 rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-bold text-white/80">{status === 'absent' ? 'Record today as absent' : 'Record today as holiday / no work'}</div>}
 
           {complete ? (
-            <div className="mt-6 flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-center text-sm font-extrabold text-white"><FiCheckCircle className="text-lg" /> {status === 'present' ? 'All time slots completed for today!' : status === 'absent' ? 'Today has been recorded as absent.' : 'Today has been recorded as holiday / no work.'}</div>
+            <div className="mt-8 rounded-full border border-white/20 bg-white/15 px-7 py-4 text-sm font-black shadow-lg"><FiCheckCircle className="mr-2 inline h-5 w-5" />Today’s attendance is complete</div>
           ) : (
-            <button
-              type="button"
-              onClick={handlePrimaryAction}
-              disabled={submitting || clockLoading}
-              className={`mt-6 flex w-full items-center justify-center gap-3 rounded-2xl px-6 py-4 text-base font-black text-white shadow-xl transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55 ${status === 'absent' ? 'bg-rose-600 shadow-rose-600/15 hover:bg-rose-700' : status === 'holiday' ? 'bg-amber-500 shadow-amber-500/15 hover:bg-amber-600' : clockState?.next_action?.type === 'out' ? 'bg-[#a8750b] shadow-[#a8750b]/15 hover:bg-[#8f6207]' : 'bg-[#800000] shadow-[#800000]/15 hover:bg-[#650000]'}`}
-            >
-              {submitting ? <><span className="h-5 w-5 animate-spin rounded-full border-2 border-white/35 border-t-white" /> Recording with server time...</> : <><FiClock /> {primaryLabel}</>}
+            <button type="button" onClick={handlePrimaryAction} disabled={submitting || clockLoading} className="mt-5 inline-flex w-full max-w-52 items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-black text-[#800000] shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:bg-[#fff9e8] disabled:cursor-not-allowed disabled:opacity-60">
+              {submitting ? <><span className="h-5 w-5 animate-spin rounded-full border-2 border-[#800000]/25 border-t-[#800000]" />Recording...</> : <><FiClock />{primaryLabel}</>}
             </button>
           )}
-
-          <div className="mt-4 flex flex-col justify-between gap-3 text-xs text-slate-400 sm:flex-row sm:items-center">
-            <p className="flex items-start gap-2"><FiMapPin className="mt-0.5 shrink-0" /> GPS is requested only when you record a present time slot. WFO logs are checked against your HTE geofence.</p>
-            <button type="button" onClick={fetchQuickClock} disabled={clockLoading} className="inline-flex shrink-0 items-center gap-1.5 font-extrabold text-[#800000] disabled:opacity-50"><FiRefreshCw className={clockLoading ? 'animate-spin' : ''} /> Resync</button>
-          </div>
         </div>
-      </section>
 
+        <footer className="relative">
+          <div className="h-1 overflow-hidden rounded-full bg-white/15" aria-hidden="true"><div className="h-full rounded-full bg-[#d4af37] transition-[width] duration-300" style={{ width: clockProgress + '%' }} /></div>
+          <div className="mt-3 flex items-center justify-between gap-4 text-sm font-bold text-white/65">
+            <span>{completedSlots}/{displaySlots.length} completed</span>
+            <Link to="/student/attendance" className="inline-flex items-center gap-1.5 text-sm font-black text-white/75 transition hover:text-white">See full log <span aria-hidden="true">↗</span></Link>
+          </div>
+          <button type="button" onClick={fetchQuickClock} disabled={clockLoading} className="sr-only">Resync clock</button>
+        </footer>
+      </section>
       <section>
         <div className="mb-4 flex items-end justify-between gap-4">
           <div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Internship requirements</p><h2 className="mt-1 text-xl font-black text-[#430909]">OJT Status</h2></div>

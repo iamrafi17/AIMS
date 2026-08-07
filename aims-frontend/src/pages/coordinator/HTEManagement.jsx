@@ -394,7 +394,7 @@ function HTEManagement() {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-black text-[#800000] dark:text-rose-300">Geofence Location & Radius</h3>
-                  <p className="mt-1 text-xs text-slate-400">Zoom into the real map, then click or drag the pin to the exact HTE entrance.</p>
+                  <p className="mt-1 text-xs text-slate-400">Search for the HTE, then click or drag the pin to its exact entrance. The location and radius save with this HTE record.</p>
                 </div>
                 <label className="flex items-center gap-2 rounded-xl bg-violet-50 px-3 py-2 text-xs font-black text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
                   <input type="checkbox" checked={hteForm.geofence_enabled} onChange={(event) => setHteForm((current) => ({ ...current, geofence_enabled: event.target.checked }))} />
@@ -410,40 +410,6 @@ function HTEManagement() {
                 onPositionChange={(latitude, longitude) => setHteForm((current) => ({ ...current, latitude, longitude }))}
                 onRadiusChange={(geofence_radius) => setHteForm((current) => ({ ...current, geofence_radius }))}
               />
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <Field label="Latitude">
-                  <input
-                    type="number"
-                    step="any"
-                    value={hteForm.latitude}
-                    onChange={(event) => setHteForm((current) => ({ ...current, latitude: event.target.value }))}
-                    className={inputClass}
-                    required={hteForm.geofence_enabled}
-                  />
-                </Field>
-                <Field label="Longitude">
-                  <input
-                    type="number"
-                    step="any"
-                    value={hteForm.longitude}
-                    onChange={(event) => setHteForm((current) => ({ ...current, longitude: event.target.value }))}
-                    className={inputClass}
-                    required={hteForm.geofence_enabled}
-                  />
-                </Field>
-                <Field label="Radius (meters)" required>
-                  <input
-                    type="number"
-                    min="10"
-                    max="10000"
-                    value={hteForm.geofence_radius}
-                    onChange={(event) => setHteForm((current) => ({ ...current, geofence_radius: event.target.value }))}
-                    className={inputClass}
-                    required
-                  />
-                </Field>
-              </div>
             </div>
 
             <div className="md:col-span-3 flex flex-wrap gap-5 border-t border-slate-100 pt-4 text-sm font-bold dark:border-gray-700">

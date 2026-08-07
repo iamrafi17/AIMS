@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicSection;
 use App\Models\Attendance;
-use App\Models\AuditLog;
 use App\Models\College;
 use App\Models\HTE;
 use App\Models\InternshipRequirement;
@@ -142,26 +141,6 @@ class AdminSystemController extends Controller
         }
 
         return response()->json(['message' => 'System settings saved successfully.']);
-    }
-
-    public function audit(Request $request)
-    {
-        $query = AuditLog::with('user:id,name,email,role')->latest();
-
-        if ($request->filled('search')) {
-            $search = trim((string) $request->input('search'));
-            $query->where(function ($builder) use ($search) {
-                $builder->where('action', 'like', "%{$search}%")
-                    ->orWhere('subject_type', 'like', "%{$search}%")
-                    ->orWhereHas('user', fn ($userQuery) => $userQuery->where('name', 'like', "%{$search}%"));
-            });
-        }
-
-        if ($request->filled('role')) {
-            $query->whereHas('user', fn ($userQuery) => $userQuery->where('role', $request->input('role')));
-        }
-
-        return response()->json($query->paginate(25));
     }
 
     public function reports()

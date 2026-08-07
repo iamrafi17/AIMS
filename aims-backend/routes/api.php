@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AdminDashboardController;
 use App\Http\Controllers\Api\AdminSystemController;
 use App\Http\Controllers\Api\AdminUserController;
@@ -33,8 +34,10 @@ use Illuminate\Support\Facades\Route;
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::get('/registration/enrollment/{schoolId}', [AuthController::class, 'enrollment']);
-Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+Route::get('/security-questions', [AuthController::class, 'securityQuestions']);
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:10,1');
+Route::post('/forgot-password/verify', [AuthController::class, 'verifySecurityAnswers'])->middleware('throttle:10,1');
+Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
 Route::get('/portal', [PublicPortalController::class, 'index']);
 
 // Public data routes
@@ -43,10 +46,11 @@ Route::get('/colleges/{college}/programs', [CollegeController::class, 'programs'
 Route::get('/colleges/{college}/htes', [CollegeController::class, 'htes']);
 
 // Protected Routes
-Route::middleware(['auth:sanctum', 'audit'])->group(function () {
+Route::middleware(['auth:sanctum', 'activity'])->group(function () {
     // User routes
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
+    Route::get('/activity-logs', [ActivityLogController::class, 'index']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
     Route::put('/profile/account', [AuthController::class, 'updateAccountInformation']);
     Route::put('/profile/information', [AuthController::class, 'updateProfileInformation']);
@@ -113,6 +117,7 @@ Route::middleware(['auth:sanctum', 'audit'])->group(function () {
         Route::get('/students/options', [CoordinatorStudentController::class, 'options']);
         Route::get('/students/enrollments', [CoordinatorStudentController::class, 'enrollments']);
         Route::post('/students/import', [CoordinatorStudentController::class, 'importCsv']);
+        Route::post('/students/import/confirm', [CoordinatorStudentController::class, 'confirmCsvImport']);
         Route::apiResource('students', CoordinatorStudentController::class);
         Route::post('/students/{student}/approve', [CoordinatorStudentController::class, 'approveRegistration']);
         Route::post('/students/{student}/reject', [CoordinatorStudentController::class, 'rejectRegistration']);
@@ -159,7 +164,6 @@ Route::middleware(['auth:sanctum', 'audit'])->group(function () {
         Route::delete('/academic/sections/{section}', [AdminSystemController::class, 'destroySection']);
         Route::get('/settings', [AdminSystemController::class, 'settings']);
         Route::put('/settings', [AdminSystemController::class, 'updateSettings']);
-        Route::get('/audit', [AdminSystemController::class, 'audit']);
         Route::get('/reports', [AdminSystemController::class, 'reports']);
     });
 

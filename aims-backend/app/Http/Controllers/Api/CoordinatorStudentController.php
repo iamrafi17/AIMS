@@ -13,6 +13,7 @@ use App\Models\Student;
 use App\Models\SystemNotification;
 use App\Models\User;
 use App\Support\ProgramAccess;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -252,65 +253,176 @@ class CoordinatorStudentController extends Controller
 
     public function importCsv(Request $request)
     {
+        $request->validate(['file' => ['required', 'file', 'mimes:csv', 'max:5120']]);
+        $students = $this->analyzePredefinedCsv($request->file('file'));
+
+        return response()->json([
+            'message' => 'Student list is ready for review.',
+            'file_name' => $request->file('file')->getClientOriginalName(),
+            'students' => $students,
+            'summary' => $this->importSummary($students),
+        ]);
+    }
+
+    public function confirmCsvImport(Request $request)
+    {
+        $request->validate(['file' => ['required', 'file', 'mimes:csv', 'max:5120']]);
         $programId = ProgramAccess::programId($request->user());
-        $request->validate(['file' => ['required', 'file', 'mimes:csv,txt', 'max:5120']]);
-        $handle = fopen($request->file('file')->getRealPath(), 'r');
-        $headers = array_map(fn ($header) => Str::snake(trim((string) $header)), fgetcsv($handle) ?: []);
-        $schoolIdHeader = in_array('school_id', $headers, true) ? 'school_id' : 'student_id';
-        $fullNameHeader = in_array('full_name', $headers, true) ? 'full_name' : 'student_name';
-        $requiredHeaders = [$schoolIdHeader, $fullNameHeader, 'section'];
-
-        if (array_diff($requiredHeaders, $headers)) {
-            fclose($handle);
-            throw ValidationException::withMessages([
-                'file' => 'CSV must contain school_id, full_name, and section columns.',
-            ]);
-        }
-
+        $program = Program::findOrFail($programId);
+        $students = $this->analyzePredefinedCsv($request->file('file'));
         $imported = 0;
-        $errors = [];
-        $rowNumber = 1;
 
-        while (($values = fgetcsv($handle)) !== false) {
-            $rowNumber++;
-            if (count(array_filter($values, fn ($value) => trim((string) $value) !== '')) === 0) {
-                continue;
-            }
-            $values = array_pad($values, count($headers), null);
-            $row = array_combine($headers, array_slice($values, 0, count($headers)));
+        DB::transaction(function () use ($request, $students, $program, &$imported) {
+            foreach ($students as $student) {
+                if ($student['status'] !== 'Ready') {
+                    continue;
+                }
 
-            try {
-                $payload = validator([
-                    'school_id' => trim((string) ($row[$schoolIdHeader] ?? '')),
-                    'full_name' => trim((string) ($row[$fullNameHeader] ?? '')),
-                    'section' => trim((string) ($row['section'] ?? '')),
-                ], [
-                    'school_id' => ['required', 'string', 'max:20', Rule::unique('ojt_enrollments', 'school_id'), Rule::unique('students', 'student_id')],
-                    'full_name' => ['required', 'string', 'max:255'],
-                    'section' => ['required', 'string', 'max:50'],
-                ])->validate();
+                $alreadyExists = OjtEnrollment::where('school_id', $student['school_no'])->exists()
+                    || Student::where('student_id', $student['school_no'])->exists();
+
+                if ($alreadyExists) {
+                    continue;
+                }
 
                 OjtEnrollment::create([
-                    'school_id' => $payload['school_id'],
-                    'full_name' => preg_replace('/\s+/', ' ', trim($payload['full_name'])),
-                    'section' => $payload['section'],
+                    'school_id' => $student['school_no'],
+                    'full_name' => $student['full_name'],
+                    'section' => $program->code,
                     'college_id' => $request->user()->college_id,
-                    'program_id' => $programId,
+                    'program_id' => $program->id,
                     'source' => 'csv',
                     'added_by' => $request->user()->id,
                 ]);
                 $imported++;
-            } catch (\Throwable $exception) {
-                $errors[] = ['row' => $rowNumber, 'school_id' => $row[$schoolIdHeader] ?? null, 'message' => $exception instanceof ValidationException ? collect($exception->errors())->flatten()->first() : $exception->getMessage()];
             }
-        }
-        fclose($handle);
+        });
 
         return response()->json([
-            'message' => $imported.' student(s) added to the OJT enrollment list; '.count($errors).' row(s) failed.',
+            'message' => 'Student list imported successfully.',
+            'detail' => $imported.' students were successfully imported.',
             'imported' => $imported,
-            'failed' => count($errors),
-            'errors' => $errors,
+            'skipped' => count($students) - $imported,
+        ]);
+    }
+
+    private function analyzePredefinedCsv(UploadedFile $file): array
+    {
+        $rows = $this->readPredefinedStudentRows($file);
+        $schoolNumbers = collect($rows)
+            ->pluck('school_no')
+            ->filter()
+            ->map(fn ($schoolNo) => Str::upper($schoolNo));
+        $counts = $schoolNumbers->countBy();
+        $uniqueSchoolNumbers = $schoolNumbers->unique()->values();
+        $existingEnrollments = OjtEnrollment::whereIn('school_id', $uniqueSchoolNumbers)
+            ->pluck('school_id')
+            ->mapWithKeys(fn ($schoolNo) => [Str::upper($schoolNo) => true]);
+        $existingStudents = Student::whereIn('student_id', $uniqueSchoolNumbers)
+            ->pluck('student_id')
+            ->mapWithKeys(fn ($schoolNo) => [Str::upper($schoolNo) => true]);
+
+        return array_map(function (array $student) use ($counts, $existingEnrollments, $existingStudents) {
+            $schoolNo = $student['school_no'];
+            $fullName = $student['full_name'];
+            $key = Str::upper($schoolNo);
+            $status = 'Ready';
+            $reason = null;
+
+            if ($schoolNo === '' || $fullName === '') {
+                $status = 'Invalid';
+                $reason = $schoolNo === ''
+                    ? 'School No. is required.'
+                    : 'Full Name is required.';
+            } elseif (mb_strlen($schoolNo) > 20 || mb_strlen($fullName) > 255) {
+                $status = 'Invalid';
+                $reason = mb_strlen($schoolNo) > 20
+                    ? 'School No. must not exceed 20 characters.'
+                    : 'Full Name must not exceed 255 characters.';
+            } elseif (($counts[$key] ?? 0) > 1) {
+                $status = 'Duplicate';
+                $reason = 'School No. appears more than once in this file.';
+            } elseif ($existingEnrollments->has($key) || $existingStudents->has($key)) {
+                $status = 'Duplicate';
+                $reason = 'School No. already exists in AIMS.';
+            }
+
+            return [
+                ...$student,
+                'status' => $status,
+                'reason' => $reason,
+            ];
+        }, $rows);
+    }
+
+    private function readPredefinedStudentRows(UploadedFile $file): array
+    {
+        $handle = fopen($file->getRealPath(), 'r');
+
+        if (! $handle) {
+            $this->invalidStudentListTemplate();
+        }
+
+        $hasOfficialTitle = false;
+        $hasStudentNumberHeader = false;
+        $hasFullNameHeader = false;
+        $students = [];
+        $rowNumber = 0;
+
+        try {
+            while (($row = fgetcsv($handle)) !== false) {
+                $rowNumber++;
+                $cells = array_map(
+                    fn ($value) => trim(ltrim((string) $value, "\xEF\xBB\xBF")),
+                    $row,
+                );
+
+                foreach ($cells as $cell) {
+                    $hasOfficialTitle = $hasOfficialTitle
+                        || Str::contains(Str::upper($cell), 'OFFICIAL LIST OF ENROLLED STUDENTS');
+                    $hasStudentNumberHeader = $hasStudentNumberHeader
+                        || preg_match('/^(STUDENT|SCHOOL)\s+NO\.?$/i', $cell) === 1;
+                    $hasFullNameHeader = $hasFullNameHeader
+                        || strcasecmp($cell, 'Full Name') === 0;
+                }
+
+                if (preg_match('/^\d+\.?$/', trim((string) ($row[2] ?? ''))) !== 1) {
+                    continue;
+                }
+
+                $students[] = [
+                    'row' => $rowNumber,
+                    'school_no' => trim((string) ($row[4] ?? '')),
+                    'full_name' => preg_replace('/\s+/', ' ', trim((string) ($row[5] ?? ''))),
+                ];
+            }
+        } finally {
+            fclose($handle);
+        }
+
+        if (! $hasOfficialTitle || ! $hasStudentNumberHeader || ! $hasFullNameHeader || $students === []) {
+            $this->invalidStudentListTemplate();
+        }
+
+        return $students;
+    }
+
+    private function importSummary(array $students): array
+    {
+        $statuses = collect($students)->countBy('status');
+
+        return [
+            'students_found' => count($students),
+            'ready' => $statuses->get('Ready', 0),
+            'duplicates' => $statuses->get('Duplicate', 0),
+            'invalid' => $statuses->get('Invalid', 0),
+        ];
+    }
+
+    private function invalidStudentListTemplate(): never
+    {
+        throw ValidationException::withMessages([
+            'file' => ['The uploaded file does not match the required student list template.'],
         ]);
     }
 

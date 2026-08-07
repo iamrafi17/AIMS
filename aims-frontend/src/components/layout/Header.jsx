@@ -38,19 +38,19 @@ function Header({ onMenuClick, sidebarOpen }) {
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-xl dark:border-gray-700 dark:bg-gray-800/90">
-      <div className="flex min-h-20 items-center justify-between gap-3 px-4 sm:px-6">
+      <div className="flex min-h-16 items-center justify-between gap-2 px-4 sm:min-h-20 sm:gap-3 sm:px-6">
         {/* Left side */}
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           <button
             onClick={onMenuClick}
-            className="rounded-xl p-2.5 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
             aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
             aria-expanded={sidebarOpen}
           >
             <Bars3Icon className="w-6 h-6 text-gray-600 dark:text-gray-300" />
           </button>
-          <div>
-            <h2 className="text-base font-black text-gray-800 sm:text-lg dark:text-white">{pageTitle}</h2>
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-black text-gray-800 sm:text-lg dark:text-white">{pageTitle}</h2>
             <p className="hidden text-xs text-gray-500 sm:block dark:text-gray-400">Welcome back, {user?.name}</p>
           </div>
         </div>
@@ -78,7 +78,7 @@ function Header({ onMenuClick, sidebarOpen }) {
           </button>
 
           {/* Notifications */}
-          <button onClick={() => navigate(`/${rolePath}/notifications`)} className="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors" aria-label={`${unread} unread notifications`}>
+          <button onClick={() => navigate(`/${rolePath}/notifications`)} className="relative grid h-11 w-11 place-items-center rounded-xl transition-colors hover:bg-gray-100 dark:hover:bg-gray-700" aria-label={`${unread} unread notifications`}>
             <BellIcon className="w-6 h-6 text-gray-600 dark:text-gray-300" />
             {unread > 0 && <span className="absolute right-0 top-0 grid min-h-5 min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">{unread > 9 ? '9+' : unread}</span>}
           </button>

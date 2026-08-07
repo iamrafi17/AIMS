@@ -18,6 +18,12 @@
   color-scheme: light;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 .dark {
   --ring-track: #374151;
   color-scheme: dark;
@@ -30,6 +36,8 @@ body {
   background: #fbfaf8;
   color: #1f2937;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  text-rendering: optimizeLegibility;
 }
 
 .dark body {
@@ -44,6 +52,8 @@ body {
 .dark .dashboard-shell .bg-gray-100,
 .dark .dashboard-shell .bg-slate-50 { background-color: #1f2937; }
 .dark .dashboard-shell .bg-slate-100 { background-color: #374151; }
+.dark .dashboard-shell .bg-slate-200,
+.dark .dashboard-shell .bg-gray-200 { background-color: #334155; }
 .dark .dashboard-shell .border-gray-100,
 .dark .dashboard-shell .border-gray-200,
 .dark .dashboard-shell .border-gray-300,
@@ -104,12 +114,52 @@ body {
 .dark .dashboard-shell .bg-violet-50 { background-color: rgba(91, 33, 182, 0.28); }
 .dark .dashboard-shell .bg-violet-100 { background-color: rgba(91, 33, 182, 0.45); }
 .dark .dashboard-shell .text-violet-700 { color: #c4b5fd; }
+.dark .dashboard-shell .text-emerald-600 { color: #6ee7b7; }
+.dark .dashboard-shell .text-blue-600 { color: #93c5fd; }
+.dark .dashboard-shell .text-violet-600 { color: #c4b5fd; }
+.dark .dashboard-shell .text-orange-700,
+.dark .dashboard-shell .text-orange-800 { color: #fdba74; }
+.dark .dashboard-shell .border-blue-200 { border-color: rgba(96, 165, 250, 0.42); }
+.dark .dashboard-shell .border-orange-200 { border-color: rgba(251, 146, 60, 0.42); }
+.dark .dashboard-shell .border-emerald-200 { border-color: rgba(52, 211, 153, 0.42); }
+.dark .dashboard-shell .border-violet-200 { border-color: rgba(167, 139, 250, 0.42); }
+
+/* The Smart Clock is already a dark branded surface. Keep its compact
+   controls transparent instead of applying the generic dark form fill. */
+.dark .dashboard-shell .quick-smart-clock select,
+.dark .dashboard-shell .quick-smart-clock select:disabled {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  opacity: 1 !important;
+  box-shadow: none !important;
+}
+
+.dark .dashboard-shell .quick-smart-clock option {
+  background-color: #720b0b;
+  color: #ffffff;
+}
+
+.dark .dashboard-shell .quick-smart-clock > div button {
+  color: #800000;
+}
+
+.dark .dashboard-shell .quick-smart-clock [class*="bg-[#f2cf70]"] {
+  color: #430909;
+}
 .dark .dashboard-shell aside .bg-white { background-color: #ffffff; }
 .dark .dashboard-shell aside [class*="text-[#800000]"] { color: #800000; }
 
 html {
   scroll-behavior: smooth;
   background-color: #fbfaf8;
+}
+
+@supports (min-height: 100dvh) {
+  .min-h-screen {
+    min-height: 100dvh;
+  }
 }
 
 .landing-reveal {
@@ -244,6 +294,65 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+img,
+video,
+canvas {
+  max-width: 100%;
+}
+
+button,
+[role='button'],
+a {
+  touch-action: manipulation;
+}
+
+button,
+[role='button'] {
+  min-height: 44px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid rgba(128, 0, 0, 0.55);
+  outline-offset: 3px;
+}
+
+.dark button:focus-visible,
+.dark a:focus-visible,
+.dark input:focus-visible,
+.dark select:focus-visible,
+.dark textarea:focus-visible,
+.dark [tabindex]:focus-visible {
+  outline-color: #f2cf70;
+}
+
+main .overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: #800000 transparent;
+}
+
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .dashboard-shell main {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  .dashboard-shell table th,
+  .dashboard-shell table td {
+    white-space: nowrap;
+  }
 }
 
 .user-avatar {

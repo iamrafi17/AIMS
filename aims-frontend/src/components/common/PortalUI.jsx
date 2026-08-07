@@ -8,7 +8,7 @@ export function PageIntro({ eyebrow, title, description, icon: Icon, actions }) 
           <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{title}</h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-white/75 sm:text-base">{description}</p>
         </div>
-        {actions && <div className="flex flex-wrap gap-3">{actions}</div>}
+        {actions && <div className="flex w-full flex-wrap gap-3 lg:w-auto">{actions}</div>}
       </div>
     </section>
   );

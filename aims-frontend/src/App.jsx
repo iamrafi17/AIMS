@@ -54,7 +54,6 @@ const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
 const AdminUsers = lazy(() => import('./pages/admin/UserManagement'));
 const AdminAcademic = lazy(() => import('./pages/admin/AcademicManagement'));
 const AdminSystem = lazy(() => import('./pages/admin/SystemSettings'));
-const AdminAudit = lazy(() => import('./pages/admin/AuditLogs'));
 const AdminReports = lazy(() => import('./pages/admin/Reports'));
 
 // Supervisor Pages
@@ -64,6 +63,7 @@ const SupervisorEvaluations = lazy(() => import('./pages/supervisor/Evaluations'
 const SupervisorAttendance = lazy(() => import('./pages/supervisor/AttendanceReview'));
 const SupervisorAnnouncements = lazy(() => import('./pages/supervisor/Announcements'));
 const Notifications = lazy(() => import('./pages/shared/Notifications'));
+const MyActivity = lazy(() => import('./pages/shared/MyActivity'));
 
 function ThemedToaster() {
   const { darkMode } = useTheme();
@@ -107,6 +107,8 @@ function App() {
             {/* Protected Routes */}
             <Route element={<PrivateRoute />}>
               <Route element={<DashboardLayout />}>
+                <Route path="/my-activity" element={<MyActivity />} />
+
                 {/* Student Routes */}
                 <Route element={<RoleBasedRoute allowedRoles={['student']} />}>
                   <Route path="/student/dashboard" element={<StudentDashboard />} />
@@ -161,7 +163,6 @@ function App() {
                   <Route path="/admin/users" element={<AdminUsers />} />
                   <Route path="/admin/academic" element={<AdminAcademic />} />
                   <Route path="/admin/system" element={<AdminSystem />} />
-                  <Route path="/admin/audit" element={<AdminAudit />} />
                   <Route path="/admin/reports" element={<AdminReports />} />
                   <Route path="/admin/profile" element={<CoordinatorProfile />} />
                   <Route path="/admin/notifications" element={<Notifications />} />

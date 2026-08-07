@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\College;
 use App\Models\OjtEnrollment;
 use App\Models\Program;
+use App\Models\SecurityQuestion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -21,7 +22,7 @@ class RegistrationEnrollmentTest extends TestCase
         $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
         OjtEnrollment::create([
             'school_id' => '2026-REG-001',
-            'full_name' => 'Maria Dela Santos',
+            'full_name' => 'SANTOS, Maria Dela',
             'section' => 'BSIT 4A',
             'college_id' => $college->id,
             'program_id' => $program->id,
@@ -31,7 +32,9 @@ class RegistrationEnrollmentTest extends TestCase
 
         $this->getJson('/api/registration/enrollment/2026-REG-001')
             ->assertOk()
-            ->assertJsonPath('full_name', 'Maria Dela Santos')
+            ->assertJsonPath('full_name', 'SANTOS, Maria Dela')
+            ->assertJsonPath('first_name', 'Maria Dela')
+            ->assertJsonPath('last_name', 'Santos')
             ->assertJsonPath('section', 'BSIT 4A')
             ->assertJsonPath('required_ojt_hours', 600);
 
@@ -59,6 +62,7 @@ class RegistrationEnrollmentTest extends TestCase
             'agree_privacy' => true,
             'password' => 'StudentPass123!',
             'password_confirmation' => 'StudentPass123!',
+            'security_questions' => $this->securityQuestionAnswers(),
         ];
 
         $response = $this->postJson('/api/register', $payload)
@@ -90,6 +94,13 @@ class RegistrationEnrollmentTest extends TestCase
         $college = College::create(['name' => 'Computing', 'code' => 'CICS', 'is_active' => true]);
         $program = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
 
+        $this->getJson('/api/registration/enrollment/NOT-LISTED')
+            ->assertNotFound()
+            ->assertJsonPath(
+                'message',
+                'Your School No. was not found in the official student list.',
+            );
+
         $this->postJson('/api/register', [
             'student_id' => 'NOT-LISTED',
             'first_name' => 'Not',
@@ -114,7 +125,22 @@ class RegistrationEnrollmentTest extends TestCase
             'agree_privacy' => true,
             'password' => 'StudentPass123!',
             'password_confirmation' => 'StudentPass123!',
+            'security_questions' => $this->securityQuestionAnswers(),
         ])->assertUnprocessable()
-            ->assertJsonValidationErrors('student_id');
+            ->assertJsonValidationErrors('student_id')
+            ->assertJsonPath(
+                'errors.student_id.0',
+                'Your School No. was not found in the official student list.',
+            );
+    }
+
+    private function securityQuestionAnswers(): array
+    {
+        return SecurityQuestion::query()->take(3)->get()->map(
+            fn (SecurityQuestion $question, int $index) => [
+                'security_question_id' => $question->id,
+                'answer' => ['Adobo', 'Volleyball', 'Reading'][$index],
+            ],
+        )->all();
     }
 }

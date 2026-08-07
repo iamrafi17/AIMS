@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\HTE;
 use App\Models\InternshipRequirement;
 use App\Models\OjtEnrollment;
+use App\Models\SecurityQuestion;
 use App\Models\Student;
 use App\Models\User;
+use App\Models\UserSecurityQuestion;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -63,6 +66,7 @@ class AuthController extends Controller
         $user->update(['last_login_at' => now()]);
 
         $token = $user->createToken($request->device_name)->plainTextToken;
+        ActivityLog::record($user, 'Authentication', 'Logged in.');
 
         $student = $user->student;
 
@@ -98,7 +102,7 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'student_id' => 'required|string|unique:students,student_id',
             'first_name' => 'required|string|max:100',
             'last_name' => 'required|string|max:100',
@@ -122,16 +126,26 @@ class AuthController extends Controller
             'agree_terms' => 'accepted',
             'agree_privacy' => 'accepted',
             'password' => 'required|string|min:8|confirmed',
+            'security_questions' => ['required', 'array', 'size:3'],
+            'security_questions.*.security_question_id' => [
+                'required',
+                'integer',
+                'distinct',
+                Rule::exists('security_questions', 'id')->where(
+                    fn ($query) => $query->where('is_active', true),
+                ),
+            ],
+            'security_questions.*.answer' => ['required', 'string', 'max:255'],
         ]);
 
-        [$user, $student] = DB::transaction(function () use ($request) {
+        [$user, $student] = DB::transaction(function () use ($request, $validated) {
             $enrollment = OjtEnrollment::where('school_id', $request->student_id)
                 ->lockForUpdate()
                 ->first();
 
             if (! $enrollment) {
                 throw ValidationException::withMessages([
-                    'student_id' => ['Your School ID is not included in the coordinator OJT enrollment list.'],
+                    'student_id' => ['Your School No. was not found in the official student list.'],
                 ]);
             }
 
@@ -186,6 +200,17 @@ class AuthController extends Controller
                 'internship_year' => $request->internship_year,
             ]);
 
+            foreach ($validated['security_questions'] as $index => $securityQuestion) {
+                UserSecurityQuestion::create([
+                    'user_id' => $user->id,
+                    'security_question_id' => $securityQuestion['security_question_id'],
+                    'position' => $index + 1,
+                    'answer_hash' => Hash::make(
+                        UserSecurityQuestion::normalizeAnswer($securityQuestion['answer']),
+                    ),
+                ]);
+            }
+
             InternshipRequirement::ensureForStudent($student->id);
 
             $enrollment->update([
@@ -219,7 +244,7 @@ class AuthController extends Controller
 
         if (! $enrollment) {
             return response()->json([
-                'message' => 'School ID was not found in the coordinator OJT enrollment list.',
+                'message' => 'Your School No. was not found in the official student list.',
             ], 404);
         }
 
@@ -246,6 +271,16 @@ class AuthController extends Controller
     private function splitEnrollmentName(string $fullName): array
     {
         $name = preg_replace('/\s+/', ' ', trim($fullName));
+
+        if (str_contains($name, ',')) {
+            [$lastName, $givenNames] = array_map('trim', explode(',', $name, 2));
+
+            return [
+                $givenNames ?: $name,
+                Str::title(Str::lower($lastName)),
+            ];
+        }
+
         $parts = explode(' ', $name);
         $lastName = count($parts) > 1 ? array_pop($parts) : '';
         $firstName = implode(' ', $parts) ?: $name;
@@ -305,52 +340,166 @@ class AuthController extends Controller
         ]);
     }
 
+    public function securityQuestions()
+    {
+        return response()->json([
+            'questions' => SecurityQuestion::query()
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->get(['id', 'question']),
+        ]);
+    }
+
     public function forgotPassword(Request $request)
     {
-        $request->validate(['email' => 'required|email']);
+        $validated = $request->validate([
+            'user_id' => ['required', 'string', 'max:100'],
+        ]);
 
-        $user = User::where('email', $request->email)->first();
+        $user = $this->findRecoveryUser($validated['user_id']);
 
-        $plainToken = null;
-        if ($user) {
-            $plainToken = Str::random(64);
-            DB::table('password_reset_tokens')->updateOrInsert(
-                ['email' => $user->email],
-                ['token' => Hash::make($plainToken), 'created_at' => now()],
-            );
+        if (! $user) {
+            return response()->json(['message' => 'User ID not found.'], 404);
         }
 
-        return response()->json(array_filter([
-            'message' => 'If the email exists, a password reset link has been sent.',
-            'reset_token' => app()->environment('local') ? $plainToken : null,
-        ]));
+        $securityQuestions = $user->securityQuestions()
+            ->with('question:id,question')
+            ->orderBy('position')
+            ->get();
+
+        if ($securityQuestions->count() !== 3) {
+            return response()->json([
+                'message' => 'Security questions are not configured for this account. Please contact an administrator.',
+            ], 422);
+        }
+
+        $challengeToken = Str::random(64);
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $user->email],
+            [
+                'token' => 'challenge:'.Hash::make($challengeToken),
+                'created_at' => now(),
+            ],
+        );
+
+        return response()->json([
+            'message' => 'Security questions loaded.',
+            'challenge_token' => $challengeToken,
+            'questions' => $securityQuestions->map(fn (UserSecurityQuestion $item) => [
+                'id' => $item->security_question_id,
+                'position' => $item->position,
+                'question' => $item->question->question,
+            ])->values(),
+        ]);
+    }
+
+    public function verifySecurityAnswers(Request $request)
+    {
+        $validated = $request->validate([
+            'user_id' => ['required', 'string', 'max:100'],
+            'challenge_token' => ['required', 'string'],
+            'answers' => ['required', 'array', 'size:3'],
+            'answers.*.security_question_id' => ['required', 'integer', 'distinct'],
+            'answers.*.answer' => ['required', 'string', 'max:255'],
+        ]);
+
+        $user = $this->findRecoveryUser($validated['user_id']);
+
+        if (! $user) {
+            return response()->json(['message' => 'User ID not found.'], 404);
+        }
+
+        $record = DB::table('password_reset_tokens')->where('email', $user->email)->first();
+
+        if (! $this->validRecoveryToken($record, 'challenge', $validated['challenge_token'])) {
+            return response()->json([
+                'message' => 'This password recovery session is invalid or expired.',
+            ], 422);
+        }
+
+        $configured = $user->securityQuestions()->orderBy('position')->get();
+        $submitted = collect($validated['answers'])->keyBy('security_question_id');
+        $allCorrect = $configured->count() === 3 && $submitted->count() === 3;
+
+        foreach ($configured as $securityQuestion) {
+            $answer = $submitted->get($securityQuestion->security_question_id);
+            $correct = $answer && Hash::check(
+                UserSecurityQuestion::normalizeAnswer($answer['answer']),
+                $securityQuestion->answer_hash,
+            );
+            $allCorrect = $allCorrect && $correct;
+        }
+
+        if (! $allCorrect) {
+            return response()->json([
+                'message' => 'One or more security answers are incorrect.',
+            ], 422);
+        }
+
+        $resetToken = Str::random(64);
+        DB::table('password_reset_tokens')->where('email', $user->email)->update([
+            'token' => 'verified:'.Hash::make($resetToken),
+            'created_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Security answers verified.',
+            'reset_token' => $resetToken,
+        ]);
     }
 
     public function resetPassword(Request $request)
     {
         $validated = $request->validate([
-            'email' => ['required', 'email'],
+            'user_id' => ['required', 'string', 'max:100'],
             'token' => ['required', 'string'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
-        $record = DB::table('password_reset_tokens')->where('email', $validated['email'])->first();
 
-        if (
-            ! $record
-            || ! Hash::check($validated['token'], $record->token)
-            || now()->diffInMinutes(Carbon::parse($record->created_at)) > 60
-        ) {
-            throw ValidationException::withMessages(['token' => ['This password reset token is invalid or expired.']]);
+        $user = $this->findRecoveryUser($validated['user_id']);
+
+        if (! $user) {
+            return response()->json(['message' => 'User ID not found.'], 404);
         }
 
-        $user = User::where('email', $validated['email'])->firstOrFail();
+        $record = DB::table('password_reset_tokens')->where('email', $user->email)->first();
+
+        if (! $this->validRecoveryToken($record, 'verified', $validated['token'])) {
+            throw ValidationException::withMessages([
+                'token' => ['This password reset verification is invalid or expired.'],
+            ]);
+        }
+
         DB::transaction(function () use ($user, $validated) {
             $user->update(['password' => Hash::make($validated['password'])]);
             $user->tokens()->delete();
             DB::table('password_reset_tokens')->where('email', $user->email)->delete();
         });
 
-        return response()->json(['message' => 'Password reset successfully. You may now sign in.']);
+        return response()->json(['message' => 'Your password has been successfully reset.']);
+    }
+
+    private function findRecoveryUser(string $identifier): ?User
+    {
+        $identifier = trim($identifier);
+
+        return User::query()
+            ->where('staff_id', strtoupper($identifier))
+            ->orWhereHas('student', fn ($query) => $query->where('student_id', $identifier))
+            ->first();
+    }
+
+    private function validRecoveryToken(?object $record, string $stage, string $plainToken): bool
+    {
+        if (
+            ! $record
+            || ! str_starts_with($record->token, $stage.':')
+            || now()->diffInMinutes(Carbon::parse($record->created_at)) > 15
+        ) {
+            return false;
+        }
+
+        return Hash::check($plainToken, Str::after($record->token, ':'));
     }
 
     public function updateProfile(Request $request)

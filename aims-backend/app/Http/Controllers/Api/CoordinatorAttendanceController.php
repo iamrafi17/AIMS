@@ -22,38 +22,38 @@ class CoordinatorAttendanceController extends Controller
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
         ]);
 
+        // Keep the summary query lean.  Loading relations for every matching
+        // attendance record becomes expensive as a program accumulates history.
         $query = $this->applyFilters(
-            Attendance::with(['student.user', 'student.program', 'student.hte', 'verifier', 'journalReviewer'])
+            Attendance::query()
                 ->whereHas('student', fn (Builder $student) => $student->where('program_id', ProgramAccess::programId($request->user()))),
             $request
         );
 
-        $filteredRecords = (clone $query)->get();
-        $records = (clone $query)->latest('date')->latest('id')->paginate(12);
+        $summary = $this->summarize((clone $query));
+        $records = (clone $query)
+            ->with(['student.user', 'student.program', 'student.hte', 'verifier', 'journalReviewer'])
+            ->latest('date')
+            ->latest('id')
+            ->paginate(12);
         $records->getCollection()->transform(fn (Attendance $attendance) => $this->recordPayload($attendance));
-
-        $present = $filteredRecords->where('status', 'present')->count();
-        $late = $filteredRecords->where('status', 'late')->count();
-        $absent = $filteredRecords->where('status', 'absent')->count();
-        $workdays = $present + $late + $absent;
-        $journalRecords = $filteredRecords->filter(fn (Attendance $record) => $this->hasJournal($record));
 
         return response()->json([
             ...$records->toArray(),
             'summary' => [
-                'total' => $filteredRecords->count(),
-                'present' => $present,
-                'late' => $late,
-                'absent' => $absent,
-                'holiday' => $filteredRecords->where('status', 'holiday')->count(),
-                'verified' => $filteredRecords->where('is_verified', true)->count(),
-                'pending_verification' => $filteredRecords->where('is_verified', false)->count(),
-                'attendance_rate' => $workdays > 0 ? round((($present + $late) / $workdays) * 100, 1) : 0,
-                'total_hours' => round($filteredRecords->sum(fn (Attendance $record) => $this->renderedHours($record)), 1),
-                'journals_submitted' => $journalRecords->count(),
-                'journals_pending' => $journalRecords->where('journal_status', 'pending')->count(),
+                'total' => $summary['total'],
+                'present' => $summary['statuses']['present'],
+                'late' => $summary['statuses']['late'],
+                'absent' => $summary['statuses']['absent'],
+                'holiday' => $summary['statuses']['holiday'],
+                'verified' => $summary['verified'],
+                'pending_verification' => $summary['pending_verification'],
+                'attendance_rate' => $summary['attendance_rate'],
+                'total_hours' => $summary['total_hours'],
+                'journals_submitted' => $summary['journals_submitted'],
+                'journals_pending' => $summary['journals_pending'],
             ],
-            'analytics' => $this->analytics($filteredRecords),
+            'analytics' => $summary['analytics'],
         ]);
     }
 
@@ -198,29 +198,68 @@ class CoordinatorAttendanceController extends Controller
         ];
     }
 
-    private function analytics($records): array
+    /**
+     * Aggregate the filtered result one row at a time instead of materializing
+     * the full history and its relations in PHP memory.
+     */
+    private function summarize(Builder $query): array
     {
         $statusColors = ['present' => '#16a34a', 'late' => '#d97706', 'absent' => '#dc2626', 'holiday' => '#7c3aed'];
         $modeLabels = ['wfo' => 'WFO', 'wfh' => 'WFH', 'field' => 'Field Work'];
 
+        $statuses = array_fill_keys(array_keys($statusColors), 0);
+        $modes = array_fill_keys(array_keys($modeLabels), 0);
+        $daily = [];
+        $total = $verified = $journalsSubmitted = $journalsPending = 0;
+        $totalHours = 0.0;
+
+        foreach ($query->cursor() as $record) {
+            $total++;
+            $statuses[$record->status] = ($statuses[$record->status] ?? 0) + 1;
+            $modes[$record->work_mode] = ($modes[$record->work_mode] ?? 0) + 1;
+            $verified += $record->is_verified ? 1 : 0;
+            $totalHours += $this->renderedHours($record);
+
+            if ($this->hasJournal($record)) {
+                $journalsSubmitted++;
+                $journalsPending += $record->journal_status === 'pending' ? 1 : 0;
+            }
+
+            $date = $record->date->toDateString();
+            $daily[$date] ??= ['hours' => 0.0, 'records' => 0];
+            $daily[$date]['hours'] += $this->renderedHours($record);
+            $daily[$date]['records']++;
+        }
+
+        ksort($daily);
+        $daily = array_slice($daily, -14, null, true);
+        $workdays = $statuses['present'] + $statuses['late'] + $statuses['absent'];
+
         return [
-            'status_breakdown' => collect($statusColors)->map(fn (string $color, string $status) => [
-                'name' => ucfirst($status),
-                'value' => $records->where('status', $status)->count(),
-                'color' => $color,
-            ])->values(),
-            'work_modes' => collect($modeLabels)->map(fn (string $label, string $mode) => [
-                'name' => $label,
-                'value' => $records->where('work_mode', $mode)->count(),
-            ])->values(),
-            'daily_hours' => $records->groupBy(fn (Attendance $record) => $record->date->toDateString())
-                ->sortKeys()
-                ->take(-14)
-                ->map(fn ($items, string $date) => [
-                    'date' => $date,
-                    'hours' => round($items->sum(fn (Attendance $record) => $this->renderedHours($record)), 1),
-                    'records' => $items->count(),
+            'total' => $total,
+            'statuses' => $statuses,
+            'verified' => $verified,
+            'pending_verification' => $total - $verified,
+            'attendance_rate' => $workdays > 0 ? round((($statuses['present'] + $statuses['late']) / $workdays) * 100, 1) : 0,
+            'total_hours' => round($totalHours, 1),
+            'journals_submitted' => $journalsSubmitted,
+            'journals_pending' => $journalsPending,
+            'analytics' => [
+                'status_breakdown' => collect($statusColors)->map(fn (string $color, string $status) => [
+                    'name' => ucfirst($status),
+                    'value' => $statuses[$status],
+                    'color' => $color,
                 ])->values(),
+                'work_modes' => collect($modeLabels)->map(fn (string $label, string $mode) => [
+                    'name' => $label,
+                    'value' => $modes[$mode],
+                ])->values(),
+                'daily_hours' => collect($daily)->map(fn (array $item, string $date) => [
+                    'date' => $date,
+                    'hours' => round($item['hours'], 1),
+                    'records' => $item['records'],
+                ])->values(),
+            ],
         ];
     }
 

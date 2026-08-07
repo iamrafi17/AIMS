@@ -29,6 +29,7 @@ const menuItems = {
     { name: 'Travel Monitoring', path: '/student/travel', icon: MapIcon },
     { name: 'Announcements', path: '/student/announcements', icon: BellIcon },
     { name: 'Notifications', path: '/student/notifications', icon: BellIcon },
+    { name: 'My Activity', path: '/my-activity', icon: ClipboardDocumentCheckIcon },
     { name: 'Profile', path: '/student/profile', icon: UserIcon },
   ],
   coordinator: [
@@ -40,6 +41,7 @@ const menuItems = {
     { name: 'Reports', path: '/coordinator/reports', icon: ChartBarIcon },
     { name: 'Announcements', path: '/coordinator/announcements', icon: BellIcon },
     { name: 'Notifications', path: '/coordinator/notifications', icon: BellIcon },
+    { name: 'My Activity', path: '/my-activity', icon: ClipboardDocumentCheckIcon },
     { name: 'Profile', path: '/coordinator/profile', icon: UserIcon },
   ],
   program_head: [
@@ -50,6 +52,7 @@ const menuItems = {
     { name: 'Reports', path: '/program-head/reports', icon: ChartBarIcon },
     { name: 'Announcements', path: '/program-head/announcements', icon: BellIcon },
     { name: 'Notifications', path: '/program-head/notifications', icon: BellIcon },
+    { name: 'My Activity', path: '/my-activity', icon: ClipboardDocumentCheckIcon },
     { name: 'Profile', path: '/program-head/profile', icon: UserIcon },
   ],
   vpaa: [
@@ -60,6 +63,7 @@ const menuItems = {
     { name: 'Announcements', path: '/vpaa/announcements', icon: BellIcon },
     { name: 'Notifications', path: '/vpaa/notifications', icon: BellIcon },
     { name: 'Reports', path: '/vpaa/reports', icon: ChartBarIcon },
+    { name: 'My Activity', path: '/my-activity', icon: ClipboardDocumentCheckIcon },
     { name: 'Profile', path: '/vpaa/profile', icon: UserIcon },
   ],
   admin: [
@@ -67,10 +71,10 @@ const menuItems = {
     { name: 'Users', path: '/admin/users', icon: UsersIcon },
     { name: 'Academic', path: '/admin/academic', icon: AcademicCapIcon },
     { name: 'System', path: '/admin/system', icon: CogIcon },
-    { name: 'Audit Logs', path: '/admin/audit', icon: ClipboardDocumentCheckIcon },
     { name: 'Announcements', path: '/admin/announcements', icon: BellIcon },
     { name: 'Notifications', path: '/admin/notifications', icon: BellIcon },
     { name: 'Reports', path: '/admin/reports', icon: ChartBarIcon },
+    { name: 'My Activity', path: '/my-activity', icon: ClipboardDocumentCheckIcon },
     { name: 'Profile', path: '/admin/profile', icon: UserIcon },
   ],
   supervisor: [
@@ -80,6 +84,7 @@ const menuItems = {
     { name: 'Attendance', path: '/supervisor/attendance', icon: ClockIcon },
     { name: 'Announcements', path: '/supervisor/announcements', icon: BellIcon },
     { name: 'Notifications', path: '/supervisor/notifications', icon: BellIcon },
+    { name: 'My Activity', path: '/my-activity', icon: ClipboardDocumentCheckIcon },
     { name: 'Profile', path: '/supervisor/profile', icon: UserIcon },
   ],
 };

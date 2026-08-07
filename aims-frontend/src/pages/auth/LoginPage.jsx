@@ -98,7 +98,7 @@ function LoginPage() {
 
           <form onSubmit={handleSubmit} className="mt-9 space-y-5">
             <div>
-              <label htmlFor="login" className="mb-2 block text-sm font-extrabold text-slate-700">Email / Staff ID / Student ID</label>
+              <label htmlFor="login" className="mb-2 block text-sm font-extrabold text-slate-700">UserID / Email</label>
               <div className="relative">
                 <FiUser className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input

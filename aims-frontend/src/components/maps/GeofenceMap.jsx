@@ -8,7 +8,7 @@ import {
   useMap,
   useMapEvents,
 } from 'react-leaflet';
-import { FiCrosshair, FiMapPin } from 'react-icons/fi';
+import { FiCrosshair, FiMapPin, FiSearch } from 'react-icons/fi';
 import 'leaflet/dist/leaflet.css';
 
 const SANTA_CRUZ_CENTER = [13.4767, 122.0269];
@@ -93,6 +93,56 @@ function CurrentLocationButton({ onPositionChange }) {
   );
 }
 
+function LocationSearch({ onPositionChange }) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState('');
+
+  const search = async () => {
+    const term = query.trim();
+    if (!term) return;
+
+    setSearching(true);
+    setError('');
+    setResults([]);
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(term)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) throw new Error('Search unavailable');
+      const matches = await response.json();
+      setResults(matches);
+      if (!matches.length) setError('No locations found. Try a more specific address.');
+    } catch {
+      setError('Location search is unavailable. Check your connection and try again.');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const chooseResult = (result) => {
+    onPositionChange(Number(result.lat), Number(result.lon));
+    setQuery(result.display_name);
+    setResults([]);
+    setError('');
+  };
+
+  return (
+    <div className="relative z-[600] mx-auto w-full max-w-md">
+      <div role="search" className="flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-gray-600 dark:bg-gray-900">
+        <FiSearch className="ml-3 shrink-0 self-center text-slate-400" />
+        <input value={query} onChange={(event) => { setQuery(event.target.value); setError(''); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); search(); } }} className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm outline-none dark:text-white" placeholder="Search an HTE address or landmark" aria-label="Search HTE location" />
+        <button type="button" onClick={search} disabled={searching} className="bg-[#800000] px-4 text-xs font-black text-white disabled:opacity-60">{searching ? 'Searching...' : 'Search'}</button>
+      </div>
+      {(results.length > 0 || error) && <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-gray-600 dark:bg-gray-900">
+        {results.map((result) => <button key={result.place_id} type="button" onClick={() => chooseResult(result)} className="block w-full border-b border-slate-100 px-4 py-3 text-left text-xs font-semibold text-slate-700 hover:bg-rose-50 last:border-0 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">{result.display_name}</button>)}
+        {error && <p className="px-4 py-3 text-xs font-semibold text-rose-600">{error}</p>}
+      </div>}
+    </div>
+  );
+}
+
 function GeofenceMap({
   latitude,
   longitude,
@@ -161,8 +211,11 @@ function GeofenceMap({
             </>
           )}
         </MapContainer>
+        {editable && <div className="absolute left-1/2 top-4 z-[500] w-[calc(100%-2rem)] -translate-x-1/2">
+          <LocationSearch onPositionChange={updatePosition} />
+        </div>}
         {!hasSelectedLocation && (
-          <div className="pointer-events-none absolute inset-x-4 top-4 z-[500] mx-auto max-w-md rounded-xl bg-white/95 px-4 py-3 text-center text-xs font-black text-slate-700 shadow-lg backdrop-blur dark:bg-gray-900/95 dark:text-gray-200">
+          <div className="pointer-events-none absolute inset-x-4 top-20 z-[400] mx-auto max-w-md rounded-xl bg-white/95 px-4 py-3 text-center text-xs font-black text-slate-700 shadow-lg backdrop-blur dark:bg-gray-900/95 dark:text-gray-200">
             Click the exact HTE location on the map to place the pin.
           </div>
         )}

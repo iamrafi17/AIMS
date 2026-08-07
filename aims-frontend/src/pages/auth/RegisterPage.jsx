@@ -62,6 +62,7 @@ function RegisterPage() {
   const [colleges, setColleges] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [htes, setHtes] = useState([]);
+  const [securityQuestions, setSecurityQuestions] = useState([]);
   const { register } = useAuth();
   const navigate = useNavigate();
 
@@ -95,12 +96,23 @@ function RegisterPage() {
     agree_privacy: false,
     password: '',
     password_confirmation: '',
+    security_questions: [
+      { security_question_id: '', answer: '' },
+      { security_question_id: '', answer: '' },
+      { security_question_id: '', answer: '' },
+    ],
   });
 
   useEffect(() => {
-    api.get('/colleges')
-      .then((response) => setColleges(response.data))
-      .catch(() => toast.error('Unable to load academic options. Please refresh the page.'))
+    Promise.all([
+      api.get('/colleges'),
+      api.get('/security-questions'),
+    ])
+      .then(([collegeResponse, questionResponse]) => {
+        setColleges(collegeResponse.data);
+        setSecurityQuestions(questionResponse.data.questions || []);
+      })
+      .catch(() => toast.error('Unable to load registration options. Please refresh the page.'))
       .finally(() => setDataLoading(false));
   }, []);
 
@@ -134,9 +146,18 @@ function RegisterPage() {
     if (name === 'student_id') setEnrollmentVerified(false);
   };
 
+  const updateSecurityQuestion = (index, field, value) => {
+    setFormData((current) => ({
+      ...current,
+      security_questions: current.security_questions.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, [field]: value } : item
+      )),
+    }));
+  };
+
   const verifyEnrollment = async () => {
     const schoolId = formData.student_id.trim();
-    if (!schoolId) return toast.error('Enter your School ID first.');
+    if (!schoolId) return toast.error('Enter your School No. first.');
 
     setEnrollmentLoading(true);
     setEnrollmentVerified(false);
@@ -154,10 +175,10 @@ function RegisterPage() {
         hte_id: '',
       }));
       setEnrollmentVerified(true);
-      toast.success('OJT enrollment verified.');
+      toast.success('Student found in the official student list.');
     } catch (error) {
       setFormData((current) => ({ ...current, full_name: '', first_name: '', last_name: '', section: '', college_id: '', program_id: '', hte_id: '' }));
-      toast.error(error.response?.data?.message || 'School ID was not found in the OJT enrollment list.');
+      toast.error(error.response?.data?.message || 'Your School No. was not found in the official student list.');
     } finally {
       setEnrollmentLoading(false);
     }
@@ -183,6 +204,20 @@ function RegisterPage() {
 
     if (formData.password !== formData.password_confirmation) {
       toast.error('Your password confirmation does not match.');
+      return;
+    }
+
+    const incompleteQuestion = formData.security_questions.some(
+      (item) => !item.security_question_id || !item.answer.trim(),
+    );
+    if (incompleteQuestion) {
+      toast.error('Select all three security questions and provide every answer.');
+      return;
+    }
+
+    const selectedQuestionIds = formData.security_questions.map((item) => item.security_question_id);
+    if (new Set(selectedQuestionIds).size !== 3) {
+      toast.error('Please select three different security questions.');
       return;
     }
 
@@ -212,9 +247,9 @@ function RegisterPage() {
           <>
             <StepHeader eyebrow="Step 1 of 6" title="Personal information" description="Use the same information that appears in your official university records." />
             <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="School ID">
+              <Field label="School No.">
                 <div className="flex gap-2">
-                  <input name="student_id" value={formData.student_id} onChange={handleChange} required className={inputClass} placeholder="e.g. 2026-0001" autoComplete="username" />
+                  <input name="student_id" value={formData.student_id} onChange={handleChange} required className={inputClass} placeholder="e.g. 23S0160" autoComplete="username" />
                   <button type="button" onClick={verifyEnrollment} disabled={enrollmentLoading} className="shrink-0 rounded-xl bg-[#800000] px-4 text-xs font-extrabold text-white disabled:opacity-55">
                     {enrollmentLoading ? 'Checking...' : 'Verify'}
                   </button>
@@ -371,6 +406,59 @@ function RegisterPage() {
               <Field label="Confirm Password">
                 <input type={showPassword ? 'text' : 'password'} name="password_confirmation" value={formData.password_confirmation} onChange={handleChange} required minLength={8} className={inputClass} autoComplete="new-password" />
               </Field>
+            </div>
+            <div className="mt-7 rounded-2xl border border-[#800000]/15 bg-[#800000]/[0.025] p-5 sm:p-6">
+              <div className="flex items-start gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#800000]/10 text-[#800000]"><FiShield /></div>
+                <div>
+                  <h3 className="font-black text-[#430909]">Security questions</h3>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">Select three different questions. Your answers will be securely hashed and used only if you need to reset your password.</p>
+                </div>
+              </div>
+              <div className="mt-5 space-y-5">
+                {formData.security_questions.map((item, index) => {
+                  const selectedByOtherRows = formData.security_questions
+                    .filter((_, itemIndex) => itemIndex !== index)
+                    .map((question) => String(question.security_question_id))
+                    .filter(Boolean);
+
+                  return (
+                    <div key={`security-question-${index + 1}`} className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+                      <Field label={`Q${index + 1}: Select Security Question`}>
+                        <select
+                          required
+                          value={item.security_question_id}
+                          onChange={(event) => updateSecurityQuestion(index, 'security_question_id', event.target.value)}
+                          className={inputClass}
+                        >
+                          <option value="">Select a question</option>
+                          {securityQuestions.map((question) => (
+                            <option
+                              key={question.id}
+                              value={question.id}
+                              disabled={selectedByOtherRows.includes(String(question.id))}
+                            >
+                              {question.question}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Answer">
+                        <input
+                          required
+                          type="text"
+                          value={item.answer}
+                          onChange={(event) => updateSecurityQuestion(index, 'answer', event.target.value)}
+                          className={inputClass}
+                          maxLength={255}
+                          autoComplete="off"
+                          placeholder="Enter an answer you will remember"
+                        />
+                      </Field>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             <div className="mt-7 rounded-2xl border border-[#d4af37]/25 bg-[#fffaf0] p-5">
               <h3 className="font-black text-[#430909]">Registration summary</h3>

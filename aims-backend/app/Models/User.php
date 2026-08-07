@@ -89,6 +89,16 @@ class User extends Authenticatable
         return $this->hasMany(Student::class, 'supervisor_id');
     }
 
+    public function activityLogs()
+    {
+        return $this->hasMany(ActivityLog::class);
+    }
+
+    public function securityQuestions()
+    {
+        return $this->hasMany(UserSecurityQuestion::class);
+    }
+
     public function getAvatarUrlAttribute(): ?string
     {
         $path = ltrim(str_replace('\\', '/', trim((string) $this->avatar)), '/');

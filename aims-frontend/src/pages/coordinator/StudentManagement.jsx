@@ -257,16 +257,41 @@ function StudentManagement() {
     try { const response = await api.put(`/coordinator/students/${student.id}/deactivate`); toast.success(response.data.message); setSelected(null); fetchStudents(); } catch (error) { toast.error(errorMessage(error, 'Unable to deactivate student.')); }
   };
 
-  const importCsv = async () => {
+  const previewCsvImport = async () => {
     if (!importFile) return toast.error('Choose a CSV file first.');
     const payload = new FormData(); payload.append('file', importFile); setBusy(true);
-    try { const response = await api.post('/coordinator/students/import', payload, { headers: { 'Content-Type': 'multipart/form-data' } }); setImportResult(response.data); toast.success(response.data.message); fetchEnrollments(); } catch (error) { toast.error(errorMessage(error, 'CSV enrollment import failed.')); } finally { setBusy(false); }
+    try {
+      const response = await api.post('/coordinator/students/import', payload, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setImportResult(response.data);
+      toast.success(response.data.message);
+    } catch (error) {
+      setImportResult(null);
+      toast.error(errorMessage(error, 'CSV preview failed.'));
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const downloadTemplate = () => {
-    const headers = 'school_id,full_name,section\n';
-    const sample = '2026-0002,Juan Dela Cruz,BSIT 4A\n';
-    const url = URL.createObjectURL(new Blob([headers + sample], { type: 'text/csv' })); const link = document.createElement('a'); link.href = url; link.download = 'aims-student-import-template.csv'; link.click(); URL.revokeObjectURL(url);
+  const confirmCsvImport = async () => {
+    if (!importFile || !importResult) return;
+    const payload = new FormData(); payload.append('file', importFile); setBusy(true);
+    try {
+      const response = await api.post('/coordinator/students/import/confirm', payload, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setImportResult((current) => ({ ...current, ...response.data, completed: true }));
+      toast.success(`${response.data.message} ${response.data.detail}`);
+      fetchEnrollments();
+    } catch (error) {
+      toast.error(errorMessage(error, 'Student import confirmation failed.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const closeImport = () => {
+    setImportOpen(false);
+    setImportFile(null);
+    setImportResult(null);
+    if (importInput.current) importInput.current.value = '';
   };
 
   return <div className="space-y-6">
@@ -426,25 +451,59 @@ function StudentManagement() {
       </Modal>
     )}
 
-    {importOpen && <Modal title="Enroll Students via CSV" subtitle="Every valid row is added to the OJT enrollment list without creating an account." onClose={() => setImportOpen(false)}>
+    {importOpen && <Modal title="Import Student List" subtitle="Preview the official school CSV before saving eligible students." onClose={closeImport} size="wide">
       <div className="p-6">
         <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
-          Required CSV columns: <b>school_id</b>, <b>full_name</b>, and <b>section</b>. Older files using <b>student_id</b> and <b>student_name</b> are also accepted. Students already enrolled with the same ID are skipped and reported as errors.
+          Upload the existing predefined school CSV without changing its layout. AIMS reads only <b>Column E (School No.)</b> and <b>Column F (Full Name)</b> from numbered student rows.
         </div>
-        <button onClick={downloadTemplate} className="mt-4 inline-flex items-center gap-2 text-xs font-black text-[#800000] dark:text-rose-300"><FiDownload /> Download CSV Template</button>
-        <button onClick={() => importInput.current?.click()} className="mt-5 flex w-full flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center hover:border-[#800000]/40 dark:border-gray-600">
-          <FiUpload className="text-3xl text-[#800000] dark:text-rose-300" />
-          <p className="mt-3 text-sm font-black">{importFile?.name || 'Choose the student CSV file'}</p>
-          <p className="mt-1 text-xs text-slate-400">CSV or TXT, maximum 5 MB</p>
-        </button>
-        <input ref={importInput} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => { setImportFile(event.target.files?.[0] || null); setImportResult(null); }} />
-        {importResult && <div className="mt-5 rounded-2xl bg-slate-50 p-4 dark:bg-gray-900">
-          <p className="text-sm font-black text-slate-800 dark:text-white">{importResult.message}</p>
-          {importResult.errors?.length > 0 && <div className="mt-3 max-h-36 overflow-y-auto text-xs text-rose-600">{importResult.errors.map((error) => <p key={`${error.row}-${error.school_id}`}>Row {error.row} ({error.school_id || 'unknown'}): {error.message}</p>)}</div>}
-        </div>}
+        {!importResult?.completed && <>
+          <button onClick={() => importInput.current?.click()} className="mt-5 flex w-full flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center hover:border-[#800000]/40 dark:border-gray-600">
+            <FiUpload className="text-3xl text-[#800000] dark:text-rose-300" />
+            <p className="mt-3 text-sm font-black">{importFile?.name || 'Choose the predefined school CSV file'}</p>
+            <p className="mt-1 text-xs text-slate-400">CSV only, maximum 5 MB</p>
+          </button>
+          <input ref={importInput} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => { setImportFile(event.target.files?.[0] || null); setImportResult(null); }} />
+        </>}
+
+        {importResult && !importResult.completed && <>
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              ['Students Found', importResult.summary?.students_found, 'text-slate-700 dark:text-slate-200'],
+              ['Ready', importResult.summary?.ready, 'text-emerald-600'],
+              ['Duplicates', importResult.summary?.duplicates, 'text-amber-600'],
+              ['Invalid', importResult.summary?.invalid, 'text-rose-600'],
+            ].map(([label, value, color]) => <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center dark:border-gray-700 dark:bg-gray-900"><p className={`text-2xl font-black ${color}`}>{value || 0}</p><p className="mt-1 text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</p></div>)}
+          </div>
+          <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-gray-700">
+            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-gray-700 dark:bg-gray-900">
+              File: <b className="text-slate-700 dark:text-slate-200">{importResult.file_name}</b>
+            </div>
+            <div className="max-h-80 overflow-auto">
+              <table className="w-full min-w-[680px] text-left">
+                <thead className="sticky top-0 bg-white text-[10px] uppercase tracking-wide text-slate-400 dark:bg-gray-800">
+                  <tr><th className="px-4 py-3">School No.</th><th className="px-4 py-3">Full Name</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Details</th></tr>
+                </thead>
+                <tbody>
+                  {importResult.students?.map((student) => {
+                    const statusStyle = student.status === 'Ready'
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                      : student.status === 'Duplicate'
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                        : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300';
+                    return <tr key={`${student.row}-${student.school_no}`} className="border-t border-slate-100 dark:border-gray-700"><td className="px-4 py-3 text-sm font-black text-slate-800 dark:text-white">{student.school_no || '—'}</td><td className="px-4 py-3 text-sm text-slate-700 dark:text-gray-200">{student.full_name || '—'}</td><td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${statusStyle}`}>{student.status}</span></td><td className="px-4 py-3 text-xs text-slate-400">{student.reason || 'Ready to import'}</td></tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>}
+
+        {importResult?.completed && <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center dark:border-emerald-900 dark:bg-emerald-950/30"><div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-100 text-2xl text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300"><FiCheck /></div><h3 className="mt-4 text-lg font-black text-emerald-800 dark:text-emerald-200">{importResult.message}</h3><p className="mt-2 text-sm text-emerald-700 dark:text-emerald-300">{importResult.detail}</p>{importResult.skipped > 0 && <p className="mt-1 text-xs text-slate-500">{importResult.skipped} duplicate or invalid record(s) were skipped.</p>}</div>}
+
         <div className="mt-6 flex justify-end gap-3">
-          <button onClick={() => setImportOpen(false)} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold dark:border-gray-600">Close</button>
-          <button onClick={importCsv} disabled={busy || !importFile} className="rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? 'Enrolling...' : 'Enroll Students'}</button>
+          <button onClick={closeImport} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold dark:border-gray-600">{importResult?.completed ? 'Done' : 'Cancel'}</button>
+          {!importResult && <button onClick={previewCsvImport} disabled={busy || !importFile} className="rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? 'Reading CSV...' : 'Preview Import'}</button>}
+          {importResult && !importResult.completed && <button onClick={confirmCsvImport} disabled={busy || !importResult.summary?.ready} className="rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? 'Importing...' : `Confirm Import (${importResult.summary?.ready || 0})`}</button>}
         </div>
       </div>
     </Modal>}

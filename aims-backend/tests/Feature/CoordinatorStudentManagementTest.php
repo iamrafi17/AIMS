@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\College;
 use App\Models\HTE;
 use App\Models\InternshipRequirement;
+use App\Models\OjtEnrollment;
 use App\Models\Program;
 use App\Models\ProgramRequirement;
 use App\Models\Student;
@@ -213,29 +214,139 @@ class CoordinatorStudentManagementTest extends TestCase
         ])->assertNotFound();
     }
 
-    public function test_coordinator_can_import_student_enrollments_without_creating_credentials(): void
+    public function test_predefined_school_csv_is_previewed_before_ready_students_are_confirmed(): void
+    {
+        [$coordinator, $college, $program] = $this->managementContext();
+        Sanctum::actingAs($coordinator);
+
+        OjtEnrollment::create([
+            'school_id' => '23S0141',
+            'full_name' => 'CANTUBA, Rose S',
+            'section' => 'BSIT',
+            'college_id' => $college->id,
+            'program_id' => $program->id,
+            'source' => 'manual',
+            'added_by' => $coordinator->id,
+        ]);
+
+        $csv = $this->predefinedSchoolCsv([
+            ['1', '23S0160', 'BRIONES, Terrence C'],
+            ['2.', '23S0141', 'CANTUBA, Rose S'],
+            ['3.', '23S0019', 'CONDE, Cassandra Marie R'],
+            ['4.', '23S0019', 'DUPLICATE, Student'],
+            ['5.', '', 'MISSING, School Number'],
+            ['6.', '23S0999', ''],
+        ]);
+
+        $preview = $this->post('/api/coordinator/students/import', [
+            'file' => UploadedFile::fake()->createWithContent('students.csv', $csv),
+        ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('message', 'Student list is ready for review.')
+            ->assertJsonPath('file_name', 'students.csv')
+            ->assertJsonPath('summary.students_found', 6)
+            ->assertJsonPath('summary.ready', 1)
+            ->assertJsonPath('summary.duplicates', 3)
+            ->assertJsonPath('summary.invalid', 2)
+            ->assertJsonPath('students.0.school_no', '23S0160')
+            ->assertJsonPath('students.0.full_name', 'BRIONES, Terrence C')
+            ->assertJsonPath('students.0.status', 'Ready')
+            ->assertJsonPath('students.1.status', 'Duplicate')
+            ->assertJsonPath('students.2.status', 'Duplicate')
+            ->assertJsonPath('students.3.status', 'Duplicate')
+            ->assertJsonPath('students.4.status', 'Invalid')
+            ->assertJsonPath('students.5.status', 'Invalid');
+
+        $this->assertDatabaseMissing('ojt_enrollments', ['school_id' => '23S0160']);
+        $this->assertDatabaseMissing('users', ['name' => 'BRIONES, Terrence C']);
+        $this->assertDatabaseMissing('students', ['student_id' => '23S0160']);
+
+        $this->post('/api/coordinator/students/import/confirm', [
+            'file' => UploadedFile::fake()->createWithContent('students.csv', $csv),
+        ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('message', 'Student list imported successfully.')
+            ->assertJsonPath('imported', 1)
+            ->assertJsonPath('skipped', 5);
+
+        $this->assertDatabaseHas('ojt_enrollments', [
+            'school_id' => '23S0160',
+            'full_name' => 'BRIONES, Terrence C',
+            'section' => 'BSIT',
+            'college_id' => $college->id,
+            'program_id' => $program->id,
+            'source' => 'csv',
+        ]);
+        $this->assertDatabaseMissing('ojt_enrollments', ['school_id' => '23S0019']);
+        $this->assertDatabaseMissing('users', ['name' => 'BRIONES, Terrence C']);
+        $this->assertDatabaseMissing('students', ['student_id' => '23S0160']);
+
+        $preview->assertJsonMissingPath('credentials');
+    }
+
+    public function test_predefined_import_rejects_wrong_and_empty_templates_without_saving(): void
     {
         [$coordinator] = $this->managementContext();
         Sanctum::actingAs($coordinator);
 
-        $csv = implode("\n", [
-            'school_id,full_name,section',
-            '2026-2001,Maria Santos,BSIT 4A',
-            '2026-2002,Pedro Reyes,BSIT 4B',
-            '2026-2001,Duplicate Student,BSIT 4C',
+        foreach ([
+            'wrong.csv' => "school_id,full_name\n23S0160,Student Name",
+            'empty.csv' => '',
+        ] as $fileName => $contents) {
+            $this->post('/api/coordinator/students/import', [
+                'file' => UploadedFile::fake()->createWithContent($fileName, $contents),
+            ], ['Accept' => 'application/json'])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('file')
+                ->assertJsonPath(
+                    'errors.file.0',
+                    'The uploaded file does not match the required student list template.',
+                );
+        }
+
+        $this->post('/api/coordinator/students/import', [
+            'file' => UploadedFile::fake()->createWithContent(
+                'students.txt',
+                $this->predefinedSchoolCsv([['1.', '23S0160', 'BRIONES, Terrence C']]),
+            ),
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('file');
+
+        $this->assertDatabaseCount('ojt_enrollments', 0);
+    }
+
+    public function test_uploading_the_same_predefined_csv_twice_marks_every_student_duplicate(): void
+    {
+        [$coordinator] = $this->managementContext();
+        Sanctum::actingAs($coordinator);
+
+        $csv = $this->predefinedSchoolCsv([
+            ['1.', '23S0160', 'BRIONES, Terrence C'],
+            ['2.', '23S0141', 'CANTUBA, Rose S'],
         ]);
+
+        $this->post('/api/coordinator/students/import/confirm', [
+            'file' => UploadedFile::fake()->createWithContent('students.csv', $csv),
+        ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('imported', 2);
 
         $this->post('/api/coordinator/students/import', [
             'file' => UploadedFile::fake()->createWithContent('students.csv', $csv),
         ], ['Accept' => 'application/json'])
             ->assertOk()
-            ->assertJsonPath('imported', 2)
-            ->assertJsonPath('failed', 1)
-            ->assertJsonMissingPath('credentials');
+            ->assertJsonPath('summary.ready', 0)
+            ->assertJsonPath('summary.duplicates', 2);
 
-        $this->assertDatabaseHas('ojt_enrollments', ['school_id' => '2026-2001', 'source' => 'csv']);
-        $this->assertDatabaseHas('ojt_enrollments', ['school_id' => '2026-2002', 'source' => 'csv']);
-        $this->assertDatabaseMissing('students', ['student_id' => '2026-2001']);
+        $this->post('/api/coordinator/students/import/confirm', [
+            'file' => UploadedFile::fake()->createWithContent('students.csv', $csv),
+        ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('imported', 0)
+            ->assertJsonPath('skipped', 2);
+
+        $this->assertDatabaseCount('ojt_enrollments', 2);
     }
 
     private function managementContext(): array
@@ -256,6 +367,25 @@ class CoordinatorStudentManagementTest extends TestCase
         ]);
 
         return [$coordinator, $college, $program, $hte];
+    }
+
+    private function predefinedSchoolCsv(array $students): string
+    {
+        $lines = [
+            ',,,,,,,,OFFICIAL LIST OF ENROLLED STUDENTS,,,,,,,,',
+            ',,,,,,,,2025-2026 2nd Semester,,,,,,,,',
+            ',,,Subject Code,,,ISP307,,,,,,,,Class Section,,,BSIS 3-A',
+            ',,#,,Student No,Full Name,,,,,,,Program,,Level',
+        ];
+
+        foreach ($students as [$number, $schoolNo, $fullName]) {
+            $escapedName = '"'.str_replace('"', '""', $fullName).'"';
+            $lines[] = ",,{$number},,{$schoolNo},{$escapedName},,,,,,BSIS";
+        }
+
+        $lines[] = 'TOTAL NUMBER OF STUDENTS:  '.count($students);
+
+        return implode("\n", $lines);
     }
 
     private function studentPayload(College $college, Program $program, HTE $hte): array
