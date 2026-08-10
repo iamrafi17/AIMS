@@ -92,6 +92,7 @@ class AnnouncementController extends Controller
 
     public function show(Request $request, Announcement $announcement)
     {
+        $this->authorizeVisible($request, $announcement);
         $announcement->load('author:id,name');
         $announcement->setAttribute(
             'is_read',
@@ -103,6 +104,7 @@ class AnnouncementController extends Controller
 
     public function markRead(Request $request, Announcement $announcement)
     {
+        $this->authorizeVisible($request, $announcement);
         $announcement->readers()->syncWithoutDetaching([
             $request->user()->id => ['read_at' => now()],
         ]);
@@ -193,8 +195,9 @@ class AnnouncementController extends Controller
         return response()->json(['message' => 'Announcement restored successfully.']);
     }
 
-    public function download(Announcement $announcement)
+    public function download(Request $request, Announcement $announcement)
     {
+        $this->authorizeVisible($request, $announcement);
         abort_unless($announcement->attachment_path && Storage::exists($announcement->attachment_path), 404);
 
         return Storage::download($announcement->attachment_path, $announcement->attachment_name);
@@ -222,5 +225,23 @@ class AnnouncementController extends Controller
             'scheduled_at' => ['nullable', 'date'],
             'attachment' => ['nullable', 'file', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png', 'max:10240'],
         ]);
+    }
+
+    private function authorizeVisible(Request $request, Announcement $announcement): void
+    {
+        $audiences = match ($request->user()->role) {
+            'student' => ['all', 'students'],
+            'coordinator' => ['all', 'coordinators'],
+            'program_head' => ['all', 'program_heads'],
+            default => ['all', $request->user()->role],
+        };
+
+        abort_unless(
+            in_array($announcement->target_audience, $audiences, true)
+            && $announcement->is_published
+            && ! $announcement->archived_at
+            && (! $announcement->scheduled_at || $announcement->scheduled_at->lte(now())),
+            404,
+        );
     }
 }

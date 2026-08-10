@@ -82,7 +82,7 @@ const emptyDashboard = {
 
 function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   const tones = {
-    maroon: 'bg-[#800000]/10 text-[#800000] dark:bg-rose-950/50 dark:text-rose-300',
+    maroon: 'bg-[#7D001D]/10 text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300',
     green: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
     blue: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300',
     amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
@@ -90,14 +90,14 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   };
 
   return (
-    <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
-          <p className="mt-2 text-3xl font-black text-[#430909] dark:text-white">{value}</p>
+          <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
+          <p className="mt-2 text-2xl font-bold text-[#690016] dark:text-white">{value}</p>
           <p className="mt-1 text-xs text-slate-400">{note}</p>
         </div>
-        <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-xl ${tones[tone]}`}>
+        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg text-lg ${tones[tone]}`}>
           <Icon />
         </div>
       </div>
@@ -107,14 +107,14 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
 
 function Panel({ title, subtitle, icon: Icon, action, children, className = '' }) {
   return (
-    <section className={`rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-6 ${className}`}>
+    <section className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 ${className}`}>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#800000]/10 text-lg text-[#800000] dark:bg-rose-950/50 dark:text-rose-300">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#7D001D]/10 text-lg text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300">
             <Icon />
           </div>
           <div>
-            <h2 className="font-black text-[#430909] dark:text-white">{title}</h2>
+            <h2 className="font-black text-[#690016] dark:text-white">{title}</h2>
             <p className="mt-1 text-xs leading-5 text-slate-400">{subtitle}</p>
           </div>
         </div>
@@ -125,7 +125,7 @@ function Panel({ title, subtitle, icon: Icon, action, children, className = '' }
   );
 }
 
-function ProgressBar({ value, color = 'bg-[#800000]' }) {
+function ProgressBar({ value, color = 'bg-[#7D001D]' }) {
   const safeValue = Math.min(Math.max(Number(value) || 0, 0), 100);
   return (
     <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-gray-700">
@@ -134,7 +134,7 @@ function ProgressBar({ value, color = 'bg-[#800000]' }) {
   );
 }
 
-function Ring({ value, label, color = '#800000' }) {
+function Ring({ value, label, color = '#7D001D' }) {
   const safeValue = Math.min(Math.max(Number(value) || 0, 0), 100);
 
   return (
@@ -144,7 +144,7 @@ function Ring({ value, label, color = '#800000' }) {
     >
       <div className="grid h-28 w-28 place-items-center rounded-full bg-white text-center dark:bg-gray-800">
         <div>
-          <p className="text-2xl font-black text-[#430909] dark:text-white">{safeValue.toFixed(1)}%</p>
+          <p className="text-2xl font-black text-[#690016] dark:text-white">{safeValue.toFixed(1)}%</p>
           <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</p>
         </div>
       </div>
@@ -231,7 +231,7 @@ function UniversityInternshipDashboard({
     return (
       <div className="grid min-h-[420px] place-items-center">
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-[#800000]/15 border-b-[#800000]" />
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-[#7D001D]/15 border-b-[#7D001D]" />
           <p className="mt-4 text-xs font-black uppercase tracking-widest text-slate-400">Loading university overview</p>
         </div>
       </div>
@@ -298,7 +298,7 @@ function UniversityInternshipDashboard({
   }
 
   const complianceItems = [
-    ['Requirements approved', compliance.requirements_rate, `${compliance.requirements_approved} of ${compliance.requirements_total}`, 'bg-[#800000]'],
+    ['Requirements approved', compliance.requirements_rate, `${compliance.requirements_approved} of ${compliance.requirements_total}`, 'bg-[#7D001D]'],
     ['Attendance verified', compliance.attendance_verification_rate, 'Current month', 'bg-emerald-500'],
     ['Valid MOA coverage', compliance.moa_coverage_rate, `${compliance.valid_moa_students} deployed students`, 'bg-blue-500'],
     ['Travel checkpoints', compliance.travel_verification_rate, 'Verified records', 'bg-violet-500'],
@@ -306,16 +306,14 @@ function UniversityInternshipDashboard({
 
   return (
     <div className="space-y-6">
-      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#360707] via-[#650d0d] to-[#8b1717] p-6 text-white shadow-lg sm:p-8">
-        <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border-[44px] border-white/5" />
-        <div className="absolute bottom-0 right-24 h-32 w-32 rounded-full bg-[#f1c54c]/10 blur-2xl" />
-        <div className="relative flex flex-wrap items-end justify-between gap-5">
+      <header className="border-b border-slate-200 pb-5 dark:border-slate-700">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-[#f7d979]">
+            <div className="mb-1.5 inline-flex items-center gap-2 text-xs font-bold uppercase text-[#7D001D] dark:text-rose-300">
               <FiShield /> {audienceLabel}
             </div>
-            <h1 className="text-2xl font-black sm:text-3xl">{dashboardTitle}</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/65">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{dashboardTitle}</h1>
+            <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
               {dashboardSubtitle}
             </p>
           </div>
@@ -323,7 +321,7 @@ function UniversityInternshipDashboard({
             type="button"
             onClick={refreshDashboard}
             disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-xs font-black transition hover:bg-white/15 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-[#7D001D] transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-rose-300"
           >
             <FiRefreshCw className={refreshing ? 'animate-spin' : ''} /> Refresh Data
           </button>
@@ -334,7 +332,7 @@ function UniversityInternshipDashboard({
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8750b]">University Internship Overview</p>
-            <h2 className="mt-1 text-lg font-black text-[#430909] dark:text-white">University-wide internship status</h2>
+            <h2 className="mt-1 text-lg font-black text-[#690016] dark:text-white">University-wide internship status</h2>
           </div>
           {executive ? (
             <p className="text-xs font-bold text-slate-400">
@@ -360,7 +358,7 @@ function UniversityInternshipDashboard({
         subtitle="Internship status, evaluation results, and program-level performance"
         icon={FiBarChart2}
         action={(
-          <Link to={routes.analytics} className="inline-flex items-center gap-1 text-xs font-black text-[#800000] dark:text-rose-300">
+          <Link to={routes.analytics} className="inline-flex items-center gap-1 text-xs font-black text-[#7D001D] dark:text-rose-300">
             View progress <FiArrowRight />
           </Link>
         )}
@@ -368,14 +366,14 @@ function UniversityInternshipDashboard({
         <div className="grid gap-6 xl:grid-cols-[0.75fr_1.25fr]">
           <div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-[#800000]/5 p-4 dark:bg-rose-950/20">
-                <FiTrendingUp className="text-xl text-[#800000] dark:text-rose-300" />
-                <p className="mt-3 text-2xl font-black text-[#430909] dark:text-white">{analytics.average_progress}%</p>
+              <div className="rounded-2xl bg-[#7D001D]/5 p-4 dark:bg-rose-950/20">
+                <FiTrendingUp className="text-xl text-[#7D001D] dark:text-rose-300" />
+                <p className="mt-3 text-2xl font-black text-[#690016] dark:text-white">{analytics.average_progress}%</p>
                 <p className="mt-1 text-[9px] font-black uppercase tracking-wide text-slate-400">Average OJT progress</p>
               </div>
               <div className="rounded-2xl bg-amber-50 p-4 dark:bg-amber-950/20">
                 <FiStar className="text-xl text-amber-600" />
-                <p className="mt-3 text-2xl font-black text-[#430909] dark:text-white">{analytics.average_rating}<span className="text-xs text-slate-400"> / 5</span></p>
+                <p className="mt-3 text-2xl font-black text-[#690016] dark:text-white">{analytics.average_rating}<span className="text-xs text-slate-400"> / 5</span></p>
                 <p className="mt-1 text-[9px] font-black uppercase tracking-wide text-slate-400">{analytics.evaluations_completed} reviewed evaluations</p>
               </div>
             </div>
@@ -413,7 +411,7 @@ function UniversityInternshipDashboard({
                       <td className="py-4 text-sm font-black text-slate-800 dark:text-white">{item.program}</td>
                       <td className="py-4 text-xs font-black text-slate-600 dark:text-gray-300">{item.students}</td>
                       <td className="w-36 py-4">
-                        <div className="mb-1 text-right text-[9px] font-black text-[#800000] dark:text-rose-300">{item.progress}%</div>
+                        <div className="mb-1 text-right text-[9px] font-black text-[#7D001D] dark:text-rose-300">{item.progress}%</div>
                         <ProgressBar value={item.progress} />
                       </td>
                       <td className="w-36 py-4">
@@ -436,7 +434,7 @@ function UniversityInternshipDashboard({
           subtitle={`${new Date().toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} university attendance`}
           icon={FiClock}
           action={(
-            <Link to={routes.attendance} className="inline-flex items-center gap-1 text-xs font-black text-[#800000] dark:text-rose-300">
+            <Link to={routes.attendance} className="inline-flex items-center gap-1 text-xs font-black text-[#7D001D] dark:text-rose-300">
               Open attendance <FiArrowRight />
             </Link>
           )}
@@ -446,7 +444,7 @@ function UniversityInternshipDashboard({
             <div className="w-full flex-1">
               <div className="mb-5 flex items-end justify-between gap-3">
                 <div>
-                  <p className="text-3xl font-black text-[#430909] dark:text-white">{attendance.total_hours}<span className="ml-1 text-sm text-slate-400">hrs</span></p>
+                  <p className="text-3xl font-black text-[#690016] dark:text-white">{attendance.total_hours}<span className="ml-1 text-sm text-slate-400">hrs</span></p>
                   <p className="mt-1 text-xs text-slate-400">Rendered this month</p>
                 </div>
                 <div className="text-right">
@@ -478,7 +476,7 @@ function UniversityInternshipDashboard({
               <div key={day.date} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
                 <span className="text-[8px] font-black text-slate-400">{day.rate}%</span>
                 <div
-                  className={`w-full max-w-10 rounded-t-lg ${day.rate >= 90 ? 'bg-emerald-500' : day.rate > 0 ? 'bg-[#800000]' : 'bg-slate-200 dark:bg-gray-700'}`}
+                  className={`w-full max-w-10 rounded-t-lg ${day.rate >= 90 ? 'bg-emerald-500' : day.rate > 0 ? 'bg-[#7D001D]' : 'bg-slate-200 dark:bg-gray-700'}`}
                   style={{ height: `${Math.max(day.rate, 4)}%` }}
                 />
                 <span className="text-[8px] font-black text-slate-500">{day.label}</span>
@@ -498,7 +496,7 @@ function UniversityInternshipDashboard({
                       <p className="text-xs font-black text-slate-600 dark:text-gray-200">{label}</p>
                       <p className="text-[9px] text-slate-400">{note}</p>
                     </div>
-                    <span className="text-xs font-black text-[#800000] dark:text-rose-300">{value}%</span>
+                    <span className="text-xs font-black text-[#7D001D] dark:text-rose-300">{value}%</span>
                   </div>
                   <ProgressBar value={value} color={color} />
                 </div>
@@ -510,7 +508,7 @@ function UniversityInternshipDashboard({
 
       <Panel title="Travel Monitoring Summary" subtitle="Read-only university travel activity and verification status" icon={FiMapPin}>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl bg-gradient-to-br from-[#430909] to-[#800000] p-5 text-white">
+          <div className="rounded-2xl bg-gradient-to-br from-[#690016] to-[#7D001D] p-5 text-white">
             <FiActivity className="text-2xl text-[#f1c54c]" />
             <p className="mt-5 text-3xl font-black">{travel.active}</p>
             <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-white/55">Active sessions</p>
@@ -518,7 +516,7 @@ function UniversityInternshipDashboard({
           </div>
           <div className="rounded-2xl bg-slate-50 p-5 dark:bg-gray-900">
             <FiBriefcase className="text-2xl text-blue-600" />
-            <p className="mt-5 text-3xl font-black text-[#430909] dark:text-white">{travel.total_this_month}</p>
+            <p className="mt-5 text-3xl font-black text-[#690016] dark:text-white">{travel.total_this_month}</p>
             <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-slate-400">Sessions this month</p>
             <p className="mt-3 text-xs leading-5 text-slate-400">All recorded university travel activity.</p>
           </div>
@@ -549,15 +547,15 @@ function UniversityInternshipDashboard({
             <Link
               key={item.label}
               to={item.path}
-              className="group rounded-2xl border border-slate-100 p-4 transition hover:-translate-y-0.5 hover:border-[#800000]/20 hover:shadow-md dark:border-gray-700"
+              className="group rounded-2xl border border-slate-100 p-4 transition hover:-translate-y-0.5 hover:border-[#7D001D]/20 hover:shadow-md dark:border-gray-700"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className={`grid h-10 w-10 place-items-center rounded-xl text-lg ${item.tone}`}><item.icon /></div>
-                <span className={`text-2xl font-black ${item.count > 0 ? 'text-[#800000] dark:text-rose-300' : 'text-emerald-600'}`}>{item.count}</span>
+                <span className={`text-2xl font-black ${item.count > 0 ? 'text-[#7D001D] dark:text-rose-300' : 'text-emerald-600'}`}>{item.count}</span>
               </div>
               <p className="mt-4 text-sm font-black text-slate-800 dark:text-white">{item.label}</p>
               <p className="mt-1 min-h-10 text-[11px] leading-5 text-slate-400">{item.note}</p>
-              <div className="mt-3 flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-[#800000] opacity-70 group-hover:opacity-100 dark:text-rose-300">
+              <div className="mt-3 flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-[#7D001D] opacity-70 group-hover:opacity-100 dark:text-rose-300">
                 Open queue <FiArrowRight />
               </div>
             </Link>

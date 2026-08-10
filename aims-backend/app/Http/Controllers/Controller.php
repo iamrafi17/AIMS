@@ -19,6 +19,14 @@ abstract class Controller
         return $disk;
     }
 
+    protected function privateDisk(): FilesystemAdapter
+    {
+        /** @var FilesystemAdapter $disk */
+        $disk = Storage::disk('local');
+
+        return $disk;
+    }
+
     /**
      * Normalize paths written by older Windows-hosted versions of the app.
      */
@@ -27,5 +35,10 @@ abstract class Controller
         $path = ltrim(str_replace('\\', '/', trim((string) $path)), '/');
 
         return $path !== '' ? $path : null;
+    }
+
+    protected function privateStoragePath(?string $path): ?string
+    {
+        return $this->publicStoragePath($path);
     }
 }

@@ -15,7 +15,6 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -26,8 +25,8 @@ class AuthController extends Controller
     {
         $request->validate([
             'login' => 'required|string',
-            'password' => 'required',
-            'device_name' => 'required|string',
+            'password' => 'required|string|max:255',
+            'device_name' => 'required|string|max:100',
         ]);
 
         $identifier = trim($request->login);
@@ -109,7 +108,7 @@ class AuthController extends Controller
             'middle_name' => 'nullable|string|max:100',
             'gender' => 'required|in:male,female',
             'birth_date' => 'required|date',
-            'address' => 'required|string',
+            'address' => 'required|string|max:1000',
             'phone' => 'required|string|max:20',
             'email' => 'required|email|unique:users,email',
             'college_id' => 'nullable|exists:colleges,id',
@@ -118,14 +117,14 @@ class AuthController extends Controller
             'section' => 'required|string|max:50',
             'parent_name' => 'required|string|max:255',
             'parent_relationship' => 'required|string|max:50',
-            'parent_address' => 'required|string',
+            'parent_address' => 'required|string|max:1000',
             'parent_phone' => 'required|string|max:20',
             'hte_id' => 'nullable|exists:htes,id',
             'internship_semester' => 'required|string|max:30',
             'internship_year' => ['required', 'string', 'max:20', 'regex:/^\d{4}-\d{4}$/'],
             'agree_terms' => 'accepted',
             'agree_privacy' => 'accepted',
-            'password' => 'required|string|min:8|confirmed',
+            'password' => 'required|string|min:8|max:255|confirmed',
             'security_questions' => ['required', 'array', 'size:3'],
             'security_questions.*.security_question_id' => [
                 'required',
@@ -357,38 +356,35 @@ class AuthController extends Controller
         ]);
 
         $user = $this->findRecoveryUser($validated['user_id']);
-
-        if (! $user) {
-            return response()->json(['message' => 'User ID not found.'], 404);
-        }
-
-        $securityQuestions = $user->securityQuestions()
+        $challengeToken = Str::random(64);
+        $securityQuestions = $user?->securityQuestions()
             ->with('question:id,question')
             ->orderBy('position')
             ->get();
 
-        if ($securityQuestions->count() !== 3) {
-            return response()->json([
-                'message' => 'Security questions are not configured for this account. Please contact an administrator.',
-            ], 422);
+        if ($user && $securityQuestions?->count() === 3) {
+            DB::table('password_reset_tokens')->updateOrInsert(
+                ['email' => $user->email],
+                [
+                    'token' => 'challenge:'.Hash::make($challengeToken),
+                    'created_at' => now(),
+                ],
+            );
+        } else {
+            $securityQuestions = SecurityQuestion::query()
+                ->where('is_active', true)
+                ->inRandomOrder()
+                ->limit(3)
+                ->get(['id', 'question']);
         }
 
-        $challengeToken = Str::random(64);
-        DB::table('password_reset_tokens')->updateOrInsert(
-            ['email' => $user->email],
-            [
-                'token' => 'challenge:'.Hash::make($challengeToken),
-                'created_at' => now(),
-            ],
-        );
-
         return response()->json([
-            'message' => 'Security questions loaded.',
+            'message' => 'If this account is eligible for recovery, answer the security questions.',
             'challenge_token' => $challengeToken,
-            'questions' => $securityQuestions->map(fn (UserSecurityQuestion $item) => [
-                'id' => $item->security_question_id,
-                'position' => $item->position,
-                'question' => $item->question->question,
+            'questions' => $securityQuestions->values()->map(fn ($item, int $index) => [
+                'id' => $item instanceof UserSecurityQuestion ? $item->security_question_id : $item->id,
+                'position' => $item instanceof UserSecurityQuestion ? $item->position : $index + 1,
+                'question' => $item instanceof UserSecurityQuestion ? $item->question->question : $item->question,
             ])->values(),
         ]);
     }
@@ -406,7 +402,7 @@ class AuthController extends Controller
         $user = $this->findRecoveryUser($validated['user_id']);
 
         if (! $user) {
-            return response()->json(['message' => 'User ID not found.'], 404);
+            return $this->recoveryVerificationFailed();
         }
 
         $record = DB::table('password_reset_tokens')->where('email', $user->email)->first();
@@ -453,13 +449,15 @@ class AuthController extends Controller
         $validated = $request->validate([
             'user_id' => ['required', 'string', 'max:100'],
             'token' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'string', 'min:8', 'max:255', 'confirmed'],
         ]);
 
         $user = $this->findRecoveryUser($validated['user_id']);
 
         if (! $user) {
-            return response()->json(['message' => 'User ID not found.'], 404);
+            throw ValidationException::withMessages([
+                'token' => ['This password reset verification is invalid or expired.'],
+            ]);
         }
 
         $record = DB::table('password_reset_tokens')->where('email', $user->email)->first();
@@ -489,6 +487,13 @@ class AuthController extends Controller
             ->first();
     }
 
+    private function recoveryVerificationFailed()
+    {
+        return response()->json([
+            'message' => 'The recovery answers or session are invalid.',
+        ], 422);
+    }
+
     private function validRecoveryToken(?object $record, string $stage, string $plainToken): bool
     {
         if (
@@ -500,198 +505,5 @@ class AuthController extends Controller
         }
 
         return Hash::check($plainToken, Str::after($record->token, ':'));
-    }
-
-    public function updateProfile(Request $request)
-    {
-        $user = $request->user();
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'address' => ['nullable', 'string', 'max:1000'],
-        ]);
-
-        DB::transaction(function () use ($user, $validated) {
-            $user->update([
-                'name' => $validated['name'],
-                'email' => $validated['email'],
-                'phone' => $validated['phone'] ?? $user->phone,
-                'address' => $validated['address'] ?? $user->address,
-            ]);
-
-            if ($user->student) {
-                $user->student->update([
-                    'phone' => $validated['phone'] ?? $user->student->phone,
-                    'address' => $validated['address'] ?? $user->student->address,
-                ]);
-            }
-        });
-
-        return response()->json([
-            'message' => 'Profile updated successfully.',
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'staff_id' => $user->staff_id,
-                'phone' => $user->phone,
-                'address' => $user->address,
-                'role' => $user->role,
-                'avatar' => $user->avatar,
-                'avatar_url' => $user->avatar_url,
-            ],
-        ]);
-    }
-
-    public function updateAccountInformation(Request $request)
-    {
-        $user = $request->user();
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-        ]);
-
-        $user->update($validated);
-
-        return response()->json([
-            'message' => 'Account information updated successfully.',
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'staff_id' => $user->staff_id,
-                'phone' => $user->phone,
-                'address' => $user->address,
-                'role' => $user->role,
-                'avatar' => $user->avatar,
-                'avatar_url' => $user->avatar_url,
-            ],
-        ]);
-    }
-
-    public function updateProfileInformation(Request $request)
-    {
-        $user = $request->user();
-        $student = $user->student;
-
-        if (! $student) {
-            return response()->json(['message' => 'Student profile not found.'], 404);
-        }
-
-        $validated = $request->validate([
-            'first_name' => ['required', 'string', 'max:100'],
-            'middle_name' => ['nullable', 'string', 'max:100'],
-            'last_name' => ['required', 'string', 'max:100'],
-            'gender' => ['required', 'in:male,female'],
-            'birth_date' => ['required', 'date', 'before:today'],
-        ]);
-
-        DB::transaction(function () use ($user, $student, $validated) {
-            $student->update($validated);
-            $user->update([
-                'name' => trim(collect([
-                    $validated['first_name'],
-                    $validated['middle_name'] ?? null,
-                    $validated['last_name'],
-                ])->filter()->implode(' ')),
-            ]);
-        });
-
-        return response()->json([
-            'message' => 'Profile information updated successfully.',
-            'student' => $student->fresh(),
-        ]);
-    }
-
-    public function updateContactInformation(Request $request)
-    {
-        $user = $request->user();
-        $validated = $request->validate([
-            'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'phone' => ['required', 'string', 'max:20'],
-            'address' => ['required', 'string', 'max:1000'],
-        ]);
-
-        DB::transaction(function () use ($user, $validated) {
-            $user->update([
-                'email' => $validated['email'],
-                'phone' => $validated['phone'],
-                'address' => $validated['address'],
-            ]);
-
-            if ($user->student) {
-                $user->student->update([
-                    'phone' => $validated['phone'],
-                    'address' => $validated['address'],
-                ]);
-            }
-        });
-
-        return response()->json([
-            'message' => 'Contact information updated successfully.',
-            'email' => $user->fresh()->email,
-            'phone' => $user->student?->fresh()->phone ?? $user->fresh()->phone,
-            'address' => $user->student?->fresh()->address ?? $user->fresh()->address,
-        ]);
-    }
-
-    public function changePassword(Request $request)
-    {
-        $validated = $request->validate([
-            'current_password' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password'],
-        ]);
-        $user = $request->user();
-
-        if (! Hash::check($validated['current_password'], $user->password)) {
-            throw ValidationException::withMessages([
-                'current_password' => ['The current password is incorrect.'],
-            ]);
-        }
-
-        $user->update(['password' => Hash::make($validated['password'])]);
-
-        return response()->json([
-            'message' => 'Password changed successfully.',
-        ]);
-    }
-
-    public function uploadAvatar(Request $request)
-    {
-        $validated = $request->validate([
-            'avatar' => ['required', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
-        ]);
-
-        $user = $request->user();
-        $oldAvatar = $user->avatar;
-        $path = $validated['avatar']->store('avatars/'.$user->id, 'public');
-
-        $user->update(['avatar' => $path]);
-
-        if ($oldAvatar && $oldAvatar !== $path) {
-            Storage::disk('public')->delete($oldAvatar);
-        }
-
-        return response()->json([
-            'message' => 'Profile photo updated successfully.',
-            'avatar' => $path,
-            'avatar_url' => $user->fresh()->avatar_url,
-        ]);
-    }
-
-    public function removeAvatar(Request $request)
-    {
-        $user = $request->user();
-
-        if ($user->avatar) {
-            Storage::disk('public')->delete($user->avatar);
-            $user->update(['avatar' => null]);
-        }
-
-        return response()->json([
-            'message' => 'Profile photo removed.',
-            'avatar' => null,
-            'avatar_url' => null,
-        ]);
     }
 }

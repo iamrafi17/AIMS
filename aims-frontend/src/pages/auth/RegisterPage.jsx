@@ -19,7 +19,7 @@ import api from '../../services/api';
 import useAuth from '../../context/useAuth';
 import marsuLogo from '../../assets/marsu-logo.png';
 
-const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#800000]/45 focus:ring-4 focus:ring-[#800000]/8 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500';
+const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500';
 
 const steps = [
   { number: 1, title: 'Personal', description: 'Tell us about yourself', icon: FiUser },
@@ -46,7 +46,7 @@ function StepHeader({ eyebrow, title, description }) {
   return (
     <div className="mb-7 border-b border-slate-100 pb-6">
       <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#a8750b]">{eyebrow}</p>
-      <h2 className="mt-2 text-2xl font-black tracking-tight text-[#430909] sm:text-3xl">{title}</h2>
+      <h2 className="mt-2 text-2xl font-black tracking-tight text-[#690016] sm:text-3xl">{title}</h2>
       <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
     </div>
   );
@@ -250,7 +250,7 @@ function RegisterPage() {
               <Field label="School No.">
                 <div className="flex gap-2">
                   <input name="student_id" value={formData.student_id} onChange={handleChange} required className={inputClass} placeholder="e.g. 23S0160" autoComplete="username" />
-                  <button type="button" onClick={verifyEnrollment} disabled={enrollmentLoading} className="shrink-0 rounded-xl bg-[#800000] px-4 text-xs font-extrabold text-white disabled:opacity-55">
+                  <button type="button" onClick={verifyEnrollment} disabled={enrollmentLoading} className="shrink-0 rounded-xl bg-[#7D001D] px-4 text-xs font-extrabold text-white disabled:opacity-55">
                     {enrollmentLoading ? 'Checking...' : 'Verify'}
                   </button>
                 </div>
@@ -370,20 +370,20 @@ function RegisterPage() {
           <>
             <StepHeader eyebrow="Step 5 of 6" title="Consent and verification" description="Review the policies that protect you, the university, and your internship records." />
             <div className="space-y-5">
-              <div className="rounded-2xl border border-slate-100 bg-[#faf8f5] p-5">
-                <h3 className="flex items-center gap-2 font-black text-[#430909]"><FiCheckCircle className="text-[#a8750b]" /> Terms and Conditions</h3>
+              <div className="rounded-xl border border-slate-100 bg-[#faf8f5] p-5">
+                <h3 className="flex items-center gap-2 font-black text-[#690016]"><FiCheckCircle className="text-[#a8750b]" /> Terms and Conditions</h3>
                 <p className="mt-3 text-sm leading-6 text-slate-600">I understand that my AIMS account must be used responsibly and that all attendance, journal, document, and monitoring records I submit must be accurate. I agree to follow MarSU internship policies and the rules of my assigned host training establishment.</p>
               </div>
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 transition has-checked:border-[#800000]/35 has-checked:bg-[#800000]/[0.025]">
-                <input type="checkbox" name="agree_terms" checked={formData.agree_terms} onChange={handleChange} required className="mt-0.5 h-4 w-4 shrink-0 accent-[#800000]" />
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 transition has-checked:border-[#7D001D]/35 has-checked:bg-[#7D001D]/[0.025]">
+                <input type="checkbox" name="agree_terms" checked={formData.agree_terms} onChange={handleChange} required className="mt-0.5 h-4 w-4 shrink-0 accent-[#7D001D]" />
                 <span className="text-sm font-bold leading-6 text-slate-700">I have read and agree to the Terms and Conditions.</span>
               </label>
-              <div className="rounded-2xl border border-slate-100 bg-[#faf8f5] p-5">
-                <h3 className="flex items-center gap-2 font-black text-[#430909]"><FiShield className="text-[#a8750b]" /> Data Privacy Act of 2012</h3>
+              <div className="rounded-xl border border-slate-100 bg-[#faf8f5] p-5">
+                <h3 className="flex items-center gap-2 font-black text-[#690016]"><FiShield className="text-[#a8750b]" /> Data Privacy Act of 2012</h3>
                 <p className="mt-3 text-sm leading-6 text-slate-600">I consent to Marinduque State University collecting, using, and securely storing the information required to administer and monitor my internship, in accordance with Republic Act No. 10173 and applicable university policies.</p>
               </div>
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 transition has-checked:border-[#800000]/35 has-checked:bg-[#800000]/[0.025]">
-                <input type="checkbox" name="agree_privacy" checked={formData.agree_privacy} onChange={handleChange} required className="mt-0.5 h-4 w-4 shrink-0 accent-[#800000]" />
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 transition has-checked:border-[#7D001D]/35 has-checked:bg-[#7D001D]/[0.025]">
+                <input type="checkbox" name="agree_privacy" checked={formData.agree_privacy} onChange={handleChange} required className="mt-0.5 h-4 w-4 shrink-0 accent-[#7D001D]" />
                 <span className="text-sm font-bold leading-6 text-slate-700">I agree to the collection and processing of my data under the Data Privacy Act of 2012.</span>
               </label>
             </div>
@@ -407,11 +407,11 @@ function RegisterPage() {
                 <input type={showPassword ? 'text' : 'password'} name="password_confirmation" value={formData.password_confirmation} onChange={handleChange} required minLength={8} className={inputClass} autoComplete="new-password" />
               </Field>
             </div>
-            <div className="mt-7 rounded-2xl border border-[#800000]/15 bg-[#800000]/[0.025] p-5 sm:p-6">
+            <div className="mt-7 rounded-xl border border-[#7D001D]/15 bg-[#7D001D]/[0.025] p-5 sm:p-6">
               <div className="flex items-start gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#800000]/10 text-[#800000]"><FiShield /></div>
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#7D001D]/10 text-[#7D001D]"><FiShield /></div>
                 <div>
-                  <h3 className="font-black text-[#430909]">Security questions</h3>
+                  <h3 className="font-black text-[#690016]">Security questions</h3>
                   <p className="mt-1 text-sm leading-6 text-slate-500">Select three different questions. Your answers will be securely hashed and used only if you need to reset your password.</p>
                 </div>
               </div>
@@ -460,8 +460,8 @@ function RegisterPage() {
                 })}
               </div>
             </div>
-            <div className="mt-7 rounded-2xl border border-[#d4af37]/25 bg-[#fffaf0] p-5">
-              <h3 className="font-black text-[#430909]">Registration summary</h3>
+            <div className="mt-7 rounded-xl border border-[#d4af37]/25 bg-[#fffaf0] p-5">
+              <h3 className="font-black text-[#690016]">Registration summary</h3>
               <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
                 {[
                   ['Student', `${formData.first_name} ${formData.last_name}`.trim() || 'Not provided'],
@@ -490,12 +490,12 @@ function RegisterPage() {
             <img src={marsuLogo} alt="Marinduque State University seal" className="h-11 w-11 shrink-0 object-contain" />
             <div className="min-w-0"><p className="max-w-[185px] truncate text-sm font-black text-[#720b0b] sm:max-w-none">Marinduque State University</p><p className="truncate text-xs text-slate-500">AIMS Student Registration</p></div>
           </Link>
-          <Link to="/login" className="shrink-0 text-sm font-extrabold text-[#800000]"><span className="hidden sm:inline">Already registered? </span>Login</Link>
+          <Link to="/login" className="shrink-0 text-sm font-extrabold text-[#7D001D]"><span className="hidden sm:inline">Already registered? </span>Login</Link>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-7 px-5 py-8 lg:grid-cols-[300px_1fr] lg:items-start lg:px-8 lg:py-12">
-        <aside className="min-w-0 overflow-hidden rounded-3xl bg-[#650707] p-5 text-white shadow-xl shadow-[#650707]/10 lg:sticky lg:top-6 lg:p-6">
+      <div className="mx-auto grid max-w-7xl gap-5 px-3 py-5 sm:px-5 sm:py-8 lg:grid-cols-[300px_1fr] lg:items-start lg:gap-7 lg:px-8 lg:py-12">
+        <aside className="min-w-0 overflow-hidden rounded-xl bg-[#650707] p-5 text-white shadow-sm shadow-[#650707]/10 lg:sticky lg:top-6 lg:p-6">
           <Link to="/" className="mb-6 inline-flex items-center gap-2 text-xs font-bold text-white/55 hover:text-white"><FiArrowLeft /> Back to AIMS home</Link>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#e4c65e]">Student application</p>
           <h1 className="mt-2 text-2xl font-black tracking-tight">Join the AIMS community</h1>
@@ -508,7 +508,7 @@ function RegisterPage() {
               const complete = step > item.number;
               return (
                 <button key={item.number} type="button" onClick={() => complete && setStep(item.number)} disabled={!complete && !active} className={`flex min-w-[54px] items-center gap-3 rounded-xl p-2.5 text-left transition lg:w-full ${active ? 'bg-white text-[#5c0000]' : complete ? 'text-white hover:bg-white/10' : 'text-white/35'}`}>
-                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${active ? 'bg-[#800000] text-white' : complete ? 'bg-[#d4af37] text-[#430909]' : 'bg-white/8'}`}>
+                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${active ? 'bg-[#7D001D] text-white' : complete ? 'bg-[#d4af37] text-[#690016]' : 'bg-white/8'}`}>
                     {complete ? <FiCheck /> : <Icon />}
                   </span>
                   <span className="hidden lg:block"><strong className="block text-sm">{item.title}</strong><span className={`text-xs ${active ? 'text-slate-500' : 'text-white/40'}`}>{item.description}</span></span>
@@ -517,22 +517,22 @@ function RegisterPage() {
             })}
           </div>
 
-          <div className="mt-7 hidden rounded-2xl border border-white/10 bg-white/[0.055] p-4 text-xs leading-5 text-white/55 lg:block">
+          <div className="mt-7 hidden rounded-xl border border-white/10 bg-white/[0.055] p-4 text-xs leading-5 text-white/55 lg:block">
             <strong className="mb-1 block text-white">What happens next?</strong>
             Your coordinator reviews the application. You’ll be able to log in after approval.
           </div>
         </aside>
 
-        <section className="min-w-0 overflow-hidden rounded-3xl border border-black/[0.055] bg-white shadow-xl shadow-slate-900/5">
-          <div className="h-1.5 bg-slate-100"><div className="h-full bg-gradient-to-r from-[#800000] to-[#d4af37] transition-all duration-500" style={{ width: `${(step / steps.length) * 100}%` }} /></div>
-          <form onSubmit={step === steps.length ? handleSubmit : nextStep} className="p-6 sm:p-9 lg:p-10">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-black/[0.055] bg-white shadow-sm shadow-slate-900/5">
+          <div className="h-1.5 bg-slate-100"><div className="h-full bg-gradient-to-r from-[#7D001D] to-[#d4af37] transition-all duration-500" style={{ width: `${(step / steps.length) * 100}%` }} /></div>
+          <form onSubmit={step === steps.length ? handleSubmit : nextStep} className="p-4 sm:p-7 lg:p-10">
             {renderStep()}
-            <div className="mt-9 flex items-center justify-between gap-4 border-t border-slate-100 pt-6">
-              <button type="button" onClick={previousStep} disabled={step === 1} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-sm font-extrabold text-slate-600 transition hover:bg-slate-50 disabled:invisible"><FiArrowLeft /> Previous</button>
+            <div className="mt-9 flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
+              <button type="button" onClick={previousStep} disabled={step === 1} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-sm font-extrabold text-slate-600 transition hover:bg-slate-50 disabled:invisible min-[420px]:w-auto"><FiArrowLeft /> Previous</button>
               {step < steps.length ? (
-                <button type="submit" className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-6 py-3 text-sm font-extrabold text-white shadow-lg shadow-[#800000]/15 transition hover:bg-[#650000]">Next step <FiArrowRight /></button>
+                <button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-6 py-3 text-sm font-extrabold text-white shadow-lg shadow-[#7D001D]/15 transition hover:bg-[#650000] min-[420px]:w-auto">Next step <FiArrowRight /></button>
               ) : (
-                <button type="submit" disabled={loading || !formData.agree_terms || !formData.agree_privacy} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-6 py-3 text-sm font-extrabold text-white shadow-lg shadow-[#800000]/15 transition hover:bg-[#650000] disabled:cursor-not-allowed disabled:opacity-55">
+                <button type="submit" disabled={loading || !formData.agree_terms || !formData.agree_privacy} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-6 py-3 text-sm font-extrabold text-white shadow-lg shadow-[#7D001D]/15 transition hover:bg-[#650000] disabled:cursor-not-allowed disabled:opacity-55 min-[420px]:w-auto">
                   {loading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/35 border-t-white" /> Submitting...</> : <><FiCheckCircle /> Submit Registration</>}
                 </button>
               )}

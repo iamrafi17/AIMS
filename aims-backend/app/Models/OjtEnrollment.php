@@ -13,6 +13,7 @@ class OjtEnrollment extends Model
         'section',
         'college_id',
         'program_id',
+        'academic_section_id',
         'source',
         'added_by',
         'student_record_id',
@@ -44,5 +45,10 @@ class OjtEnrollment extends Model
     public function program(): BelongsTo
     {
         return $this->belongsTo(Program::class);
+    }
+
+    public function academicSection(): BelongsTo
+    {
+        return $this->belongsTo(AcademicSection::class);
     }
 }

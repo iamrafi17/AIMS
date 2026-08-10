@@ -91,7 +91,7 @@ function ProgressRing({ percent }) {
           cy="60"
           r="50"
           fill="none"
-          stroke="#800000"
+          stroke="#7D001D"
           strokeWidth="10"
           strokeLinecap="round"
           pathLength="100"
@@ -99,7 +99,7 @@ function ProgressRing({ percent }) {
         />
       </svg>
       <div className="absolute inset-0 grid place-items-center text-center">
-        <div><p className="text-3xl font-black text-[#800000]">{safePercent.toFixed(1)}%</p><p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-400">complete</p></div>
+        <div><p className="text-3xl font-black text-[#7D001D]">{safePercent.toFixed(1)}%</p><p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-400">complete</p></div>
       </div>
     </div>
   );
@@ -126,7 +126,7 @@ function ActivityModal({ period, activity, setActivity, submitting, onCancel, on
         <div className="flex items-start justify-between border-b border-slate-100 p-6">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Activity / Accomplishment Report</p>
-            <h2 id="activity-title" className="mt-2 text-2xl font-black text-[#430909]">{period} Activities</h2>
+            <h2 id="activity-title" className="mt-2 text-2xl font-black text-[#690016]">{period} Activities</h2>
           </div>
           <button type="button" onClick={onCancel} disabled={submitting} className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700" aria-label="Close activity modal"><FiX /></button>
         </div>
@@ -141,13 +141,13 @@ function ActivityModal({ period, activity, setActivity, submitting, onCancel, on
             maxLength={2000}
             rows={6}
             autoFocus
-            className="mt-4 w-full resize-none rounded-2xl border border-slate-200 p-4 text-sm leading-6 outline-none transition focus:border-[#800000]/40 focus:ring-4 focus:ring-[#800000]/5"
+            className="mt-4 w-full resize-none rounded-2xl border border-slate-200 p-4 text-sm leading-6 outline-none transition focus:border-[#7D001D]/40 focus:ring-4 focus:ring-[#7D001D]/5"
             placeholder={`Describe your ${period} activities...`}
           />
           <div className="mt-2 text-right text-xs font-medium text-slate-400">{activity.length} / 2000</div>
           <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <button type="button" onClick={onCancel} disabled={submitting} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-extrabold text-slate-600 hover:bg-slate-50">Cancel</button>
-            <button type="submit" disabled={submitting || !activity.trim()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#800000] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-[#800000]/15 disabled:cursor-not-allowed disabled:opacity-55">
+            <button type="submit" disabled={submitting || !activity.trim()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-[#7D001D]/15 disabled:cursor-not-allowed disabled:opacity-55">
               {submitting ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/35 border-t-white" /> Saving...</> : <><FiClock /> Submit & Time Out</>}
             </button>
           </div>
@@ -162,9 +162,9 @@ function CompletionModal({ onClose }) {
     <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="completion-title">
       <div className="w-full max-w-sm rounded-3xl bg-white p-8 text-center shadow-2xl dark:bg-gray-800">
         <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-100 text-4xl text-emerald-600"><FiCheck /></div>
-        <h2 id="completion-title" className="mt-6 text-2xl font-black text-[#430909]">Attendance complete!</h2>
+        <h2 id="completion-title" className="mt-6 text-2xl font-black text-[#690016]">Attendance complete!</h2>
         <p className="mt-3 text-sm leading-6 text-slate-500">All required time slots for today were saved successfully using server time.</p>
-        <button type="button" onClick={onClose} className="mt-7 w-full rounded-xl bg-[#800000] px-5 py-3 text-sm font-extrabold text-white">Done</button>
+        <button type="button" onClick={onClose} className="mt-7 w-full rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-extrabold text-white">Done</button>
       </div>
     </div>
   );
@@ -306,7 +306,7 @@ function StudentDashboard() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-[#800000]" />
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-[#7D001D]" />
       </div>
     );
   }
@@ -343,20 +343,18 @@ function StudentDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl bg-gradient-to-r from-[#800000] to-[#5c0000] p-6 text-white shadow-lg shadow-[#800000]/10">
-        <h1 className="text-2xl font-black">Welcome, {student?.first_name || user?.name}!</h1>
-        <p className="mt-1 text-white/75">
+      <div className="border-b border-slate-200 pb-5 dark:border-slate-700">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Welcome, {student?.first_name || user?.name}!</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {student?.college?.name || dashboardData?.student?.college} · {student?.program?.name || dashboardData?.student?.program}
         </p>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <div className="rounded-xl bg-white/12 px-4 py-2 backdrop-blur"><p className="text-xs text-white/60">Year & Section</p><p className="font-bold">{student?.year_level} - {student?.section}</p></div>
-          <div className="rounded-xl bg-white/12 px-4 py-2 backdrop-blur"><p className="text-xs text-white/60">Internship Status</p><p className="font-bold capitalize">{student?.internship_status}</p></div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="rounded-lg bg-slate-100 px-3 py-2 dark:bg-slate-800"><p className="text-xs text-slate-500 dark:text-slate-400">Year & Section</p><p className="text-sm font-bold">{student?.year_level} - {student?.section}</p></div>
+          <div className="rounded-lg bg-slate-100 px-3 py-2 dark:bg-slate-800"><p className="text-xs text-slate-500 dark:text-slate-400">Internship Status</p><p className="text-sm font-bold capitalize">{student?.internship_status}</p></div>
         </div>
       </div>
 
-      <section className="quick-smart-clock relative isolate mx-auto flex min-h-[25rem] w-full max-w-4xl flex-col overflow-hidden rounded-[1.5rem] bg-gradient-to-br from-[#720b0b] via-[#800000] to-[#520505] px-5 py-4 text-white shadow-xl shadow-[#430909]/20 sm:px-6 sm:py-5 lg:min-h-[420px]">
-        <div className="pointer-events-none absolute -right-28 -top-32 h-80 w-80 rounded-full bg-white/[0.055] blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-[#d4af37]/10 blur-3xl" />
+      <section className="quick-smart-clock relative isolate mx-auto flex min-h-[25rem] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-[#690016] px-5 py-4 text-white shadow-sm sm:px-6 sm:py-5 lg:min-h-[420px]">
 
         <header className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-3">
@@ -389,7 +387,7 @@ function StudentDashboard() {
         </header>
 
         <div className="relative mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center py-3 text-center">
-          <time className="font-mono text-[clamp(2.5rem,5vw,3.5rem)] font-black leading-none tracking-[-0.075em] tabular-nums">
+          <time className="font-mono text-4xl font-black leading-none tabular-nums sm:text-5xl">
             {clockLoading ? '--:--:--' : formattedTime}
           </time>
           <p className="mt-2 text-sm font-bold text-white/70 sm:text-base">{formattedDate}</p>
@@ -401,7 +399,7 @@ function StudentDashboard() {
                 const period = slot.period || (slot.key?.startsWith('am_') ? 'AM' : 'PM');
                 const action = slot.label?.includes('Out') ? 'Out' : 'In';
                 return <li key={slot.key} className="flex min-w-0 flex-col items-center">
-                  <span className={'grid h-10 w-10 place-items-center rounded-full border-2 text-sm font-black ' + (slot.completed ? 'border-[#f2cf70] bg-[#f2cf70] text-[#430909]' : isCurrent ? 'border-white bg-white/20 text-white' : 'border-white/20 bg-black/10 text-white/70')}>
+                  <span className={'grid h-10 w-10 place-items-center rounded-full border-2 text-sm font-black ' + (slot.completed ? 'border-[#f2cf70] bg-[#f2cf70] text-[#690016]' : isCurrent ? 'border-white bg-white/20 text-white' : 'border-white/20 bg-black/10 text-white/70')}>
                     {slot.completed ? <FiCheck aria-label="Completed" /> : slot.number || index + 1}
                   </span>
                   <span className="mt-1.5 text-[11px] font-black text-white/75 sm:text-xs">{period} {action}</span>
@@ -415,8 +413,8 @@ function StudentDashboard() {
           {complete ? (
             <div className="mt-8 rounded-full border border-white/20 bg-white/15 px-7 py-4 text-sm font-black shadow-lg"><FiCheckCircle className="mr-2 inline h-5 w-5" />Today’s attendance is complete</div>
           ) : (
-            <button type="button" onClick={handlePrimaryAction} disabled={submitting || clockLoading} className="mt-5 inline-flex w-full max-w-52 items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-black text-[#800000] shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:bg-[#fff9e8] disabled:cursor-not-allowed disabled:opacity-60">
-              {submitting ? <><span className="h-5 w-5 animate-spin rounded-full border-2 border-[#800000]/25 border-t-[#800000]" />Recording...</> : <><FiClock />{primaryLabel}</>}
+            <button type="button" onClick={handlePrimaryAction} disabled={submitting || clockLoading} className="mt-5 inline-flex w-full max-w-52 items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-black text-[#7D001D] shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:bg-[#fff9e8] disabled:cursor-not-allowed disabled:opacity-60">
+              {submitting ? <><span className="h-5 w-5 animate-spin rounded-full border-2 border-[#7D001D]/25 border-t-[#7D001D]" />Recording...</> : <><FiClock />{primaryLabel}</>}
             </button>
           )}
         </div>
@@ -432,7 +430,7 @@ function StudentDashboard() {
       </section>
       <section>
         <div className="mb-4 flex items-end justify-between gap-4">
-          <div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Internship requirements</p><h2 className="mt-1 text-xl font-black text-[#430909]">OJT Status</h2></div>
+          <div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Internship requirements</p><h2 className="mt-1 text-xl font-black text-[#690016]">OJT Status</h2></div>
           <p className="hidden text-xs font-semibold text-slate-400 sm:block">Synced with your AIMS records</p>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
@@ -454,7 +452,7 @@ function StudentDashboard() {
               <span className="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-blue-700">Recorded</span>
             </div>
             <p className="mt-5 text-sm font-black text-slate-800">Attendance</p>
-            <p className="mt-1 text-2xl font-black text-[#430909]">{dashboardStatus.attendance_days || 0} <span className="text-sm text-slate-400">days</span></p>
+            <p className="mt-1 text-2xl font-black text-[#690016]">{dashboardStatus.attendance_days || 0} <span className="text-sm text-slate-400">days</span></p>
           </div>
         </div>
       </section>
@@ -462,8 +460,8 @@ function StudentDashboard() {
       <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-lg shadow-slate-900/[0.04] dark:border-gray-700 dark:bg-gray-800">
         <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_right,rgba(212,175,55,0.13),transparent_38%),linear-gradient(135deg,#fff,#fffaf7)] p-6 dark:border-gray-700 dark:bg-none dark:bg-gray-800 lg:p-8">
           <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#800000] text-xl text-white"><FiTrendingUp /></div>
-            <div><h2 className="text-xl font-black text-[#430909]">OJT Progress</h2><p className="text-xs font-semibold text-slate-400">Calculated from completed attendance time slots</p></div>
+            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#7D001D] text-xl text-white"><FiTrendingUp /></div>
+            <div><h2 className="text-xl font-black text-[#690016]">OJT Progress</h2><p className="text-xs font-semibold text-slate-400">Calculated from completed attendance time slots</p></div>
           </div>
 
           <div className="mt-7 flex flex-col gap-7 xl:flex-row xl:items-center">
@@ -472,7 +470,7 @@ function StudentDashboard() {
               <div className="grid w-full grid-cols-2 gap-3 sm:w-[340px]">
                 {[
                   { value: formatMetric(progress.rendered_hours), label: 'hrs done', tone: 'text-emerald-600' },
-                  { value: formatMetric(progress.hours_left), label: 'hrs left', tone: 'text-[#800000]' },
+                  { value: formatMetric(progress.hours_left), label: 'hrs left', tone: 'text-[#7D001D]' },
                   { value: progress.entries || 0, label: 'entries', tone: 'text-blue-600' },
                   { value: progress.days_left ?? '—', label: 'days left', tone: 'text-[#a8750b]' },
                 ].map((metric) => (
@@ -486,11 +484,11 @@ function StudentDashboard() {
 
             <div className="flex-1 space-y-6 xl:border-l xl:border-slate-200 xl:pl-8">
               <div>
-                <div className="mb-2 flex items-center justify-between gap-4 text-sm"><span className="font-bold text-slate-600">Hours</span><span className="font-black text-[#430909]">{formatMetric(progress.rendered_hours)} <span className="font-semibold text-slate-400">/ {formatMetric(progress.required_hours)}</span></span></div>
-                <div className="h-3 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-gradient-to-r from-[#800000] to-[#b88918] transition-all duration-700" style={{ width: `${Math.min(Number(progress.percent_complete) || 0, 100)}%` }} /></div>
+                <div className="mb-2 flex items-center justify-between gap-4 text-sm"><span className="font-bold text-slate-600">Hours</span><span className="font-black text-[#690016]">{formatMetric(progress.rendered_hours)} <span className="font-semibold text-slate-400">/ {formatMetric(progress.required_hours)}</span></span></div>
+                <div className="h-3 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-gradient-to-r from-[#7D001D] to-[#b88918] transition-all duration-700" style={{ width: `${Math.min(Number(progress.percent_complete) || 0, 100)}%` }} /></div>
               </div>
               <div>
-                <div className="mb-2 flex items-center justify-between gap-4 text-sm"><span className="font-bold text-slate-600">Semester</span><span className="font-black text-[#430909]">{formatMetric(progress.semester_elapsed_percent)}% <span className="font-semibold text-slate-400">elapsed</span></span></div>
+                <div className="mb-2 flex items-center justify-between gap-4 text-sm"><span className="font-bold text-slate-600">Semester</span><span className="font-black text-[#690016]">{formatMetric(progress.semester_elapsed_percent)}% <span className="font-semibold text-slate-400">elapsed</span></span></div>
                 <div className="h-3 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-[#d4af37] transition-all duration-700" style={{ width: `${Math.min(Number(progress.semester_elapsed_percent) || 0, 100)}%` }} /></div>
                 <div className="mt-3 flex justify-between text-xs font-bold text-slate-400"><span>{formatOjtDate(progress.start_date)}</span><span>{formatOjtDate(progress.end_date)}</span></div>
               </div>
@@ -503,7 +501,7 @@ function StudentDashboard() {
 
         <div className="p-6 lg:p-8">
           <div className="flex items-end justify-between gap-4">
-            <div><p className="text-xs font-extrabold uppercase tracking-[0.15em] text-slate-400">This Week</p><p className="mt-1 text-2xl font-black text-[#430909]">{formatMetric(progress.this_week_hours)} <span className="text-sm font-bold text-slate-400">hrs</span></p></div>
+            <div><p className="text-xs font-extrabold uppercase tracking-[0.15em] text-slate-400">This Week</p><p className="mt-1 text-2xl font-black text-[#690016]">{formatMetric(progress.this_week_hours)} <span className="text-sm font-bold text-slate-400">hrs</span></p></div>
             <p className="text-xs font-semibold text-slate-400">Server-recorded hours</p>
           </div>
           <div className="mt-6 grid h-52 grid-cols-7 items-end gap-2 sm:gap-4">
@@ -513,7 +511,7 @@ function StudentDashboard() {
                 <div key={item.date} className="flex h-full min-w-0 flex-col items-center justify-end gap-2">
                   <span className="text-[10px] font-extrabold text-slate-400 sm:text-xs">{formatMetric(item.hours)}</span>
                   <div className="flex h-36 w-full max-w-12 items-end overflow-hidden rounded-t-xl bg-slate-100">
-                    <div className="w-full rounded-t-xl bg-gradient-to-t from-[#800000] to-[#d4af37] transition-all duration-700" style={{ height: `${barHeight}%` }} title={`${item.day}: ${formatMetric(item.hours)} hours`} />
+                    <div className="w-full rounded-t-xl bg-gradient-to-t from-[#7D001D] to-[#d4af37] transition-all duration-700" style={{ height: `${barHeight}%` }} title={`${item.day}: ${formatMetric(item.hours)} hours`} />
                   </div>
                   <span className="text-[10px] font-black uppercase text-slate-500 sm:text-xs">{item.day}</span>
                 </div>
@@ -526,15 +524,15 @@ function StudentDashboard() {
       {dashboardData?.tasks?.length > 0 && (
         <section className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="mb-4 flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#800000]/10 text-[#800000]"><FiClipboard /></div>
-            <div><h3 className="font-black text-[#430909] dark:text-white">Assigned HTE Tasks</h3><p className="text-xs text-slate-400">Current deliverables from your HTE supervisor</p></div>
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#7D001D]/10 text-[#7D001D]"><FiClipboard /></div>
+            <div><h3 className="font-black text-[#690016] dark:text-white">Assigned HTE Tasks</h3><p className="text-xs text-slate-400">Current deliverables from your HTE supervisor</p></div>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {dashboardData.tasks.map((task) => (
               <article key={task.id} className="rounded-2xl border border-slate-100 p-4 dark:border-gray-700">
                 <div className="flex items-start justify-between gap-3"><h4 className="font-black text-slate-800 dark:text-white">{task.title}</h4><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${task.priority === 'high' ? 'bg-rose-100 text-rose-700' : task.priority === 'low' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{task.priority}</span></div>
                 <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{task.description || 'No additional instructions.'}</p>
-                <p className="mt-3 text-xs font-bold text-[#800000] dark:text-rose-300">{task.due_date ? `Due ${new Date(task.due_date).toLocaleDateString()}` : 'No fixed deadline'} · {task.status.replace('_', ' ')}</p>
+                <p className="mt-3 text-xs font-bold text-[#7D001D] dark:text-rose-300">{task.due_date ? `Due ${new Date(task.due_date).toLocaleDateString()}` : 'No fixed deadline'} · {task.status.replace('_', ' ')}</p>
               </article>
             ))}
           </div>
@@ -544,7 +542,7 @@ function StudentDashboard() {
       <div className="rounded-xl bg-white p-6 shadow-sm dark:bg-gray-800">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-800">Recent Announcements</h3>
-          <Link to="/student/announcements" className="text-sm font-medium text-[#800000] hover:text-[#5c0000]">View All</Link>
+          <Link to="/student/announcements" className="text-sm font-medium text-[#7D001D] hover:text-[#5c0000]">View All</Link>
         </div>
         {dashboardData?.announcements?.length > 0 ? (
           <div className="grid gap-4 lg:grid-cols-2">

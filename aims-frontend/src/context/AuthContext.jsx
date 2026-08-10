@@ -29,10 +29,11 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (identifier, password) => {
+    const platform = navigator.userAgentData?.platform || navigator.platform || 'Browser';
     const response = await api.post('/login', {
       login: identifier,
       password,
-      device_name: navigator.userAgent,
+      device_name: `AIMS Web - ${platform}`.slice(0, 100),
     });
     localStorage.setItem('token', response.data.token);
     setUser(response.data.user);

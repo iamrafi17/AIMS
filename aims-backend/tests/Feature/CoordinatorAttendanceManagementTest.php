@@ -117,6 +117,24 @@ class CoordinatorAttendanceManagementTest extends TestCase
         ]);
     }
 
+    public function test_attendance_history_cannot_be_deleted(): void
+    {
+        [$coordinator, $student] = $this->context();
+        $attendance = Attendance::create([
+            'student_id' => $student->id,
+            'date' => '2026-07-20',
+            'status' => 'present',
+            'work_mode' => 'wfo',
+            'session_type' => 'full_day',
+        ]);
+        Sanctum::actingAs($coordinator);
+
+        $this->deleteJson("/api/coordinator/attendance/{$attendance->id}")
+            ->assertStatus(405);
+
+        $this->assertDatabaseHas('attendance', ['id' => $attendance->id]);
+    }
+
     private function context(): array
     {
         $coordinator = User::factory()->create(['role' => 'coordinator']);

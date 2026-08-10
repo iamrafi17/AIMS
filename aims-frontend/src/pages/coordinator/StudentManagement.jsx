@@ -48,18 +48,18 @@ function Modal({ title, subtitle, onClose, children, size = 'default' }) {
     return () => { document.body.style.overflow = previousOverflow; };
   }, []);
 
-  return <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-hidden bg-slate-950/60 p-3 backdrop-blur-sm sm:p-4"><div role="dialog" aria-modal="true" aria-label={title} style={{ maxWidth: maxWidths[size] || maxWidths.default, maxHeight: 'calc(100vh - 1.5rem)' }} className="flex w-full flex-col overflow-hidden rounded-2xl border border-white/20 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800"><div className="flex shrink-0 items-start justify-between border-b border-slate-100 bg-white px-5 py-4 dark:border-gray-700 dark:bg-gray-800"><div className="min-w-0 pr-4"><h2 className="truncate text-lg font-black text-[#430909] dark:text-white">{title}</h2>{subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}</div><button type="button" onClick={onClose} className="shrink-0 rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700" aria-label="Close dialog"><FiX /></button></div><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div></div></div>;
+  return <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-hidden bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4"><div role="dialog" aria-modal="true" aria-label={title} style={{ maxWidth: maxWidths[size] || maxWidths.default, maxHeight: 'calc(100dvh - 1rem)' }} className="flex w-full flex-col overflow-hidden rounded-2xl border border-white/20 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800"><div className="flex shrink-0 items-start justify-between border-b border-slate-100 bg-white px-4 py-4 dark:border-gray-700 dark:bg-gray-800 sm:px-5"><div className="min-w-0 pr-4"><h2 className="truncate text-lg font-black text-[#690016] dark:text-white">{title}</h2>{subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}</div><button type="button" onClick={onClose} className="shrink-0 rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700" aria-label="Close dialog"><FiX /></button></div><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div></div></div>;
 }
 
 function Input({ label, name, form, setForm, type = 'text', required = false, ...props }) {
-  return <label><span className="mb-1.5 block text-[11px] font-extrabold uppercase tracking-wide text-slate-400">{label}{required && ' *'}</span><input type={type} name={name} value={form[name] ?? ''} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} required={required} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#800000]/50 focus:ring-4 focus:ring-[#800000]/5 dark:border-gray-600 dark:bg-gray-900 dark:text-white" {...props} /></label>;
+  return <label><span className="mb-1.5 block text-[11px] font-extrabold uppercase tracking-wide text-slate-400">{label}{required && ' *'}</span><input type={type} name={name} value={form[name] ?? ''} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} required={required} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 focus:ring-4 focus:ring-[#7D001D]/5 dark:border-gray-600 dark:bg-gray-900 dark:text-white" {...props} /></label>;
 }
 
 function Select({ label, name, form, setForm, children, required = false, ...props }) {
-  return <label><span className="mb-1.5 block text-[11px] font-extrabold uppercase tracking-wide text-slate-400">{label}{required && ' *'}</span><select name={name} value={form[name] ?? ''} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} required={required} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#800000]/50 dark:border-gray-600 dark:bg-gray-900 dark:text-white" {...props}>{children}</select></label>;
+  return <label><span className="mb-1.5 block text-[11px] font-extrabold uppercase tracking-wide text-slate-400">{label}{required && ' *'}</span><select name={name} value={form[name] ?? ''} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} required={required} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 dark:border-gray-600 dark:bg-gray-900 dark:text-white" {...props}>{children}</select></label>;
 }
 
-function Progress({ value, color = 'bg-[#800000]' }) {
+function Progress({ value, color = 'bg-[#7D001D]' }) {
   return <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-gray-700"><div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(Math.max(Number(value) || 0, 0), 100)}%` }} /></div>;
 }
 
@@ -75,18 +75,18 @@ function RequirementChecklist({ requirements = [], busy, onDownload, onReview })
     <div>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <h3 className="font-black text-[#430909] dark:text-white">Official OJT Requirements</h3>
+          <h3 className="font-black text-[#690016] dark:text-white">Official OJT Requirements</h3>
           <p className="mt-1 text-xs text-slate-400">Review the student&apos;s ten required documents.</p>
         </div>
-        <span className="text-sm font-black text-[#800000] dark:text-rose-300">{counts.approved}/{requirements.length || 10} approved</span>
+        <span className="text-sm font-black text-[#7D001D] dark:text-rose-300">{counts.approved}/{requirements.length || 10} approved</span>
       </div>
 
       <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-gray-700 dark:bg-gray-900/60">
         <div className="mb-2 flex items-center justify-between text-xs">
           <span className="font-bold text-slate-500 dark:text-gray-300">Completion</span>
-          <span className="font-black text-[#800000] dark:text-rose-300">{completion}%</span>
+          <span className="font-black text-[#7D001D] dark:text-rose-300">{completion}%</span>
         </div>
-        <Progress value={completion} color="bg-gradient-to-r from-[#800000] to-[#d4af37]" />
+        <Progress value={completion} color="bg-gradient-to-r from-[#7D001D] to-[#d4af37]" />
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
             ['Missing', counts.missing, 'text-slate-500'],
@@ -103,7 +103,7 @@ function RequirementChecklist({ requirements = [], busy, onDownload, onReview })
           return (
             <article key={requirement.id} className="flex min-h-44 flex-col rounded-2xl border border-slate-200 p-4 dark:border-gray-700 dark:bg-gray-900/30">
               <div className="flex items-start gap-3">
-                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#800000]/8 text-sm font-black text-[#800000] dark:bg-rose-950 dark:text-rose-300">{index + 1}</div>
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#7D001D]/8 text-sm font-black text-[#7D001D] dark:bg-rose-950 dark:text-rose-300">{index + 1}</div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-black leading-5 text-slate-800 dark:text-white">{requirement.requirement_name}</p>
                   <div className="mt-2"><StatusBadge value={status} /></div>
@@ -295,16 +295,16 @@ function StudentManagement() {
   };
 
   return <div className="space-y-6">
-    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Coordinator Portal</p><h1 className="mt-1 text-2xl font-black text-[#430909] dark:text-white">Student Management</h1><p className="mt-1 text-sm text-slate-400">Records, approvals, requirements, and internship progress</p></div><div className="flex flex-wrap gap-2"><button onClick={() => setRequirementsOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-[#d4af37]/50 bg-[#d4af37]/10 px-4 py-2.5 text-xs font-black text-[#6b4f00] dark:text-amber-300"><FiSettings /> Customize Requirements</button><button onClick={() => { setImportOpen(true); setImportResult(null); setImportFile(null); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-[#800000] dark:border-gray-700 dark:bg-gray-800 dark:text-rose-300"><FiUpload /> Import CSV</button><button onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-4 py-2.5 text-xs font-black text-white"><FiPlus /> Add Manually</button></div></div>
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Coordinator Portal</p><h1 className="mt-1 text-2xl font-black text-[#690016] dark:text-white">Student Management</h1><p className="mt-1 text-sm text-slate-400">Records, approvals, requirements, and internship progress</p></div><div className="flex flex-wrap gap-2"><button onClick={() => setRequirementsOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-[#d4af37]/50 bg-[#d4af37]/10 px-4 py-2.5 text-xs font-black text-[#6b4f00] dark:text-amber-300"><FiSettings /> Customize Requirements</button><button onClick={() => { setImportOpen(true); setImportResult(null); setImportFile(null); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-[#7D001D] dark:border-gray-700 dark:bg-gray-800 dark:text-rose-300"><FiUpload /> Import CSV</button><button onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-4 py-2.5 text-xs font-black text-white"><FiPlus /> Add Manually</button></div></div>
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{[
-      ['Total Students', summary.total, FiUsers, 'text-[#800000]'], ['Pending Review', summary.pending, FiFileText, 'text-amber-600'], ['Approved', summary.approved, FiCheck, 'text-emerald-600'], ['Rejected', summary.rejected, FiX, 'text-rose-600'], ['Active Interns', summary.active, FiUserCheck, 'text-blue-600'],
-    ].map(([label, value, Icon, color]) => <div key={label} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 dark:bg-gray-700"><Icon className={color} /></div><div><p className="text-2xl font-black text-[#430909] dark:text-white">{value || 0}</p><p className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">{label}</p></div></div></div>)}</div>
+      ['Total Students', summary.total, FiUsers, 'text-[#7D001D]'], ['Pending Review', summary.pending, FiFileText, 'text-amber-600'], ['Approved', summary.approved, FiCheck, 'text-emerald-600'], ['Rejected', summary.rejected, FiX, 'text-rose-600'], ['Active Interns', summary.active, FiUserCheck, 'text-blue-600'],
+    ].map(([label, value, Icon, color]) => <div key={label} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 dark:bg-gray-700"><Icon className={color} /></div><div><p className="text-2xl font-black text-[#690016] dark:text-white">{value || 0}</p><p className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">{label}</p></div></div></div>)}</div>
 
     <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-gray-700">
         <div>
-          <h2 className="font-black text-[#430909] dark:text-white">OJT Enrollment List</h2>
+          <h2 className="font-black text-[#690016] dark:text-white">OJT Enrollment List</h2>
           <p className="mt-1 text-xs text-slate-400">Students uploaded through CSV or added manually. They create their own account during registration.</p>
         </div>
         <div className="flex gap-2 text-[10px] font-black uppercase">
@@ -333,7 +333,7 @@ function StudentManagement() {
     <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800"><div className="grid gap-3 lg:grid-cols-[1fr_180px_180px]"><label className="relative"><FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, student ID, or email..." className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none dark:border-gray-600 dark:bg-gray-900" /></label><select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-xl border border-slate-200 px-3 text-sm dark:border-gray-600 dark:bg-gray-900"><option value="">All registrations</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select><select value={internshipStatus} onChange={(event) => setInternshipStatus(event.target.value)} className="rounded-xl border border-slate-200 px-3 text-sm dark:border-gray-600 dark:bg-gray-900"><option value="">All internships</option><option value="pending">Pending</option><option value="active">Active</option><option value="completed">Completed</option><option value="dropped">Dropped</option></select></div></section>
 
     <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-left"><thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-gray-900"><tr><th className="px-5 py-4 font-extrabold">Student</th><th className="px-4 py-4 font-extrabold">Academic / HTE</th><th className="px-4 py-4 font-extrabold">Registration</th><th className="px-4 py-4 font-extrabold">OJT Progress</th><th className="px-4 py-4 font-extrabold">Requirements</th><th className="px-5 py-4 text-right font-extrabold">Actions</th></tr></thead><tbody>{loading ? <tr><td colSpan="6" className="py-16 text-center text-slate-400">Loading students...</td></tr> : students.length ? students.map((student) => <tr key={student.id} className="border-t border-slate-100 hover:bg-slate-50/60 dark:border-gray-700 dark:hover:bg-gray-900/50"><td className="px-5 py-4"><p className="text-sm font-black text-slate-800 dark:text-white">{student.last_name}, {student.first_name}</p><p className="mt-1 text-xs text-slate-400">{student.student_id} · {student.user?.email}</p></td><td className="px-4 py-4"><p className="text-xs font-bold text-slate-700 dark:text-gray-200">{student.program?.code} · Year {student.year_level}-{student.section}</p><p className="mt-1 max-w-48 truncate text-[11px] text-slate-400">{student.hte?.name || 'No HTE assigned'}</p></td><td className="px-4 py-4"><StatusBadge value={student.registration_status} /><div className="mt-1.5"><StatusBadge value={student.internship_status} /></div></td><td className="w-48 px-4 py-4"><div className="mb-1.5 flex justify-between text-[11px]"><span className="font-bold text-slate-500">{student.progress?.rendered_hours || 0}/{student.progress?.required_hours || 486}h</span><span className="font-black text-[#800000] dark:text-rose-300">{student.progress?.percent || 0}%</span></div><Progress value={student.progress?.percent} /><p className="mt-1.5 text-[10px] text-slate-400">{student.progress?.attendance_days || 0} days · {student.progress?.journal_entries || 0} journals</p></td><td className="w-40 px-4 py-4"><div className="mb-1.5 flex justify-between text-[11px]"><span className="text-slate-500">{student.progress?.requirements_approved || 0}/{student.progress?.requirements_total || 0}</span><span className="font-black text-blue-600">{student.progress?.requirements_percent || 0}%</span></div><Progress value={student.progress?.requirements_percent} color="bg-blue-500" /></td><td className="px-5 py-4"><div className="flex justify-end gap-1.5">{student.registration_status === 'pending' && <><button onClick={() => decideRegistration(student, 'approve')} className="rounded-lg bg-emerald-100 p-2 text-emerald-700" title="Approve"><FiCheck /></button><button onClick={() => decideRegistration(student, 'reject')} className="rounded-lg bg-rose-100 p-2 text-rose-700" title="Reject"><FiX /></button></>}<button onClick={() => viewStudent(student.id)} className="rounded-lg bg-blue-100 p-2 text-blue-700" title="Review"><FiEye /></button><button onClick={() => openEdit(student)} className="rounded-lg bg-amber-100 p-2 text-amber-700" title="Edit"><FiEdit2 /></button><button onClick={() => deactivateStudent(student)} className="rounded-lg bg-rose-100 p-2 text-rose-700" title="Deactivate and preserve records"><FiTrash2 /></button></div></td></tr>) : <tr><td colSpan="6" className="py-16 text-center text-slate-400">No student records match your filters.</td></tr>}</tbody></table></div>
+      <div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-left"><thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-gray-900"><tr><th className="px-5 py-4 font-extrabold">Student</th><th className="px-4 py-4 font-extrabold">Academic / HTE</th><th className="px-4 py-4 font-extrabold">Registration</th><th className="px-4 py-4 font-extrabold">OJT Progress</th><th className="px-4 py-4 font-extrabold">Requirements</th><th className="px-5 py-4 text-right font-extrabold">Actions</th></tr></thead><tbody>{loading ? <tr><td colSpan="6" className="py-16 text-center text-slate-400">Loading students...</td></tr> : students.length ? students.map((student) => <tr key={student.id} className="border-t border-slate-100 hover:bg-slate-50/60 dark:border-gray-700 dark:hover:bg-gray-900/50"><td className="px-5 py-4"><p className="text-sm font-black text-slate-800 dark:text-white">{student.last_name}, {student.first_name}</p><p className="mt-1 text-xs text-slate-400">{student.student_id} · {student.user?.email}</p></td><td className="px-4 py-4"><p className="text-xs font-bold text-slate-700 dark:text-gray-200">{student.program?.code} · Year {student.year_level}-{student.section}</p><p className="mt-1 max-w-48 truncate text-[11px] text-slate-400">{student.hte?.name || 'No HTE assigned'}</p></td><td className="px-4 py-4"><StatusBadge value={student.registration_status} /><div className="mt-1.5"><StatusBadge value={student.internship_status} /></div></td><td className="w-48 px-4 py-4"><div className="mb-1.5 flex justify-between text-[11px]"><span className="font-bold text-slate-500">{student.progress?.rendered_hours || 0}/{student.progress?.required_hours || 486}h</span><span className="font-black text-[#7D001D] dark:text-rose-300">{student.progress?.percent || 0}%</span></div><Progress value={student.progress?.percent} /><p className="mt-1.5 text-[10px] text-slate-400">{student.progress?.attendance_days || 0} days · {student.progress?.journal_entries || 0} journals</p></td><td className="w-40 px-4 py-4"><div className="mb-1.5 flex justify-between text-[11px]"><span className="text-slate-500">{student.progress?.requirements_approved || 0}/{student.progress?.requirements_total || 0}</span><span className="font-black text-blue-600">{student.progress?.requirements_percent || 0}%</span></div><Progress value={student.progress?.requirements_percent} color="bg-blue-500" /></td><td className="px-5 py-4"><div className="flex justify-end gap-1.5">{student.registration_status === 'pending' && <><button onClick={() => decideRegistration(student, 'approve')} className="rounded-lg bg-emerald-100 p-2 text-emerald-700" title="Approve"><FiCheck /></button><button onClick={() => decideRegistration(student, 'reject')} className="rounded-lg bg-rose-100 p-2 text-rose-700" title="Reject"><FiX /></button></>}<button onClick={() => viewStudent(student.id)} className="rounded-lg bg-blue-100 p-2 text-blue-700" title="Review"><FiEye /></button><button onClick={() => openEdit(student)} className="rounded-lg bg-amber-100 p-2 text-amber-700" title="Edit"><FiEdit2 /></button><button onClick={() => deactivateStudent(student)} className="rounded-lg bg-rose-100 p-2 text-rose-700" title="Deactivate and preserve records"><FiTrash2 /></button></div></td></tr>) : <tr><td colSpan="6" className="py-16 text-center text-slate-400">No student records match your filters.</td></tr>}</tbody></table></div>
       <div className="flex items-center justify-between border-t border-slate-100 px-5 py-4 text-xs dark:border-gray-700"><p className="text-slate-400">{total} record(s) · Page {page} of {lastPage}</p><div className="flex gap-2"><button onClick={() => setPage((current) => Math.max(current - 1, 1))} disabled={page === 1} className="rounded-lg border border-slate-200 p-2 disabled:opacity-30 dark:border-gray-600"><FiChevronLeft /></button><button onClick={() => setPage((current) => Math.min(current + 1, lastPage))} disabled={page === lastPage} className="rounded-lg border border-slate-200 p-2 disabled:opacity-30 dark:border-gray-600"><FiChevronRight /></button></div></div>
     </section>
 
@@ -349,7 +349,7 @@ function StudentManagement() {
         </div>
         <div className="flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4 dark:border-gray-700 dark:bg-gray-800">
           <button type="button" onClick={() => setEditor(null)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold dark:border-gray-600">Cancel</button>
-          <button type="submit" disabled={busy} className="rounded-xl bg-[#800000] px-6 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? 'Adding...' : 'Add Student'}</button>
+          <button type="submit" disabled={busy} className="rounded-xl bg-[#7D001D] px-6 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? 'Adding...' : 'Add Student'}</button>
         </div>
       </form>
     </Modal>}
@@ -360,17 +360,17 @@ function StudentManagement() {
           <div className="mx-auto flex max-w-2xl items-center">
             {['Personal & Account', 'Academic & OJT', 'Guardian & Status'].map((label, index) => <div key={label} className="flex min-w-0 flex-1 items-center last:flex-none">
               <div className="flex min-w-0 items-center gap-2">
-                <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${index <= editorStep ? 'bg-[#800000] text-white' : 'bg-slate-200 text-slate-500 dark:bg-gray-700'}`}>{index + 1}</span>
-                <span className={`hidden truncate text-[11px] font-black sm:block ${index === editorStep ? 'text-[#800000] dark:text-rose-300' : 'text-slate-400'}`}>{label}</span>
+                <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${index <= editorStep ? 'bg-[#7D001D] text-white' : 'bg-slate-200 text-slate-500 dark:bg-gray-700'}`}>{index + 1}</span>
+                <span className={`hidden truncate text-[11px] font-black sm:block ${index === editorStep ? 'text-[#7D001D] dark:text-rose-300' : 'text-slate-400'}`}>{label}</span>
               </div>
-              {index < 2 && <span className={`mx-3 h-0.5 min-w-4 flex-1 ${index < editorStep ? 'bg-[#800000]' : 'bg-slate-200 dark:bg-gray-700'}`} />}
+              {index < 2 && <span className={`mx-3 h-0.5 min-w-4 flex-1 ${index < editorStep ? 'bg-[#7D001D]' : 'bg-slate-200 dark:bg-gray-700'}`} />}
             </div>)}
           </div>
         </div>
 
         <div className="p-5 sm:p-6">
           {editorStep === 0 && <>
-            <h3 className="mb-4 text-sm font-black text-[#800000] dark:text-rose-300">Personal & Account Information</h3>
+            <h3 className="mb-4 text-sm font-black text-[#7D001D] dark:text-rose-300">Personal & Account Information</h3>
             <div className="grid gap-3 md:grid-cols-3">
               <Input label="Student ID" name="student_id" form={form} setForm={setForm} required />
               <Input label="First Name" name="first_name" form={form} setForm={setForm} required />
@@ -386,7 +386,7 @@ function StudentManagement() {
           </>}
 
           {editorStep === 1 && <>
-            <h3 className="mb-4 text-sm font-black text-[#800000] dark:text-rose-300">Academic & Internship Information</h3>
+            <h3 className="mb-4 text-sm font-black text-[#7D001D] dark:text-rose-300">Academic & Internship Information</h3>
             <div className="grid gap-3 md:grid-cols-3">
               <Select label="College" name="college_id" form={form} setForm={(updater) => setForm((current) => ({ ...updater(current), program_id: '' }))} required><option value="">Select college</option>{options.colleges?.map((college) => <option key={college.id} value={college.id}>{college.code} — {college.name}</option>)}</Select>
               <Select label="Program" name="program_id" form={form} setForm={setForm} required><option value="">Select program</option>{programs.map((program) => <option key={program.id} value={program.id}>{program.code} — {program.name}</option>)}</Select>
@@ -403,7 +403,7 @@ function StudentManagement() {
           </>}
 
           {editorStep === 2 && <>
-            <h3 className="mb-4 text-sm font-black text-[#800000] dark:text-rose-300">Guardian & Record Status</h3>
+            <h3 className="mb-4 text-sm font-black text-[#7D001D] dark:text-rose-300">Guardian & Record Status</h3>
             <p className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">Review the final information, then click <b>Save Changes</b>. This step will not save automatically.</p>
             <div className="grid gap-3 md:grid-cols-3">
               <Select label="Registration Status" name="registration_status" form={form} setForm={setForm}><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></Select>
@@ -424,8 +424,8 @@ function StudentManagement() {
           <button type="button" onClick={() => editorStep === 0 ? setEditor(null) : setEditorStep((current) => current - 1)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold dark:border-gray-600">{editorStep === 0 ? 'Cancel' : 'Previous'}</button>
           <span className="text-xs font-bold text-slate-400">Step {editorStep + 1} of 3</span>
           {editorStep < 2
-            ? <button type="button" onClick={nextEditorStep} className="rounded-xl bg-[#800000] px-6 py-2.5 text-sm font-black text-white">Next</button>
-            : <button type="button" onClick={() => saveStudent()} disabled={busy} className="rounded-xl bg-[#800000] px-6 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? 'Saving...' : 'Save Changes'}</button>}
+            ? <button type="button" onClick={nextEditorStep} className="rounded-xl bg-[#7D001D] px-6 py-2.5 text-sm font-black text-white">Next</button>
+            : <button type="button" onClick={() => saveStudent()} disabled={busy} className="rounded-xl bg-[#7D001D] px-6 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? 'Saving...' : 'Save Changes'}</button>}
         </div>
       </form>
     </Modal>}
@@ -444,7 +444,7 @@ function StudentManagement() {
               <Progress value={selected.progress?.percent} />
               <p className="mt-2 text-xs text-slate-400">{selected.progress?.rendered_hours || 0} / {selected.progress?.required_hours || 486} hours · {selected.progress?.attendance_days || 0} attendance days</p>
             </div>
-            <button onClick={() => openEdit(selected)} className="w-full rounded-xl border border-slate-200 py-3 text-sm font-black text-[#800000] dark:border-gray-600 dark:text-rose-300">Edit Student Record</button>
+            <button onClick={() => openEdit(selected)} className="w-full rounded-xl border border-slate-200 py-3 text-sm font-black text-[#7D001D] dark:border-gray-600 dark:text-rose-300">Edit Student Record</button>
           </aside>
           <RequirementChecklist requirements={selected.requirements} busy={busy} onDownload={downloadRequirement} onReview={reviewRequirement} />
         </div>
@@ -457,8 +457,8 @@ function StudentManagement() {
           Upload the existing predefined school CSV without changing its layout. AIMS reads only <b>Column E (School No.)</b> and <b>Column F (Full Name)</b> from numbered student rows.
         </div>
         {!importResult?.completed && <>
-          <button onClick={() => importInput.current?.click()} className="mt-5 flex w-full flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center hover:border-[#800000]/40 dark:border-gray-600">
-            <FiUpload className="text-3xl text-[#800000] dark:text-rose-300" />
+          <button onClick={() => importInput.current?.click()} className="mt-5 flex w-full flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center hover:border-[#7D001D]/40 dark:border-gray-600">
+            <FiUpload className="text-3xl text-[#7D001D] dark:text-rose-300" />
             <p className="mt-3 text-sm font-black">{importFile?.name || 'Choose the predefined school CSV file'}</p>
             <p className="mt-1 text-xs text-slate-400">CSV only, maximum 5 MB</p>
           </button>
@@ -502,8 +502,8 @@ function StudentManagement() {
 
         <div className="mt-6 flex justify-end gap-3">
           <button onClick={closeImport} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold dark:border-gray-600">{importResult?.completed ? 'Done' : 'Cancel'}</button>
-          {!importResult && <button onClick={previewCsvImport} disabled={busy || !importFile} className="rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? 'Reading CSV...' : 'Preview Import'}</button>}
-          {importResult && !importResult.completed && <button onClick={confirmCsvImport} disabled={busy || !importResult.summary?.ready} className="rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? 'Importing...' : `Confirm Import (${importResult.summary?.ready || 0})`}</button>}
+          {!importResult && <button onClick={previewCsvImport} disabled={busy || !importFile} className="rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? 'Reading CSV...' : 'Preview Import'}</button>}
+          {importResult && !importResult.completed && <button onClick={confirmCsvImport} disabled={busy || !importResult.summary?.ready} className="rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? 'Importing...' : `Confirm Import (${importResult.summary?.ready || 0})`}</button>}
         </div>
       </div>
     </Modal>}

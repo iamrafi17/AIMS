@@ -45,7 +45,7 @@ const statusStyles = {
   rejected: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300',
 };
 
-const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-[#800000] focus:ring-4 focus:ring-[#800000]/5 dark:border-gray-600 dark:bg-gray-900 dark:text-white';
+const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/5 dark:border-gray-600 dark:bg-gray-900 dark:text-white';
 
 function formatDate(value, includeTime = false) {
   if (!value) return '—';
@@ -76,7 +76,7 @@ function MetricCard({ label, value, note, icon: Icon, tone }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
-          <p className="mt-2 text-3xl font-black text-[#430909] dark:text-white">{value}</p>
+          <p className="mt-2 text-3xl font-black text-[#690016] dark:text-white">{value}</p>
           <p className="mt-1 text-xs text-slate-400">{note}</p>
         </div>
         <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-xl ${tones[tone]}`}><Icon /></div>
@@ -99,11 +99,11 @@ function EmptyState({ icon: Icon, title, description }) {
 
 function Modal({ title, subtitle, onClose, children }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl dark:bg-gray-800">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-label={title} className="max-h-[calc(100dvh-1rem)] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl dark:bg-gray-800 sm:max-h-[92dvh]">
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 bg-white px-5 py-5 sm:px-6 dark:border-gray-700 dark:bg-gray-800">
           <div>
-            <h2 className="text-lg font-black text-[#430909] dark:text-white">{title}</h2>
+            <h2 className="text-lg font-black text-[#690016] dark:text-white">{title}</h2>
             <p className="mt-1 text-xs text-slate-400">{subtitle}</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close review dialog" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-500 transition hover:bg-slate-200 dark:bg-gray-700 dark:text-gray-200"><FiX /></button>
@@ -226,7 +226,7 @@ function VPAAApprovals() {
     return (
       <div className="grid min-h-[420px] place-items-center">
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-[#800000]/15 border-b-[#800000]" />
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-[#7D001D]/15 border-b-[#7D001D]" />
           <p className="mt-4 text-xs font-black uppercase tracking-widest text-slate-400">Loading approval workspace</p>
         </div>
       </div>
@@ -235,7 +235,7 @@ function VPAAApprovals() {
 
   return (
     <div className="space-y-6">
-      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#430909] via-[#690d0d] to-[#8d1717] p-6 text-white shadow-lg sm:p-8">
+      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#690016] via-[#690d0d] to-[#8d1717] p-6 text-white shadow-lg sm:p-8">
         <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border-[44px] border-white/5" />
         <div className="absolute bottom-0 right-28 h-28 w-28 rounded-full bg-[#f1c54c]/10 blur-2xl" />
         <div className="relative flex flex-wrap items-end justify-between gap-5">
@@ -262,9 +262,9 @@ function VPAAApprovals() {
           {tabs.map((tab) => {
             const count = tab.id === 'documents' ? summary.pending_documents : tab.id === 'deployments' ? summary.pending_deployments : data.history.length;
             return (
-              <button key={tab.id} type="button" onClick={() => { setActiveTab(tab.id); setSearch(''); }} className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-xs font-black transition ${activeTab === tab.id ? 'bg-[#800000] text-white shadow-md shadow-[#800000]/15' : 'text-slate-500 hover:bg-slate-50 hover:text-[#800000] dark:text-gray-300 dark:hover:bg-gray-700'}`}>
+              <button key={tab.id} type="button" onClick={() => { setActiveTab(tab.id); setSearch(''); }} className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-xs font-black transition ${activeTab === tab.id ? 'bg-[#7D001D] text-white shadow-md shadow-[#7D001D]/15' : 'text-slate-500 hover:bg-slate-50 hover:text-[#7D001D] dark:text-gray-300 dark:hover:bg-gray-700'}`}>
                 <tab.icon className="text-base" /> {tab.label}
-                <span className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[9px] ${activeTab === tab.id ? 'bg-white text-[#800000]' : 'bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-gray-300'}`}>{count}</span>
+                <span className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[9px] ${activeTab === tab.id ? 'bg-white text-[#7D001D]' : 'bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-gray-300'}`}>{count}</span>
               </button>
             );
           })}
@@ -292,7 +292,7 @@ function VPAAApprovals() {
         <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6 dark:border-gray-700 dark:bg-gray-800">
           <div className="mb-5 flex items-start gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"><FiFileText /></div>
-            <div><h2 className="font-black text-[#430909] dark:text-white">Review Endorsed Documents</h2><p className="mt-1 text-xs text-slate-400">Documents cleared and endorsed by the Program Head for VPAA decision.</p></div>
+            <div><h2 className="font-black text-[#690016] dark:text-white">Review Endorsed Documents</h2><p className="mt-1 text-xs text-slate-400">Documents cleared and endorsed by the Program Head for VPAA decision.</p></div>
           </div>
           {documents.length === 0 ? (
             <EmptyState icon={FiFileText} title="No endorsed documents waiting" description="New Program Head endorsements will appear here automatically." />
@@ -307,7 +307,7 @@ function VPAAApprovals() {
                     <td className="py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{item.endorsed_by || 'Program Head'}</td>
                     <td className="py-4 text-xs text-slate-500 dark:text-gray-400">{formatDate(item.endorsed_at, true)}</td>
                     <td className="py-4"><StatusBadge status="pending" /></td>
-                    <td className="py-4"><div className="flex justify-end gap-2"><button type="button" onClick={() => downloadDocument(item)} title="Download endorsed document" className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-gray-700 dark:text-gray-200"><FiDownload /></button><button type="button" onClick={() => openReview('document', item)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#800000] px-3 py-2 text-xs font-black text-white"><FiEye /> Review</button></div></td>
+                    <td className="py-4"><div className="flex justify-end gap-2"><button type="button" onClick={() => downloadDocument(item)} title="Download endorsed document" className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-gray-700 dark:text-gray-200"><FiDownload /></button><button type="button" onClick={() => openReview('document', item)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#7D001D] px-3 py-2 text-xs font-black text-white"><FiEye /> Review</button></div></td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -320,26 +320,26 @@ function VPAAApprovals() {
         <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6 dark:border-gray-700 dark:bg-gray-800">
           <div className="mb-5 flex items-start gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"><FiUsers /></div>
-            <div><h2 className="font-black text-[#430909] dark:text-white">Student Deployment Requests</h2><p className="mt-1 text-xs text-slate-400">Verify the student, receiving HTE, official schedule, and required internship hours.</p></div>
+            <div><h2 className="font-black text-[#690016] dark:text-white">Student Deployment Requests</h2><p className="mt-1 text-xs text-slate-400">Verify the student, receiving HTE, official schedule, and required internship hours.</p></div>
           </div>
           {deployments.length === 0 ? (
             <EmptyState icon={FiUsers} title="No deployment requests waiting" description="Coordinator deployment submissions will appear here for clearance." />
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               {deployments.map((item) => (
-                <article key={item.approval_id} className="rounded-2xl border border-slate-100 p-5 transition hover:border-[#800000]/20 hover:shadow-md dark:border-gray-700">
+                <article key={item.approval_id} className="rounded-2xl border border-slate-100 p-5 transition hover:border-[#7D001D]/20 hover:shadow-md dark:border-gray-700">
                   <div className="flex items-start justify-between gap-3">
                     <StudentIdentity student={item.student} />
                     <StatusBadge status="pending" />
                   </div>
                   <div className="mt-4 rounded-xl bg-slate-50 p-4 dark:bg-gray-900/50">
-                    <div className="flex items-start gap-3"><FiBriefcase className="mt-0.5 shrink-0 text-[#800000] dark:text-rose-300" /><div><p className="text-xs font-black text-slate-700 dark:text-gray-200">{item.hte?.name}</p><p className="mt-1 text-[10px] leading-4 text-slate-400">{item.hte?.address}</p></div></div>
+                    <div className="flex items-start gap-3"><FiBriefcase className="mt-0.5 shrink-0 text-[#7D001D] dark:text-rose-300" /><div><p className="text-xs font-black text-slate-700 dark:text-gray-200">{item.hte?.name}</p><p className="mt-1 text-[10px] leading-4 text-slate-400">{item.hte?.address}</p></div></div>
                     <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-200 pt-3 text-[10px] dark:border-gray-700">
                       <div><p className="font-black uppercase text-slate-400">OJT Period</p><p className="mt-1 font-bold text-slate-600 dark:text-gray-300">{formatDate(item.schedule?.start_date)} – {formatDate(item.schedule?.end_date)}</p></div>
                       <div><p className="font-black uppercase text-slate-400">Required Hours</p><p className="mt-1 font-bold text-slate-600 dark:text-gray-300">{item.schedule?.required_hours || 0} hours</p></div>
                     </div>
                   </div>
-                  <div className="mt-4 flex items-center justify-between gap-3"><p className="text-[10px] text-slate-400">Requested {formatDate(item.requested_at, true)} by {item.requested_by || 'Coordinator'}</p><button type="button" onClick={() => openReview('deployment', item)} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#800000] px-3 py-2 text-xs font-black text-white"><FiEye /> Review</button></div>
+                  <div className="mt-4 flex items-center justify-between gap-3"><p className="text-[10px] text-slate-400">Requested {formatDate(item.requested_at, true)} by {item.requested_by || 'Coordinator'}</p><button type="button" onClick={() => openReview('deployment', item)} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#7D001D] px-3 py-2 text-xs font-black text-white"><FiEye /> Review</button></div>
                 </article>
               ))}
             </div>
@@ -350,8 +350,8 @@ function VPAAApprovals() {
       {activeTab === 'history' && (
         <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6 dark:border-gray-700 dark:bg-gray-800">
           <div className="mb-5 flex items-start gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#800000]/10 text-[#800000] dark:bg-rose-950/50 dark:text-rose-300"><FiArchive /></div>
-            <div><h2 className="font-black text-[#430909] dark:text-white">Approval History Tracking</h2><p className="mt-1 text-xs text-slate-400">A chronological ledger of final VPAA decisions and recorded remarks.</p></div>
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#7D001D]/10 text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300"><FiArchive /></div>
+            <div><h2 className="font-black text-[#690016] dark:text-white">Approval History Tracking</h2><p className="mt-1 text-xs text-slate-400">A chronological ledger of final VPAA decisions and recorded remarks.</p></div>
           </div>
           {history.length === 0 ? (
             <EmptyState icon={FiArchive} title="No matching approval history" description="Completed document and deployment decisions will be retained here." />
@@ -389,11 +389,11 @@ function VPAAApprovals() {
                 <div className="mt-5 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2 dark:border-gray-700">
                   <div><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Document</p><p className="mt-1 text-sm font-black text-slate-700 dark:text-gray-200">{review.item.document_name}</p></div>
                   <div><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Endorsement</p><p className="mt-1 text-sm font-bold text-slate-600 dark:text-gray-300">{review.item.endorsed_by || 'Program Head'} · {formatDate(review.item.endorsed_at)}</p></div>
-                  <button type="button" onClick={() => downloadDocument(review.item)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-[#800000] sm:col-span-2 dark:border-gray-600 dark:text-rose-300"><FiDownload /> Download and Inspect Document</button>
+                  <button type="button" onClick={() => downloadDocument(review.item)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-[#7D001D] sm:col-span-2 dark:border-gray-600 dark:text-rose-300"><FiDownload /> Download and Inspect Document</button>
                 </div>
               ) : (
                 <div className="mt-5 space-y-4 border-t border-slate-100 pt-5 dark:border-gray-700">
-                  <div className="rounded-xl bg-slate-50 p-4 dark:bg-gray-900/50"><div className="flex items-start gap-3"><FiMapPin className="mt-0.5 shrink-0 text-[#800000] dark:text-rose-300" /><div><p className="text-sm font-black text-slate-700 dark:text-gray-200">{review.item.hte?.name}</p><p className="mt-1 text-xs text-slate-400">{review.item.hte?.address}</p><p className="mt-2 text-[10px] font-bold text-slate-500">Contact: {review.item.hte?.contact_person || 'Not provided'}</p></div></div></div>
+                  <div className="rounded-xl bg-slate-50 p-4 dark:bg-gray-900/50"><div className="flex items-start gap-3"><FiMapPin className="mt-0.5 shrink-0 text-[#7D001D] dark:text-rose-300" /><div><p className="text-sm font-black text-slate-700 dark:text-gray-200">{review.item.hte?.name}</p><p className="mt-1 text-xs text-slate-400">{review.item.hte?.address}</p><p className="mt-2 text-[10px] font-bold text-slate-500">Contact: {review.item.hte?.contact_person || 'Not provided'}</p></div></div></div>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {[
                       ['Start Date', formatDate(review.item.schedule?.start_date)],

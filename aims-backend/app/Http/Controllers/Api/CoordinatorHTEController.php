@@ -15,7 +15,6 @@ use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 
 class CoordinatorHTEController extends Controller
 {
@@ -105,17 +104,9 @@ class CoordinatorHTEController extends Controller
     public function destroy(Request $request, HTE $hte)
     {
         ProgramAccess::authorizeHte($request->user(), $hte);
-        if ($hte->students()->exists()) {
-            throw ValidationException::withMessages(['hte' => 'Reassign or undeploy all students before deleting this HTE.']);
-        }
+        $hte->update(['is_active' => false]);
 
-        $paths = $hte->moas()->pluck('file_path')
-            ->map(fn ($path) => $this->publicStoragePath($path))
-            ->filter();
-        $hte->delete();
-        $paths->each(fn (string $path) => $this->publicDisk()->delete($path));
-
-        return response()->json(['message' => 'HTE record deleted successfully.']);
+        return response()->json(['message' => 'HTE deactivated. Deployments and MOA history were preserved.']);
     }
 
     public function deploy(Request $request, Student $student)
@@ -210,7 +201,7 @@ class CoordinatorHTEController extends Controller
             'expiration_date' => ['required', 'date', 'after:effective_date'],
             'file' => ['required', 'file', 'mimes:pdf', 'max:10240'],
         ]);
-        $path = $request->file('file')->store('moas', 'public');
+        $path = $request->file('file')->store('moas', 'local');
 
         $moa = MOA::create([
             ...collect($validated)->except(['file', 'college_id'])->all(),
@@ -250,28 +241,16 @@ class CoordinatorHTEController extends Controller
     {
         ProgramAccess::authorizeMoa($request->user(), $moa);
 
-        $path = $this->publicStoragePath($moa->file_path);
+        $path = $this->privateStoragePath($moa->file_path);
 
-        if (! $path || ! $this->publicDisk()->exists($path)) {
+        if (! $path || ! $this->privateDisk()->exists($path)) {
             return response()->json(['message' => 'MOA file not found.'], 404);
         }
 
         $moa->loadMissing('hte:id,name');
         $hteName = Str::slug($moa->hte?->name ?? 'agreement') ?: 'agreement';
 
-        return $this->publicDisk()->download($path, "MOA-{$hteName}-{$moa->id}.pdf");
-    }
-
-    public function destroyMoa(Request $request, MOA $moa)
-    {
-        ProgramAccess::authorizeMoa($request->user(), $moa);
-        $path = $this->publicStoragePath($moa->file_path);
-        if ($path) {
-            $this->publicDisk()->delete($path);
-        }
-        $moa->delete();
-
-        return response()->json(['message' => 'MOA record deleted successfully.']);
+        return $this->privateDisk()->download($path, "MOA-{$hteName}-{$moa->id}.pdf");
     }
 
     private function hteRules(Request $request, ?HTE $hte = null): array

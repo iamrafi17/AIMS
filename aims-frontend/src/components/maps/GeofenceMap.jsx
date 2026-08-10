@@ -83,7 +83,7 @@ function CurrentLocationButton({ onPositionChange }) {
         type="button"
         onClick={locate}
         disabled={locating}
-        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-[#800000] shadow-sm disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-rose-300"
+        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-[#7D001D] shadow-sm disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-rose-300"
       >
         <FiCrosshair />
         {locating ? 'Finding location...' : 'Use current location'}
@@ -133,7 +133,7 @@ function LocationSearch({ onPositionChange }) {
       <div role="search" className="flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-gray-600 dark:bg-gray-900">
         <FiSearch className="ml-3 shrink-0 self-center text-slate-400" />
         <input value={query} onChange={(event) => { setQuery(event.target.value); setError(''); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); search(); } }} className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm outline-none dark:text-white" placeholder="Search an HTE address or landmark" aria-label="Search HTE location" />
-        <button type="button" onClick={search} disabled={searching} className="bg-[#800000] px-4 text-xs font-black text-white disabled:opacity-60">{searching ? 'Searching...' : 'Search'}</button>
+        <button type="button" onClick={search} disabled={searching} className="bg-[#7D001D] px-4 text-xs font-black text-white disabled:opacity-60">{searching ? 'Searching...' : 'Search'}</button>
       </div>
       {(results.length > 0 || error) && <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-gray-600 dark:bg-gray-900">
         {results.map((result) => <button key={result.place_id} type="button" onClick={() => chooseResult(result)} className="block w-full border-b border-slate-100 px-4 py-3 text-left text-xs font-semibold text-slate-700 hover:bg-rose-50 last:border-0 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">{result.display_name}</button>)}
@@ -171,7 +171,7 @@ function GeofenceMap({
 
   return (
     <section className={`overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 dark:border-gray-600 dark:bg-gray-900 ${className}`}>
-      <div className="relative h-[360px] min-h-[300px]">
+      <div className="relative h-[280px] min-h-[260px] sm:h-[360px] sm:min-h-[300px]">
         <MapContainer
           center={position}
           zoom={hasSelectedLocation ? 17 : 13}
@@ -191,7 +191,7 @@ function GeofenceMap({
                 center={position}
                 radius={safeRadius}
                 pathOptions={{
-                  color: '#800000',
+                  color: '#7D001D',
                   fillColor: '#d4af37',
                   fillOpacity: 0.2,
                   weight: 3,
@@ -225,7 +225,7 @@ function GeofenceMap({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="flex items-center gap-2 text-sm font-black text-slate-800 dark:text-white">
-              <FiMapPin className="text-[#800000] dark:text-rose-300" />
+              <FiMapPin className="text-[#7D001D] dark:text-rose-300" />
               {hasSelectedLocation ? 'Exact location selected' : 'No location pinned yet'}
             </p>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -243,7 +243,7 @@ function GeofenceMap({
               <label htmlFor="geofence-radius-slider" className="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-300">
                 Geofence radius
               </label>
-              <span className="rounded-lg bg-[#800000] px-3 py-1 text-xs font-black text-white">
+              <span className="rounded-lg bg-[#7D001D] px-3 py-1 text-xs font-black text-white">
                 {safeRadius.toLocaleString()} meters
               </span>
             </div>
@@ -270,7 +270,7 @@ function GeofenceMap({
                   onClick={() => onRadiusChange(preset)}
                   className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${
                     safeRadius === preset
-                      ? 'bg-[#800000] text-white'
+                      ? 'bg-[#7D001D] text-white'
                       : 'bg-white text-slate-500 ring-1 ring-slate-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-600'
                   }`}
                 >

@@ -20,6 +20,7 @@ class ApprovalRecord extends Model
         'subject_id',
         'status',
         'submitted_by',
+        'submitted_at',
         'decided_by',
         'remarks',
         'decided_at',
@@ -28,6 +29,7 @@ class ApprovalRecord extends Model
     protected function casts(): array
     {
         return [
+            'submitted_at' => 'datetime',
             'decided_at' => 'datetime',
         ];
     }
@@ -52,6 +54,7 @@ class ApprovalRecord extends Model
             ],
             [
                 'submitted_by' => $submittedBy,
+                'submitted_at' => now(),
                 'decided_by' => null,
                 'remarks' => null,
                 'decided_at' => null,

@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\CoordinatorRequirementController;
 use App\Http\Controllers\Api\CoordinatorStudentController;
 use App\Http\Controllers\Api\CoordinatorTravelController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramHeadDashboardController;
 use App\Http\Controllers\Api\ProgramHeadDocumentController;
 use App\Http\Controllers\Api\ProgramHeadStudentController;
@@ -31,13 +32,13 @@ use App\Http\Controllers\Api\VPAAMOAController;
 use Illuminate\Support\Facades\Route;
 
 // Public Routes
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/register', [AuthController::class, 'register']);
-Route::get('/registration/enrollment/{schoolId}', [AuthController::class, 'enrollment']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
+Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:registration');
+Route::get('/registration/enrollment/{schoolId}', [AuthController::class, 'enrollment'])->middleware('throttle:enrollment');
 Route::get('/security-questions', [AuthController::class, 'securityQuestions']);
-Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:10,1');
-Route::post('/forgot-password/verify', [AuthController::class, 'verifySecurityAnswers'])->middleware('throttle:10,1');
-Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:recovery');
+Route::post('/forgot-password/verify', [AuthController::class, 'verifySecurityAnswers'])->middleware('throttle:recovery');
+Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:recovery');
 Route::get('/portal', [PublicPortalController::class, 'index']);
 
 // Public data routes
@@ -46,18 +47,18 @@ Route::get('/colleges/{college}/programs', [CollegeController::class, 'programs'
 Route::get('/colleges/{college}/htes', [CollegeController::class, 'htes']);
 
 // Protected Routes
-Route::middleware(['auth:sanctum', 'activity'])->group(function () {
+Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
     // User routes
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
     Route::get('/activity-logs', [ActivityLogController::class, 'index']);
-    Route::put('/profile', [AuthController::class, 'updateProfile']);
-    Route::put('/profile/account', [AuthController::class, 'updateAccountInformation']);
-    Route::put('/profile/information', [AuthController::class, 'updateProfileInformation']);
-    Route::put('/profile/contact', [AuthController::class, 'updateContactInformation']);
-    Route::put('/profile/password', [AuthController::class, 'changePassword']);
-    Route::post('/profile/avatar', [AuthController::class, 'uploadAvatar']);
-    Route::delete('/profile/avatar', [AuthController::class, 'removeAvatar']);
+    Route::put('/profile', [ProfileController::class, 'update']);
+    Route::put('/profile/account', [ProfileController::class, 'updateAccount']);
+    Route::put('/profile/information', [ProfileController::class, 'updateStudentInformation']);
+    Route::put('/profile/contact', [ProfileController::class, 'updateContact']);
+    Route::put('/profile/password', [ProfileController::class, 'changePassword']);
+    Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar']);
+    Route::delete('/profile/avatar', [ProfileController::class, 'removeAvatar']);
 
     // Announcements (all authenticated users)
     Route::get('/announcements', [AnnouncementController::class, 'index']);
@@ -82,9 +83,6 @@ Route::middleware(['auth:sanctum', 'activity'])->group(function () {
         Route::post('/requirements/{id}/upload', [StudentRequirementController::class, 'upload']);
         Route::get('/requirements/{id}/download', [StudentRequirementController::class, 'download']);
         Route::get('/travel', [StudentTravelController::class, 'index']);
-        Route::post('/travel/{travel}/start', [StudentTravelController::class, 'start']);
-        Route::post('/travel/checkpoints/{checkpoint}', [StudentTravelController::class, 'checkpoint']);
-        Route::post('/travel/{travel}/end', [StudentTravelController::class, 'end']);
     });
 
     // Coordinator Routes
@@ -93,7 +91,6 @@ Route::middleware(['auth:sanctum', 'activity'])->group(function () {
         Route::get('/attendance', [CoordinatorAttendanceController::class, 'index']);
         Route::get('/attendance/{attendance}', [CoordinatorAttendanceController::class, 'show']);
         Route::put('/attendance/{attendance}', [CoordinatorAttendanceController::class, 'update']);
-        Route::delete('/attendance/{attendance}', [CoordinatorAttendanceController::class, 'destroy']);
         Route::put('/attendance/{attendance}/verify', [CoordinatorAttendanceController::class, 'verify']);
         Route::post('/attendance/{attendance}/journal-review', [CoordinatorAttendanceController::class, 'reviewJournal']);
         Route::get('/htes', [CoordinatorHTEController::class, 'index']);
@@ -105,7 +102,6 @@ Route::middleware(['auth:sanctum', 'activity'])->group(function () {
         Route::post('/htes/moas', [CoordinatorHTEController::class, 'storeMoa']);
         Route::put('/htes/moas/{moa}', [CoordinatorHTEController::class, 'updateMoa']);
         Route::get('/htes/moas/{moa}/download', [CoordinatorHTEController::class, 'downloadMoa']);
-        Route::delete('/htes/moas/{moa}', [CoordinatorHTEController::class, 'destroyMoa']);
         Route::get('/htes/{hte}', [CoordinatorHTEController::class, 'show']);
         Route::put('/htes/{hte}', [CoordinatorHTEController::class, 'update']);
         Route::delete('/htes/{hte}', [CoordinatorHTEController::class, 'destroy']);
@@ -124,11 +120,18 @@ Route::middleware(['auth:sanctum', 'activity'])->group(function () {
         Route::put('/students/{student}/deactivate', [CoordinatorStudentController::class, 'deactivate']);
         Route::post('/students/{student}/requirements/{requirement}/review', [CoordinatorStudentController::class, 'reviewRequirement']);
         Route::get('/students/{student}/requirements/{requirement}/download', [CoordinatorStudentController::class, 'downloadRequirement']);
+        Route::get('/travel/setup', [CoordinatorTravelController::class, 'setup']);
+        Route::get('/travel/active', [CoordinatorTravelController::class, 'active']);
+        Route::get('/travel/htes/{hte}/students', [CoordinatorTravelController::class, 'studentsForHte']);
+        Route::post('/travel/start', [CoordinatorTravelController::class, 'startTravel']);
+        Route::post('/travel/{travel}/departure', [CoordinatorTravelController::class, 'departure']);
+        Route::post('/travel/{travel}/arrival', [CoordinatorTravelController::class, 'arrival']);
+        Route::post('/travel/{travel}/arrival-photo', [CoordinatorTravelController::class, 'uploadArrivalPhoto']);
+        Route::get('/travel/{travel}/arrival-photo', [CoordinatorTravelController::class, 'arrivalPhoto']);
+        Route::post('/travel/{travel}/end', [CoordinatorTravelController::class, 'endTravel']);
+        Route::get('/travel/{travel}', [CoordinatorTravelController::class, 'show']);
         Route::get('/travel', [CoordinatorTravelController::class, 'index']);
-        Route::post('/travel', [CoordinatorTravelController::class, 'store']);
-        Route::put('/travel/{travel}', [CoordinatorTravelController::class, 'update']);
         Route::put('/travel/{travel}/cancel', [CoordinatorTravelController::class, 'cancel']);
-        Route::delete('/travel/{travel}', [CoordinatorTravelController::class, 'destroy']);
     });
 
     // Program Head Routes
@@ -142,6 +145,7 @@ Route::middleware(['auth:sanctum', 'activity'])->group(function () {
         Route::get('/travel', [ProgramHeadTravelController::class, 'index']);
         Route::put('/travel/checkpoints/{checkpoint}/verify', [ProgramHeadTravelController::class, 'verifyCheckpoint']);
         Route::get('/travel/checkpoints/{checkpoint}/photo', [ProgramHeadTravelController::class, 'photo']);
+        Route::get('/travel/{travel}/arrival-photo', [ProgramHeadTravelController::class, 'arrivalPhoto']);
         Route::get('/students', [ProgramHeadStudentController::class, 'index']);
     });
 
@@ -191,6 +195,7 @@ Route::middleware(['auth:sanctum', 'activity'])->group(function () {
         Route::get('/travel', [ProgramHeadTravelController::class, 'index']);
         Route::put('/travel/checkpoints/{checkpoint}/verify', [ProgramHeadTravelController::class, 'verifyCheckpoint']);
         Route::get('/travel/checkpoints/{checkpoint}/photo', [ProgramHeadTravelController::class, 'photo']);
+        Route::get('/travel/{travel}/arrival-photo', [ProgramHeadTravelController::class, 'arrivalPhoto']);
         Route::get('/announcements', [AnnouncementController::class, 'manage']);
         Route::post('/announcements', [AnnouncementController::class, 'store']);
         Route::post('/announcements/{announcement}', [AnnouncementController::class, 'update']);

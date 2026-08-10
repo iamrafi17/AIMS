@@ -21,6 +21,7 @@ class Student extends Model
         'phone',
         'college_id',
         'program_id',
+        'academic_section_id',
         'year_level',
         'section',
         'parent_name',
@@ -78,6 +79,11 @@ class Student extends Model
         return $this->belongsTo(Program::class);
     }
 
+    public function academicSection()
+    {
+        return $this->belongsTo(AcademicSection::class);
+    }
+
     public function hte()
     {
         return $this->belongsTo(HTE::class);
@@ -105,7 +111,7 @@ class Student extends Model
 
     public function travelLogs()
     {
-        return $this->hasMany(TravelLog::class);
+        return $this->belongsToMany(TravelLog::class, 'travel_participants')->withTimestamps();
     }
 
     public function evaluations()

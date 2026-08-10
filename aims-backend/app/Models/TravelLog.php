@@ -9,9 +9,13 @@ class TravelLog extends Model
 {
     use HasFactory;
 
+    protected $hidden = [
+        'arrival_photo_path',
+    ];
+
     protected $fillable = [
-        'student_id',
         'created_by',
+        'hte_id',
         'session_code',
         'destination',
         'purpose',
@@ -19,6 +23,8 @@ class TravelLog extends Model
         'scheduled_at',
         'start_time',
         'end_time',
+        'arrived_at',
+        'arrival_photo_path',
         'status',
     ];
 
@@ -27,18 +33,24 @@ class TravelLog extends Model
         return [
             'start_time' => 'datetime',
             'end_time' => 'datetime',
+            'arrived_at' => 'datetime',
             'scheduled_at' => 'datetime',
         ];
-    }
-
-    public function student()
-    {
-        return $this->belongsTo(Student::class);
     }
 
     public function checkpoints()
     {
         return $this->hasMany(TravelCheckpoint::class);
+    }
+
+    public function hte()
+    {
+        return $this->belongsTo(HTE::class);
+    }
+
+    public function participants()
+    {
+        return $this->belongsToMany(Student::class, 'travel_participants')->withTimestamps();
     }
 
     public function creator()

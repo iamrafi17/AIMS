@@ -4,8 +4,8 @@ import {
   BuildingLibraryIcon,
   PencilSquareIcon,
   PlusIcon,
+  PowerIcon,
   RectangleGroupIcon,
-  TrashIcon,
   UsersIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
@@ -45,13 +45,13 @@ function AcademicModal({ type, item, colleges, programs, onClose, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={onClose}>
-      <form onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4" onMouseDown={onClose}>
+      <form role="dialog" aria-modal="true" aria-label={`${item ? 'Edit' : 'Add'} ${type}`} onSubmit={submit} onMouseDown={(event) => event.stopPropagation()} className="flex max-h-[calc(100dvh-1rem)] w-full max-w-xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 dark:border-slate-700">
           <div><p className="text-xs font-black uppercase tracking-widest text-[#a8750b]">Academic structure</p><h2 className="mt-1 text-2xl font-black capitalize text-slate-900 dark:text-white">{title}</h2></div>
           <button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><XMarkIcon className="h-6 w-6" /></button>
         </div>
-        <div className="max-h-[65vh] space-y-4 overflow-y-auto p-6">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
           {type === 'program' && (
             <label className="block"><span className="mb-2 block text-sm font-bold">College</span>
               <select required value={form.college_id} onChange={(event) => setForm({ ...form, college_id: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700">
@@ -83,11 +83,11 @@ function AcademicModal({ type, item, colleges, programs, onClose, onSaved }) {
               <label><span className="mb-2 block text-sm font-bold">Academic year</span><input required pattern="\d{4}-\d{4}" value={form.academic_year} onChange={(event) => setForm({ ...form, academic_year: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" /></label>
             </div>
           )}
-          <label className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800"><input type="checkbox" checked={Boolean(form.is_active)} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} className="h-5 w-5 accent-[#800000]" /><span className="font-bold">Active and available for enrollment</span></label>
+          <label className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800"><input type="checkbox" checked={Boolean(form.is_active)} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} className="h-5 w-5 accent-[#7D001D]" /><span className="font-bold">Active and available for enrollment</span></label>
         </div>
         <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-5 dark:border-slate-700">
           <button type="button" onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold dark:border-slate-700">Cancel</button>
-          <button disabled={saving} className="rounded-2xl bg-[#800000] px-6 py-3 font-bold text-white disabled:opacity-60">{saving ? 'Saving...' : 'Save record'}</button>
+          <button disabled={saving} className="rounded-2xl bg-[#7D001D] px-6 py-3 font-bold text-white disabled:opacity-60">{saving ? 'Saving...' : 'Save record'}</button>
         </div>
       </form>
     </div>
@@ -108,13 +108,13 @@ export default function AdminAcademic() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const remove = async (type, item) => {
-    if (!window.confirm(`Delete ${item.name}? Connected records are protected.`)) return;
+  const deactivate = async (type, item) => {
+    if (!window.confirm(`Deactivate ${item.name}? Connected and historical records will be preserved.`)) return;
     try {
       const plural = type === 'college' ? 'colleges' : type === 'program' ? 'programs' : 'sections';
       const response = await api.delete(`/admin/academic/${plural}/${item.id}`);
       toast.success(response.data.message); load();
-    } catch (error) { toast.error(error.response?.data?.message || 'Unable to delete this record.'); }
+    } catch (error) { toast.error(error.response?.data?.message || 'Unable to deactivate this record.'); }
   };
 
   if (loading && !data) return <LoadingPanel />;
@@ -129,7 +129,7 @@ export default function AdminAcademic() {
   return (
     <div className="space-y-6">
       <PageIntro eyebrow="System administration" title="Academic Management" description="Maintain colleges, degree programs, sections, and academic-year structures used by enrollment and internship workflows." icon={AcademicCapIcon} actions={
-        <button onClick={() => setModal({ type, item: null })} className="inline-flex items-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#430909]"><PlusIcon className="h-5 w-5" />Add {type}</button>
+        <button onClick={() => setModal({ type, item: null })} className="inline-flex items-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#690016]"><PlusIcon className="h-5 w-5" />Add {type}</button>
       } />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Active colleges" value={data?.overview.colleges} icon={BuildingLibraryIcon} />
@@ -139,7 +139,7 @@ export default function AdminAcademic() {
       </div>
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="flex gap-1 overflow-x-auto border-b border-slate-200 p-3 dark:border-slate-700">
-          {tabs.map(([name, Icon]) => <button key={name} onClick={() => setTab(name)} className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-black capitalize transition ${tab === name ? 'bg-[#800000] text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}><Icon className="h-5 w-5" />{name}</button>)}
+          {tabs.map(([name, Icon]) => <button key={name} onClick={() => setTab(name)} className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-black capitalize transition ${tab === name ? 'bg-[#7D001D] text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}><Icon className="h-5 w-5" />{name}</button>)}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px]">
@@ -150,7 +150,7 @@ export default function AdminAcademic() {
                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.code || (item.program ? `${item.program.code} · Year ${item.year_level} · ${item.academic_year}` : item.college?.code)}</td>
                 <td className="px-6 py-4 text-sm font-bold text-slate-700 dark:text-slate-200">{type === 'college' ? `${item.programs_count} programs · ${item.students_count} students` : type === 'program' ? `${item.students_count} students` : item.program?.code}</td>
                 <td className="px-6 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${item.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>{item.is_active ? 'Active' : 'Inactive'}</span></td>
-                <td className="px-6 py-4"><div className="flex justify-end gap-2"><button onClick={() => setModal({ type, item })} className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:text-[#800000] dark:border-slate-700 dark:text-slate-300"><PencilSquareIcon className="h-5 w-5" /></button><button onClick={() => remove(type, item)} className="rounded-xl border border-slate-200 p-2 text-rose-600 dark:border-slate-700"><TrashIcon className="h-5 w-5" /></button></div></td>
+                <td className="px-6 py-4"><div className="flex justify-end gap-2"><button onClick={() => setModal({ type, item })} className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:text-[#7D001D] dark:border-slate-700 dark:text-slate-300"><PencilSquareIcon className="h-5 w-5" /></button>{item.is_active && <button onClick={() => deactivate(type, item)} className="rounded-xl border border-slate-200 p-2 text-amber-600 dark:border-slate-700" title={`Deactivate ${item.name}`}><PowerIcon className="h-5 w-5" /></button>}</div></td>
               </tr>)}
               {records.length === 0 && <tr><td colSpan="5" className="px-6 py-14 text-center text-slate-500">No {tab} have been configured.</td></tr>}
             </tbody>

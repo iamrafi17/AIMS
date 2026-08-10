@@ -22,12 +22,12 @@ function SettingInput({ setting, value, onChange }) {
   if (setting.type === 'boolean') {
     const checked = value === true || value === 1 || value === '1';
     return (
-      <button type="button" onClick={() => onChange(checked ? '0' : '1')} className={`relative h-7 w-12 rounded-full transition ${checked ? 'bg-[#800000]' : 'bg-slate-300 dark:bg-slate-600'}`} aria-pressed={checked}>
+      <button type="button" onClick={() => onChange(checked ? '0' : '1')} className={`relative h-7 w-12 rounded-full transition ${checked ? 'bg-[#7D001D]' : 'bg-slate-300 dark:bg-slate-600'}`} aria-pressed={checked}>
         <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${checked ? 'left-6' : 'left-1'}`} />
       </button>
     );
   }
-  return <input type={setting.type === 'integer' ? 'number' : 'text'} min="0" value={value ?? ''} onChange={(event) => onChange(event.target.value)} className="w-full max-w-sm rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-[#800000] focus:ring-4 focus:ring-[#800000]/10 dark:border-slate-700" />;
+  return <input type={setting.type === 'integer' ? 'number' : 'text'} min="0" value={value ?? ''} onChange={(event) => onChange(event.target.value)} className="w-full max-w-sm rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700" />;
 }
 
 export default function AdminSystem() {
@@ -65,7 +65,7 @@ export default function AdminSystem() {
   return (
     <div className="space-y-6">
       <PageIntro eyebrow="System administration" title="System Settings" description="Control institution-wide defaults, internship behavior, security preferences, and notification rules from one protected workspace." icon={ServerStackIcon} actions={
-        <button onClick={save} disabled={!dirty || saving} className="inline-flex items-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#430909] transition disabled:cursor-not-allowed disabled:opacity-50"><CheckCircleIcon className="h-5 w-5" />{saving ? 'Saving...' : 'Save changes'}</button>
+        <button onClick={save} disabled={!dirty || saving} className="inline-flex items-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#690016] transition disabled:cursor-not-allowed disabled:opacity-50"><CheckCircleIcon className="h-5 w-5" />{saving ? 'Saving...' : 'Save changes'}</button>
       } />
       <div className="grid gap-6 xl:grid-cols-2">
         {Object.entries(groups).map(([group, settings]) => {
@@ -74,7 +74,7 @@ export default function AdminSystem() {
           return (
             <section key={group} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-start gap-4 border-b border-slate-100 pb-5 dark:border-slate-800">
-                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#800000]/10 text-[#800000] dark:bg-red-400/10 dark:text-red-300"><Icon className="h-6 w-6" /></div>
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#7D001D]/10 text-[#7D001D] dark:bg-red-400/10 dark:text-red-300"><Icon className="h-6 w-6" /></div>
                 <div><h2 className="text-xl font-black text-slate-900 dark:text-white">{details.title}</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{details.description}</p></div>
               </div>
               <div className="divide-y divide-slate-100 dark:divide-slate-800">

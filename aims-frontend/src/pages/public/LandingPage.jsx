@@ -179,14 +179,14 @@ function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#fbfaf8] text-slate-900">
-      <div className="bg-[#5c0000] px-4 py-2.5 text-center text-xs font-semibold tracking-wide text-white sm:text-sm">
+      <div className="bg-[#5c0000] px-3 py-2 text-center text-[10px] font-semibold leading-4 tracking-wide text-white sm:px-4 sm:py-2.5 sm:text-sm">
         Official Internship Portal of Marinduque State University — Santa Cruz Campus
       </div>
 
       <header className={`sticky top-0 z-50 border-b border-black/5 bg-white/95 backdrop-blur-xl transition-[box-shadow,background-color] duration-300 ${scrolled ? 'shadow-lg shadow-slate-900/5' : 'shadow-none'}`}>
-        <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3 lg:px-8" aria-label="Main navigation">
-          <Link to="/" className="flex min-w-0 items-center gap-3" onClick={closeMenu}>
-            <img src={marsuLogo} alt="Marinduque State University seal" className="h-12 w-12 shrink-0 object-contain" />
+        <nav className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-5 lg:px-8" aria-label="Main navigation">
+          <Link to="/" className="flex w-0 min-w-0 flex-1 items-center gap-2 sm:gap-3" onClick={closeMenu}>
+            <img src={marsuLogo} alt="Marinduque State University seal" className="h-10 w-10 shrink-0 object-contain sm:h-12 sm:w-12" />
             <div className="min-w-0 leading-tight">
               <p className="truncate text-sm font-extrabold tracking-tight text-[#720b0b] sm:text-base">Marinduque State University</p>
               <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">Santa Cruz Campus · AIMS</p>
@@ -201,18 +201,18 @@ function LandingPage() {
               ['Announcements', '#announcements'],
               ['Contact Us', '#contact'],
             ].map(([label, href]) => (
-              <a key={href} href={href} className="landing-nav-link text-sm font-semibold text-slate-600 transition hover:text-[#800000]">
+              <a key={href} href={href} className="landing-nav-link text-sm font-semibold text-slate-600 transition hover:text-[#7D001D]">
                 {label}
               </a>
             ))}
-            <Link to="/login" className="rounded-xl bg-[#800000] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#800000]/15 transition hover:-translate-y-0.5 hover:bg-[#650000]">
+            <Link to="/login" className="rounded-xl bg-[#7D001D] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#7D001D]/15 transition hover:-translate-y-0.5 hover:bg-[#650000]">
               Login
             </Link>
           </div>
 
           <button
             type="button"
-            className="rounded-xl border border-slate-200 p-2.5 text-slate-700 lg:hidden"
+            className="shrink-0 rounded-xl border border-slate-200 p-2.5 text-slate-700 lg:hidden"
             onClick={() => setMenuOpen((open) => !open)}
             aria-label="Toggle navigation menu"
             aria-expanded={menuOpen}
@@ -231,11 +231,11 @@ function LandingPage() {
                 ['Announcements', '#announcements'],
                 ['Contact Us', '#contact'],
               ].map(([label, href]) => (
-                <a key={href} href={href} onClick={closeMenu} className="rounded-lg px-3 py-3 text-sm font-semibold text-slate-700 hover:bg-[#800000]/5 hover:text-[#800000]">
+                <a key={href} href={href} onClick={closeMenu} className="rounded-lg px-3 py-3 text-sm font-semibold text-slate-700 hover:bg-[#7D001D]/5 hover:text-[#7D001D]">
                   {label}
                 </a>
               ))}
-              <Link to="/login" onClick={closeMenu} className="mt-2 rounded-xl bg-[#800000] px-4 py-3 text-center text-sm font-bold text-white">
+              <Link to="/login" onClick={closeMenu} className="mt-2 rounded-xl bg-[#7D001D] px-4 py-3 text-center text-sm font-bold text-white">
                 Login to AIMS
               </Link>
             </div>
@@ -245,25 +245,25 @@ function LandingPage() {
 
       <main>
         <section id="home" className="relative overflow-hidden bg-[radial-gradient(circle_at_12%_20%,rgba(212,175,55,0.15),transparent_27%),linear-gradient(135deg,#fff_0%,#fffaf3_48%,#f8eeee_100%)] scroll-mt-24">
-          <div className="absolute -left-20 top-24 h-72 w-72 rounded-full border-[42px] border-[#800000]/5" />
-          <div className="mx-auto grid min-h-[calc(100vh-110px)] max-w-7xl items-center gap-12 px-5 py-16 lg:grid-cols-[0.88fr_1.12fr] lg:px-8 lg:py-20">
-            <div className="landing-hero-copy relative z-10">
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#d4af37]/35 bg-white/80 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-[#7b1818] shadow-sm">
-                <FiShield className="text-[#c39219]" />
+          <div className="absolute -left-20 top-24 h-72 w-72 rounded-full border-[42px] border-[#7D001D]/5" />
+          <div className="mx-auto grid min-h-[calc(100vh-110px)] max-w-7xl grid-cols-1 items-center gap-10 px-5 py-10 sm:py-16 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] lg:gap-12 lg:px-8 lg:py-20">
+            <div className="landing-hero-copy relative z-10 min-w-0">
+              <div className="mb-6 flex w-full max-w-full flex-wrap items-center justify-center gap-2 rounded-full border border-[#d4af37]/35 bg-white/80 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#7b1818] shadow-sm sm:inline-flex sm:w-auto sm:px-4 sm:text-xs sm:tracking-[0.16em]">
+                <FiShield className="shrink-0 text-[#c39219]" />
                 One connected internship ecosystem
               </div>
-              <h1 className="max-w-3xl text-4xl font-black leading-[1.05] tracking-[-0.045em] text-[#3b0808] sm:text-5xl lg:text-[4.35rem]">
-                Academic Internship <span className="text-[#800000]">Monitoring System</span>{' '}
+              <h1 className="max-w-3xl text-[2rem] font-black leading-[1.08] tracking-[-0.04em] text-[#3b0808] min-[400px]:text-4xl sm:text-5xl lg:text-[4.35rem]">
+                Academic Internship <span className="text-[#7D001D]">Monitoring System</span>{' '}
                 <span className="inline-block align-middle text-[0.3em] tracking-[0.08em] text-[#a8750b]">(AIMS)</span>
               </h1>
               <p className="mt-6 max-w-xl text-base leading-8 text-slate-600 sm:text-lg">
                 Empowering student internships through digital monitoring and collaboration—built for students, coordinators, supervisors, and university leaders.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <Link to="/login" className="group inline-flex items-center justify-center gap-2 rounded-xl bg-[#800000] px-6 py-3.5 text-sm font-extrabold text-white shadow-xl shadow-[#800000]/20 transition hover:-translate-y-0.5 hover:bg-[#650000]">
+                <Link to="/login" className="group inline-flex items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-6 py-3.5 text-sm font-extrabold text-white shadow-xl shadow-[#7D001D]/20 transition hover:-translate-y-0.5 hover:bg-[#650000]">
                   Login to AIMS <FiArrowRight className="transition group-hover:translate-x-1" />
                 </Link>
-                <Link to="/register" className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#800000]/20 bg-white px-6 py-3.5 text-sm font-extrabold text-[#800000] shadow-sm transition hover:-translate-y-0.5 hover:border-[#800000]/40">
+                <Link to="/register" className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#7D001D]/20 bg-white px-6 py-3.5 text-sm font-extrabold text-[#7D001D] shadow-sm transition hover:-translate-y-0.5 hover:border-[#7D001D]/40">
                   Register as Student <FiChevronRight />
                 </Link>
               </div>
@@ -277,13 +277,13 @@ function LandingPage() {
             </div>
 
             <div className="landing-hero-visual relative">
-              <div className="landing-hero-glow absolute -inset-4 rounded-[2.5rem] bg-gradient-to-br from-[#800000]/12 to-[#d4af37]/20 blur-2xl" />
+              <div className="landing-hero-glow absolute -inset-4 rounded-[2.5rem] bg-gradient-to-br from-[#7D001D]/12 to-[#d4af37]/20 blur-2xl" />
               <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white/70 p-2 shadow-2xl shadow-[#5c0000]/15 backdrop-blur">
                 <img src={heroImage} alt="Student interns using the AIMS digital monitoring platform" className="aspect-[3/2] w-full rounded-[1.55rem] object-cover" />
               </div>
-              <div className="landing-float absolute -bottom-5 left-4 flex items-center gap-3 rounded-2xl border border-white bg-white/95 p-3 pr-5 shadow-xl sm:left-[-1.5rem] sm:p-4 sm:pr-7">
-                <div className="grid h-11 w-11 place-items-center rounded-xl bg-[#800000] text-white"><FiTrendingUp /></div>
-                <div><p className="text-xs font-semibold text-slate-500">Internship journey</p><p className="text-sm font-black text-slate-900">Monitored. Guided. Achieved.</p></div>
+              <div className="landing-float absolute -bottom-5 left-2 flex max-w-[calc(100%-0.5rem)] items-center gap-3 rounded-2xl border border-white bg-white/95 p-3 pr-4 shadow-xl sm:left-[-1.5rem] sm:max-w-none sm:p-4 sm:pr-7">
+                <div className="grid h-11 w-11 place-items-center rounded-xl bg-[#7D001D] text-white"><FiTrendingUp /></div>
+                <div className="min-w-0"><p className="text-xs font-semibold text-slate-500">Internship journey</p><p className="text-xs font-black text-slate-900 min-[400px]:text-sm">Monitored. Guided. Achieved.</p></div>
               </div>
             </div>
           </div>
@@ -293,7 +293,7 @@ function LandingPage() {
           <div className="mx-auto grid max-w-7xl gap-12 px-5 lg:grid-cols-[0.78fr_1.22fr] lg:items-center lg:px-8">
             <Reveal>
               <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-[#a8750b]">About AIMS</p>
-              <h2 className="mt-4 text-3xl font-black tracking-tight text-[#430909] sm:text-4xl">Designed around the complete internship journey.</h2>
+              <h2 className="mt-4 text-3xl font-black tracking-tight text-[#690016] sm:text-4xl">Designed around the complete internship journey.</h2>
             </Reveal>
             <Reveal delay={120} className="rounded-3xl border border-slate-100 bg-[#fbfaf8] p-7 shadow-sm sm:p-10">
               <p className="text-base leading-8 text-slate-600 sm:text-lg">
@@ -306,7 +306,7 @@ function LandingPage() {
                   [FiMessageSquare, 'Collaborative', 'Clear, timely communication'],
                 ].map(([Icon, title, copy]) => (
                   <div key={title}>
-                    <Icon className="mb-3 text-xl text-[#800000]" />
+                    <Icon className="mb-3 text-xl text-[#7D001D]" />
                     <p className="font-extrabold text-slate-900">{title}</p>
                     <p className="mt-1 text-sm leading-6 text-slate-500">{copy}</p>
                   </div>
@@ -320,21 +320,21 @@ function LandingPage() {
           <div className="mx-auto max-w-7xl px-5 lg:px-8">
             <Reveal className="mx-auto max-w-2xl text-center">
               <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-[#a8750b]">Key features</p>
-              <h2 className="mt-4 text-3xl font-black tracking-tight text-[#430909] sm:text-4xl">One platform. Every internship role.</h2>
+              <h2 className="mt-4 text-3xl font-black tracking-tight text-[#690016] sm:text-4xl">One platform. Every internship role.</h2>
               <p className="mt-4 leading-7 text-slate-600">Purpose-built tools help each member of the internship community act with clarity.</p>
             </Reveal>
             <div className="mt-12 grid gap-6 lg:grid-cols-2">
               {featureGroups.map((group, index) => {
                 const GroupIcon = group.icon;
                 return (
-                  <Reveal as="article" key={group.title} delay={(index % 2) * 110} className="group rounded-3xl border border-black/[0.06] bg-white p-7 shadow-sm transition-[transform,box-shadow,border-color] duration-500 hover:-translate-y-1.5 hover:shadow-xl hover:shadow-[#800000]/5 sm:p-8">
+                  <Reveal as="article" key={group.title} delay={(index % 2) * 110} className="group rounded-3xl border border-black/[0.06] bg-white p-7 shadow-sm transition-[transform,box-shadow,border-color] duration-500 hover:-translate-y-1.5 hover:shadow-xl hover:shadow-[#7D001D]/5 sm:p-8">
                     <div className="flex items-start gap-4">
-                      <div className="grid h-13 w-13 shrink-0 place-items-center rounded-2xl bg-[#800000] text-xl text-white shadow-lg shadow-[#800000]/15">
+                      <div className="grid h-13 w-13 shrink-0 place-items-center rounded-2xl bg-[#7D001D] text-xl text-white shadow-lg shadow-[#7D001D]/15">
                         <GroupIcon />
                       </div>
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#ad7f16]">{group.eyebrow}</p>
-                        <h3 className="mt-1 text-2xl font-black text-[#430909]">{group.title}</h3>
+                        <h3 className="mt-1 text-2xl font-black text-[#690016]">{group.title}</h3>
                         <p className="mt-2 text-sm leading-6 text-slate-500">{group.description}</p>
                       </div>
                     </div>
@@ -378,20 +378,20 @@ function LandingPage() {
             <Reveal className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
               <div>
                 <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-[#a8750b]">Announcements</p>
-                <h2 className="mt-4 text-3xl font-black tracking-tight text-[#430909] sm:text-4xl">Stay informed and internship-ready.</h2>
+                <h2 className="mt-4 text-3xl font-black tracking-tight text-[#690016] sm:text-4xl">Stay informed and internship-ready.</h2>
               </div>
-              <Link to="/login" className="inline-flex items-center gap-2 text-sm font-extrabold text-[#800000]">View your portal <FiArrowRight /></Link>
+              <Link to="/login" className="inline-flex items-center gap-2 text-sm font-extrabold text-[#7D001D]">View your portal <FiArrowRight /></Link>
             </Reveal>
             <div className="mt-10 grid gap-5 lg:grid-cols-3">
               {announcements.slice(0, 3).map((announcement, index) => (
-                <Reveal as="article" key={announcement.id} delay={index * 100} className="rounded-3xl border border-slate-100 bg-[#fbfaf8] p-7 transition-[transform,box-shadow,border-color] duration-500 hover:-translate-y-1 hover:border-[#800000]/15 hover:shadow-lg">
+                <Reveal as="article" key={announcement.id} delay={index * 100} className="rounded-3xl border border-slate-100 bg-[#fbfaf8] p-7 transition-[transform,box-shadow,border-color] duration-500 hover:-translate-y-1 hover:border-[#7D001D]/15 hover:shadow-lg">
                   <div className="flex items-center justify-between gap-4">
-                    <span className="rounded-full bg-[#800000]/8 px-3 py-1 text-xs font-extrabold text-[#800000]">
+                    <span className="rounded-full bg-[#7D001D]/8 px-3 py-1 text-xs font-extrabold text-[#7D001D]">
                       {index === 0 ? 'Internship Advisory' : index === 1 ? 'University Update' : 'Upcoming Activity'}
                     </span>
                     <FiCalendar className="text-[#ba8b23]" />
                   </div>
-                  <h3 className="mt-6 text-xl font-black leading-snug text-[#430909]">{announcement.title}</h3>
+                  <h3 className="mt-6 text-xl font-black leading-snug text-[#690016]">{announcement.title}</h3>
                   <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">{announcement.content}</p>
                   <p className="mt-6 text-xs font-semibold text-slate-400">
                     {announcement.published_at
@@ -405,7 +405,7 @@ function LandingPage() {
         </section>
 
         <section className="bg-[#f6f1ea] px-5 py-12 sm:py-16">
-          <Reveal className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-7 rounded-[2rem] bg-[#430909] px-7 py-10 text-center text-white shadow-2xl shadow-[#430909]/15 sm:px-12 lg:flex-row lg:text-left">
+          <Reveal className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-7 rounded-[2rem] bg-[#690016] px-7 py-10 text-center text-white shadow-2xl shadow-[#690016]/15 sm:px-12 lg:flex-row lg:text-left">
             <div>
               <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#eac557]">Start your internship journey</p>
               <h2 className="mt-3 text-2xl font-black sm:text-3xl">Ready to connect with AIMS?</h2>

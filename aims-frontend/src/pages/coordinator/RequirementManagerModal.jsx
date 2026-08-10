@@ -133,12 +133,12 @@ function RequirementManagerModal({ onClose, onChanged }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/65 p-3 backdrop-blur-sm sm:p-5">
-      <section className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-[#f7f3ee] shadow-2xl dark:border-slate-700 dark:bg-slate-950">
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/65 p-2 backdrop-blur-sm sm:p-5">
+      <section role="dialog" aria-modal="true" aria-label="Manage program requirements" className="flex max-h-[calc(100dvh-1rem)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-[#f7f3ee] shadow-2xl dark:border-slate-700 dark:bg-slate-950 sm:max-h-[calc(100dvh-2.5rem)]">
         <header className="flex shrink-0 items-start justify-between border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900 sm:px-7">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8750b]">Program upload settings</p>
-            <h2 className="mt-1 text-xl font-black text-[#430909] dark:text-white">Customize Student Requirements</h2>
+            <h2 className="mt-1 text-xl font-black text-[#690016] dark:text-white">Customize Student Requirements</h2>
             <p className="mt-1 text-xs text-slate-500">{program ? `${program.code} — ${program.name}` : 'Your assigned academic program'}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close requirement manager"><FiX className="text-xl" /></button>
@@ -148,18 +148,18 @@ function RequirementManagerModal({ onClose, onChanged }) {
           <div className="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
             <form onSubmit={addRequirement} className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#800000]/10 text-[#800000] dark:text-red-300"><FiFilePlus /></span>
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#7D001D]/10 text-[#7D001D] dark:text-red-300"><FiFilePlus /></span>
                 <div><h3 className="font-black">Add requirement</h3><p className="text-xs text-slate-500">Added to every student in this program.</p></div>
               </div>
               <label className="mt-5 block">
                 <span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Document name</span>
-                <input required maxLength="255" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Barangay Clearance" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#800000]/50 dark:border-slate-700 dark:bg-slate-950" />
+                <input required maxLength="255" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Barangay Clearance" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 dark:border-slate-700 dark:bg-slate-950" />
               </label>
               <label className="mt-4 block">
                 <span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Upload instructions</span>
-                <textarea rows="5" maxLength="2000" value={form.instructions} onChange={(event) => setForm((current) => ({ ...current, instructions: event.target.value }))} placeholder="Describe the document or signing requirements..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#800000]/50 dark:border-slate-700 dark:bg-slate-950" />
+                <textarea rows="5" maxLength="2000" value={form.instructions} onChange={(event) => setForm((current) => ({ ...current, instructions: event.target.value }))} placeholder="Describe the document or signing requirements..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 dark:border-slate-700 dark:bg-slate-950" />
               </label>
-              <button disabled={busy} className="mt-5 w-full rounded-xl bg-[#800000] px-4 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? 'Saving...' : 'Add to Checklist'}</button>
+              <button disabled={busy} className="mt-5 w-full rounded-xl bg-[#7D001D] px-4 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? 'Saving...' : 'Add to Checklist'}</button>
               <p className="mt-4 text-[11px] leading-5 text-slate-500">Archived items disappear from student upload pages, while files already submitted remain available for historical review.</p>
             </form>
 
@@ -177,11 +177,11 @@ function RequirementManagerModal({ onClose, onChanged }) {
                         <div>
                           <input autoFocus value={editing.name} onChange={(event) => setEditing((current) => ({ ...current, name: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold dark:border-slate-700 dark:bg-slate-950" />
                           <textarea rows="3" value={editing.instructions || ''} onChange={(event) => setEditing((current) => ({ ...current, instructions: event.target.value }))} className="mt-2 w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" placeholder="Upload instructions (optional)" />
-                          <div className="mt-3 flex justify-end gap-2"><button type="button" onClick={() => setEditing(null)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold dark:border-slate-700">Cancel</button><button type="button" onClick={() => saveEdit(requirement)} disabled={busy || !editing.name.trim()} className="inline-flex items-center gap-1 rounded-lg bg-[#800000] px-3 py-2 text-xs font-black text-white disabled:opacity-50"><FiCheck /> Save</button></div>
+                          <div className="mt-3 flex justify-end gap-2"><button type="button" onClick={() => setEditing(null)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold dark:border-slate-700">Cancel</button><button type="button" onClick={() => saveEdit(requirement)} disabled={busy || !editing.name.trim()} className="inline-flex items-center gap-1 rounded-lg bg-[#7D001D] px-3 py-2 text-xs font-black text-white disabled:opacity-50"><FiCheck /> Save</button></div>
                         </div>
                       ) : (
                         <div className="flex gap-3">
-                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#800000]/8 text-xs font-black text-[#800000] dark:text-red-300">{index + 1}</div>
+                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#7D001D]/8 text-xs font-black text-[#7D001D] dark:text-red-300">{index + 1}</div>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2"><h4 className="font-black text-slate-800 dark:text-white">{requirement.name}</h4><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${requirement.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>{requirement.is_active ? 'Active' : 'Archived'}</span></div>
                             <p className="mt-1 text-xs leading-5 text-slate-500">{requirement.instructions || 'No special upload instructions.'}</p>

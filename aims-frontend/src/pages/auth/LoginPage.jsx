@@ -50,23 +50,20 @@ function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f7f3ee] lg:grid lg:grid-cols-[1.08fr_0.92fr]">
+    <main className="min-h-screen bg-[#F6F7FB] lg:grid lg:grid-cols-[1.08fr_0.92fr]">
       <section className="relative hidden min-h-screen overflow-hidden bg-[#5a0707] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
-        <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full border-[62px] border-white/[0.035]" />
-        <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-[#d4af37]/10 blur-3xl" />
-
         <Link to="/" className="relative z-10 flex items-center gap-3 self-start">
           <span className="rounded-full bg-white p-1.5 shadow-lg"><img src={marsuLogo} alt="Marinduque State University seal" className="h-12 w-12 object-contain" /></span>
           <span><strong className="block text-sm font-extrabold">Marinduque State University</strong><span className="text-xs text-white/60">Santa Cruz Campus</span></span>
         </Link>
 
         <div className="relative z-10 mx-auto my-10 w-full max-w-2xl">
-          <div className="overflow-hidden rounded-[2rem] border border-white/15 bg-white/10 p-2 shadow-2xl backdrop-blur">
-            <img src={heroImage} alt="Students collaborating through AIMS" className="aspect-[16/10] w-full rounded-[1.55rem] object-cover" />
+          <div className="overflow-hidden rounded-xl border border-white/15 bg-white/10 p-2 shadow-sm">
+            <img src={heroImage} alt="Students collaborating through AIMS" className="aspect-[16/10] w-full rounded-lg object-cover" />
           </div>
           <div className="mt-8 max-w-xl">
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#e5c351]">Academic Internship Monitoring System</p>
-            <h1 className="mt-4 text-4xl font-black leading-tight tracking-tight xl:text-5xl">Welcome to a more connected internship experience.</h1>
+            <h1 className="mt-4 text-4xl font-black leading-tight">Welcome to a more connected internship experience.</h1>
             <p className="mt-4 text-base leading-7 text-white/65">Track progress, manage requirements, and collaborate securely from deployment to completion.</p>
           </div>
         </div>
@@ -86,13 +83,13 @@ function LoginPage() {
             </Link>
           </div>
 
-          <Link to="/" className="mb-9 inline-flex items-center gap-2 text-sm font-bold text-slate-500 transition hover:text-[#800000]">
+          <Link to="/" className="mb-9 inline-flex items-center gap-2 text-sm font-bold text-slate-500 transition hover:text-[#7D001D]">
             <FiArrowLeft /> Back to home
           </Link>
 
           <div>
             <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-[#a8750b]">Secure portal access</p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight text-[#430909] sm:text-4xl">Welcome back</h2>
+            <h2 className="mt-3 text-3xl font-black text-[#690016]">Welcome back</h2>
             <p className="mt-3 text-sm leading-6 text-slate-500">Enter your university email, Staff ID, or Student ID to continue to AIMS.</p>
           </div>
 
@@ -109,7 +106,7 @@ function LoginPage() {
                   value={identifier}
                   onChange={(event) => setIdentifier(event.target.value)}
                   required
-                  className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#800000]/45 focus:ring-4 focus:ring-[#800000]/8"
+                  className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8"
                   placeholder="Email, Staff ID, or Student ID"
                 />
               </div>
@@ -127,10 +124,10 @@ function LoginPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   required
-                  className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#800000]/45 focus:ring-4 focus:ring-[#800000]/8"
+                  className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8"
                   placeholder="Enter your password"
                 />
-                <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-[#800000]" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-[#7D001D]" aria-label={showPassword ? 'Hide password' : 'Show password'}>
                   {showPassword ? <FiEyeOff /> : <FiEye />}
                 </button>
               </div>
@@ -138,19 +135,19 @@ function LoginPage() {
 
             <div className="flex items-center justify-between gap-4">
               <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-600">
-                <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="h-4 w-4 rounded border-slate-300 accent-[#800000]" />
+                <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="h-4 w-4 rounded border-slate-300 accent-[#7D001D]" />
                 Remember me
               </label>
-              <Link to="/forgot-password" className="text-sm font-extrabold text-[#800000] hover:text-[#5c0000]">Forgot password?</Link>
+              <Link to="/forgot-password" className="text-sm font-extrabold text-[#7D001D] hover:text-[#5c0000]">Forgot password?</Link>
             </div>
 
-            <button type="submit" disabled={loading} className="flex w-full items-center justify-center rounded-xl bg-[#800000] px-5 py-3.5 text-sm font-extrabold text-white shadow-xl shadow-[#800000]/15 transition hover:-translate-y-0.5 hover:bg-[#650000] disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="submit" disabled={loading} className="flex w-full items-center justify-center rounded-lg bg-[#7D001D] px-5 py-3.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#690016] disabled:cursor-not-allowed disabled:opacity-60">
               {loading ? <><span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/35 border-t-white" /> Signing in...</> : 'Login to AIMS'}
             </button>
           </form>
 
           <div className="mt-8 border-t border-slate-200 pt-7 text-center">
-            <p className="text-sm text-slate-500">New student intern? <Link to="/register" className="font-extrabold text-[#800000] hover:text-[#5c0000]">Register as Student</Link></p>
+            <p className="text-sm text-slate-500">New student intern? <Link to="/register" className="font-extrabold text-[#7D001D] hover:text-[#5c0000]">Register as Student</Link></p>
           </div>
 
           <p className="mt-10 text-center text-xs leading-5 text-slate-400">By continuing, you agree to the university’s acceptable use and data privacy policies.</p>

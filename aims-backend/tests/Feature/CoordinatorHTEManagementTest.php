@@ -97,7 +97,7 @@ class CoordinatorHTEManagementTest extends TestCase
 
     public function test_coordinator_can_manage_holidays_upload_moa_and_receive_expiration_alerts(): void
     {
-        Storage::fake('public');
+        Storage::fake('local');
         [$coordinator, $college, $hte] = $this->context();
         Sanctum::actingAs($coordinator);
 
@@ -126,9 +126,9 @@ class CoordinatorHTEManagementTest extends TestCase
             ->assertJsonPath('moa.status', 'pending');
 
         $moa = MOA::firstOrFail();
-        /** @var FilesystemAdapter $publicDisk */
-        $publicDisk = Storage::disk('public');
-        $publicDisk->assertExists($moa->file_path);
+        /** @var FilesystemAdapter $privateDisk */
+        $privateDisk = Storage::disk('local');
+        $privateDisk->assertExists($moa->file_path);
 
         $this->get("/api/coordinator/htes/moas/{$moa->id}/download")
             ->assertOk()
@@ -147,6 +147,18 @@ class CoordinatorHTEManagementTest extends TestCase
             ->assertJsonPath('summary.expiring_moas', 1)
             ->assertJsonPath('expiration_alerts.0.hte', $hte->name)
             ->assertJsonPath('expiration_alerts.0.level', 'critical');
+
+        $this->deleteJson("/api/coordinator/htes/moas/{$moa->id}")
+            ->assertStatus(405);
+        $this->assertDatabaseHas('moas', ['id' => $moa->id]);
+        $privateDisk->assertExists($moa->file_path);
+
+        $this->deleteJson("/api/coordinator/htes/{$hte->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'HTE deactivated. Deployments and MOA history were preserved.');
+        $this->assertDatabaseHas('htes', ['id' => $hte->id, 'is_active' => false]);
+        $this->assertDatabaseHas('moas', ['id' => $moa->id]);
+        $privateDisk->assertExists($moa->file_path);
 
         $this->deleteJson("/api/coordinator/htes/holidays/{$holidayId}")
             ->assertOk();

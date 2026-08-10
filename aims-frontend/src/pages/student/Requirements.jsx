@@ -90,7 +90,7 @@ function StudentRequirements() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#800000]"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#7D001D]"></div>
       </div>
     );
   }
@@ -99,7 +99,7 @@ function StudentRequirements() {
     <div className="space-y-6">
       <div>
         <p className="text-xs font-black uppercase tracking-[0.18em] text-[#a8750b]">Program checklist</p>
-        <h1 className="mt-1 text-2xl font-black text-[#430909] dark:text-white">Internship Requirements</h1>
+        <h1 className="mt-1 text-2xl font-black text-[#690016] dark:text-white">Internship Requirements</h1>
         <p className="mt-1 text-sm text-slate-500">Upload the documents configured by your internship coordinator.</p>
       </div>
 
@@ -140,7 +140,7 @@ function StudentRequirements() {
 
                 <div className="mt-4 flex items-center gap-4">
                   {req.file_path ? (
-                    <button type="button" onClick={() => handleDownload(req)} className="text-sm text-[#800000] hover:text-[#5C0000] font-medium">Download File</button>
+                    <button type="button" onClick={() => handleDownload(req)} className="text-sm text-[#7D001D] hover:text-[#690016] font-medium">Download File</button>
                   ) : null}
                   <label className="cursor-pointer">
                       <input
@@ -150,7 +150,7 @@ function StudentRequirements() {
                         onChange={(e) => handleUpload(req.id, e.target.files[0])}
                         disabled={uploading === req.id}
                       />
-                      <span className={`inline-block px-4 py-2 bg-[#800000] hover:bg-[#5C0000] text-white text-sm font-medium rounded-lg transition-colors ${
+                      <span className={`inline-block px-4 py-2 bg-[#7D001D] hover:bg-[#690016] text-white text-sm font-medium rounded-lg transition-colors ${
                         uploading === req.id ? 'opacity-70 cursor-not-allowed' : ''
                       }`}>
                         {uploading === req.id ? 'Uploading...' : req.file_path ? 'Replace File' : 'Upload File'}

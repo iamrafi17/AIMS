@@ -13,8 +13,8 @@ use App\Models\Student;
 use App\Models\SystemNotification;
 use App\Models\User;
 use App\Support\ProgramAccess;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -152,30 +152,28 @@ class CoordinatorStudentController extends Controller
     public function destroy(Request $request, Student $student)
     {
         ProgramAccess::authorizeStudent($request->user(), $student);
-        $paths = $student->requirements()->pluck('file_path')
-            ->map(fn ($path) => $this->publicStoragePath($path))
-            ->filter();
-        $avatar = $this->publicStoragePath($student->user?->avatar);
-        $user = $student->user;
+        $this->deactivateStudent($student);
 
-        DB::transaction(fn () => $user ? $user->delete() : $student->delete());
-        $paths->each(fn ($path) => $this->publicDisk()->delete($path));
-        if ($avatar) {
-            $this->publicDisk()->delete($avatar);
-        }
-
-        return response()->json(['message' => 'Student record and login account deleted successfully.']);
+        return response()->json(['message' => 'Student record deactivated. Historical attendance, requirements, and reports were preserved.']);
     }
 
     public function deactivate(Request $request, Student $student)
     {
         ProgramAccess::authorizeStudent($request->user(), $student);
-        DB::transaction(function () use ($student) {
-            $student->user?->update(['is_active' => false]);
-            $student->update(['internship_status' => 'dropped']);
-        });
+        $this->deactivateStudent($student);
 
         return response()->json(['message' => 'Student record deactivated. Historical attendance, requirements, and reports were preserved.']);
+    }
+
+    private function deactivateStudent(Student $student): void
+    {
+        DB::transaction(function () use ($student) {
+            $student->user?->update(['is_active' => false]);
+            $student->user?->tokens()->delete();
+            if ($student->internship_status !== 'completed') {
+                $student->update(['internship_status' => 'dropped']);
+            }
+        });
     }
 
     public function approveRegistration(Student $student, Request $request)
@@ -243,12 +241,12 @@ class CoordinatorStudentController extends Controller
     {
         ProgramAccess::authorizeStudent($request->user(), $student);
         ProgramAccess::authorizeRequirement($request->user(), $requirement);
-        $path = $this->publicStoragePath($requirement->file_path);
-        if ($requirement->student_id !== $student->id || ! $path || ! $this->publicDisk()->exists($path)) {
+        $path = $this->privateStoragePath($requirement->file_path);
+        if ($requirement->student_id !== $student->id || ! $path || ! $this->privateDisk()->exists($path)) {
             return response()->json(['message' => 'Requirement file not found.'], 404);
         }
 
-        return $this->publicDisk()->download($path);
+        return $this->privateDisk()->download($path);
     }
 
     public function importCsv(Request $request)
@@ -431,11 +429,11 @@ class CoordinatorStudentController extends Controller
         return [
             'student_id' => ['required', 'string', 'max:20', Rule::unique('students')->ignore($student?->id)],
             'first_name' => ['required', 'string', 'max:100'], 'last_name' => ['required', 'string', 'max:100'], 'middle_name' => ['nullable', 'string', 'max:100'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($student?->user_id)], 'password' => [$student ? 'nullable' : 'nullable', 'string', 'min:8'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($student?->user_id)], 'password' => [$student ? 'nullable' : 'nullable', 'string', 'min:8', 'max:255'],
             'gender' => ['required', 'in:male,female,other'], 'birth_date' => ['required', 'date', 'before:today'], 'address' => ['required', 'string', 'max:1000'], 'phone' => ['required', 'string', 'max:20'],
             'college_id' => ['nullable', Rule::in([(int) $coordinator->college_id])], 'program_id' => ['nullable', Rule::in([(int) $coordinator->program_id])], 'year_level' => ['required', 'integer', 'between:1,5'], 'section' => ['required', 'string', 'max:50'],
             'parent_name' => ['required', 'string', 'max:255'], 'parent_relationship' => ['nullable', 'string', 'max:50'], 'parent_address' => ['required', 'string', 'max:1000'], 'parent_phone' => ['required', 'string', 'max:20'],
-            'hte_id' => ['nullable', 'exists:htes,id'], 'internship_semester' => ['nullable', 'string', 'max:30'], 'internship_year' => ['nullable', 'string', 'max:20'],
+            'hte_id' => ['nullable', Rule::exists('htes', 'id')->where('program_id', $coordinator->program_id)], 'internship_semester' => ['nullable', 'string', 'max:30'], 'internship_year' => ['nullable', 'string', 'max:20'],
             'registration_status' => ['nullable', 'in:pending,approved,rejected'], 'internship_status' => ['nullable', 'in:pending,active,completed,dropped'],
             'consent_status' => ['nullable', 'in:pending,rejected,done'], 'schedule_status' => ['nullable', 'in:pending,rejected,approved'],
             'ojt_start_date' => ['nullable', 'date'], 'ojt_end_date' => ['nullable', 'date', 'after_or_equal:ojt_start_date'], 'required_ojt_hours' => ['nullable', 'numeric', 'between:1,2000'], 'allow_past_attendance' => ['nullable', 'boolean'],

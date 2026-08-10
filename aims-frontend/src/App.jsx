@@ -85,7 +85,7 @@ function ThemedToaster() {
 function PageLoader() {
   return (
     <div className="grid min-h-screen place-items-center bg-slate-50 dark:bg-gray-950">
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#800000]" />
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#7D001D]" />
     </div>
   );
 }

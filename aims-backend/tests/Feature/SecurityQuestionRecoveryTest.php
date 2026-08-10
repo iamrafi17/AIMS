@@ -80,17 +80,34 @@ class SecurityQuestionRecoveryTest extends TestCase
         }
     }
 
-    public function test_invalid_user_id_and_legacy_account_without_questions_are_blocked(): void
+    public function test_invalid_and_legacy_accounts_do_not_reveal_whether_an_id_exists(): void
     {
-        $this->postJson('/api/forgot-password', ['user_id' => 'NOT-A-USER'])
-            ->assertNotFound()
-            ->assertJsonPath('message', 'User ID not found.');
+        $invalid = $this->postJson('/api/forgot-password', ['user_id' => 'NOT-A-USER'])
+            ->assertOk()
+            ->assertJsonCount(3, 'questions')
+            ->assertJsonStructure(['challenge_token', 'questions'])
+            ->assertJsonPath('message', 'If this account is eligible for recovery, answer the security questions.');
 
         $legacyUser = User::factory()->create(['role' => 'coordinator']);
 
-        $this->postJson('/api/forgot-password', ['user_id' => $legacyUser->staff_id])
+        $legacy = $this->postJson('/api/forgot-password', ['user_id' => $legacyUser->staff_id])
+            ->assertOk()
+            ->assertJsonCount(3, 'questions')
+            ->assertJsonStructure(['challenge_token', 'questions'])
+            ->assertJsonPath('message', 'If this account is eligible for recovery, answer the security questions.');
+
+        $this->assertSame($invalid->status(), $legacy->status());
+
+        $this->postJson('/api/forgot-password/verify', [
+            'user_id' => 'NOT-A-USER',
+            'challenge_token' => $invalid->json('challenge_token'),
+            'answers' => collect($invalid->json('questions'))->map(fn ($question) => [
+                'security_question_id' => $question['id'],
+                'answer' => 'decoy answer',
+            ])->all(),
+        ])
             ->assertUnprocessable()
-            ->assertJsonPath('message', 'Security questions are not configured for this account. Please contact an administrator.');
+            ->assertJsonPath('message', 'The recovery answers or session are invalid.');
     }
 
     public function test_all_answers_must_be_correct_before_password_can_be_reset(): void

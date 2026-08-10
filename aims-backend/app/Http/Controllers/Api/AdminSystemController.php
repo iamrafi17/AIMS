@@ -63,10 +63,9 @@ class AdminSystemController extends Controller
 
     public function destroyCollege(College $college)
     {
-        abort_if($college->programs()->exists() || $college->students()->exists(), 422, 'Deactivate this college instead; it still has connected records.');
-        $college->delete();
+        $college->update(['is_active' => false]);
 
-        return response()->json(['message' => 'College deleted successfully.']);
+        return response()->json(['message' => 'College deactivated. Connected records were preserved.']);
     }
 
     public function storeProgram(Request $request)
@@ -96,10 +95,9 @@ class AdminSystemController extends Controller
 
     public function destroyProgram(Program $program)
     {
-        abort_if($program->students()->exists(), 422, 'Deactivate this program instead; students are connected to it.');
-        $program->delete();
+        $program->update(['is_active' => false]);
 
-        return response()->json(['message' => 'Program deleted successfully.']);
+        return response()->json(['message' => 'Program deactivated. Connected records were preserved.']);
     }
 
     public function storeSection(Request $request)
@@ -118,9 +116,9 @@ class AdminSystemController extends Controller
 
     public function destroySection(AcademicSection $section)
     {
-        $section->delete();
+        $section->update(['is_active' => false]);
 
-        return response()->json(['message' => 'Section deleted successfully.']);
+        return response()->json(['message' => 'Section deactivated. Historical enrollment context was preserved.']);
     }
 
     public function settings()

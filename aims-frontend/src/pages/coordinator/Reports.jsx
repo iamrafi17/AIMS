@@ -86,20 +86,20 @@ const statusStyles = {
   Pending: 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-gray-300',
 };
 
-const inputClass = 'rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-600 outline-none transition focus:border-[#800000] focus:ring-4 focus:ring-[#800000]/5 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200';
+const inputClass = 'rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-600 outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/5 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200';
 
 function StatusBadge({ status }) {
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${statusStyles[status] || statusStyles.pending}`}>{String(status).replace('-', ' ')}</span>;
 }
 
-function ProgressBar({ value, color = 'bg-[#800000]' }) {
+function ProgressBar({ value, color = 'bg-[#7D001D]' }) {
   const safeValue = Math.min(Math.max(Number(value) || 0, 0), 100);
   return <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-gray-700"><div className={`h-full rounded-full ${color}`} style={{ width: `${safeValue}%` }} /></div>;
 }
 
 function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   const tones = {
-    maroon: 'bg-[#800000]/10 text-[#800000] dark:bg-rose-950/50 dark:text-rose-300',
+    maroon: 'bg-[#7D001D]/10 text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300',
     green: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
     blue: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300',
     amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
@@ -108,7 +108,7 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 print:border-slate-200 print:shadow-none">
       <div className="flex items-start justify-between gap-3">
-        <div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p><p className="mt-2 text-3xl font-black text-[#430909] dark:text-white print:text-black">{value}</p><p className="mt-1 text-xs text-slate-400">{note}</p></div>
+        <div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p><p className="mt-2 text-3xl font-black text-[#690016] dark:text-white print:text-black">{value}</p><p className="mt-1 text-xs text-slate-400">{note}</p></div>
         <div className={`grid h-11 w-11 place-items-center rounded-2xl text-xl print:hidden ${tones[tone]}`}><Icon /></div>
       </div>
     </div>
@@ -120,8 +120,8 @@ function Panel({ title, subtitle, icon: Icon, action, children, className = '' }
     <section className={`rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-6 print:break-inside-avoid print:rounded-none print:border-0 print:p-0 print:shadow-none ${className}`}>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3 print:mb-3">
         <div className="flex items-start gap-3">
-          {Icon && <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#800000]/10 text-lg text-[#800000] dark:bg-rose-950/50 dark:text-rose-300 print:hidden"><Icon /></div>}
-          <div><h2 className="font-black text-[#430909] dark:text-white print:text-black">{title}</h2>{subtitle && <p className="mt-1 text-xs leading-5 text-slate-400">{subtitle}</p>}</div>
+          {Icon && <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#7D001D]/10 text-lg text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300 print:hidden"><Icon /></div>}
+          <div><h2 className="font-black text-[#690016] dark:text-white print:text-black">{title}</h2>{subtitle && <p className="mt-1 text-xs leading-5 text-slate-400">{subtitle}</p>}</div>
         </div>
         {action}
       </div>
@@ -130,11 +130,11 @@ function Panel({ title, subtitle, icon: Icon, action, children, className = '' }
   );
 }
 
-function Donut({ value, label, color = '#800000' }) {
+function Donut({ value, label, color = '#7D001D' }) {
   return (
     <div className="relative grid h-36 w-36 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(${color} ${value * 3.6}deg, #e8e4df 0deg)` }}>
       <div className="grid h-28 w-28 place-items-center rounded-full bg-white text-center dark:bg-gray-800 print:bg-white">
-        <div><p className="text-2xl font-black text-[#430909] dark:text-white print:text-black">{value}%</p><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</p></div>
+        <div><p className="text-2xl font-black text-[#690016] dark:text-white print:text-black">{value}%</p><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</p></div>
       </div>
     </div>
   );
@@ -144,7 +144,7 @@ function ReportFilters({ dateFrom, dateTo, program, search, onDateFrom, onDateTo
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 print:hidden">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-        <div className="flex items-center gap-2 text-xs font-black text-slate-500 dark:text-gray-300"><FiFilter className="text-[#800000] dark:text-rose-300" /> Report filters</div>
+        <div className="flex items-center gap-2 text-xs font-black text-slate-500 dark:text-gray-300"><FiFilter className="text-[#7D001D] dark:text-rose-300" /> Report filters</div>
         <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="relative"><FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search report records..." className={`${inputClass} w-full pl-9`} /></label>
           <select value={program} onChange={(event) => onProgram(event.target.value)} className={inputClass}><option value="all">All programs</option><option value="BSIT">BS Information Technology</option><option value="BSIS">BS Information Systems</option><option value="BSBA">BS Business Administration</option><option value="BSHM">BS Hospitality Management</option></select>
@@ -189,14 +189,14 @@ function CoordinatorReports() {
 
   return (
     <div className="space-y-6 print:space-y-4">
-      <div className="hidden border-b-2 border-[#800000] pb-4 print:block">
+      <div className="hidden border-b-2 border-[#7D001D] pb-4 print:block">
         <div className="flex items-end justify-between gap-4">
-          <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#800000]">Marinduque State University · AIMS</p><h1 className="mt-1 text-2xl font-black text-black">{activeModule.label}</h1><p className="mt-1 text-xs text-slate-500">{activeModule.description}</p></div>
+          <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7D001D]">Marinduque State University · AIMS</p><h1 className="mt-1 text-2xl font-black text-black">{activeModule.label}</h1><p className="mt-1 text-xs text-slate-500">{activeModule.description}</p></div>
           <div className="text-right text-xs"><p className="font-bold text-black">{reportPeriod}</p><p className="mt-1 text-slate-500">{program === 'all' ? 'All academic programs' : program}</p></div>
         </div>
       </div>
 
-      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#430909] via-[#690d0d] to-[#8d1717] p-6 text-white shadow-lg sm:p-8 print:hidden">
+      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#690016] via-[#690d0d] to-[#8d1717] p-6 text-white shadow-lg sm:p-8 print:hidden">
         <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border-[44px] border-white/5" />
         <div className="absolute bottom-0 right-28 h-28 w-28 rounded-full bg-[#f1c54c]/10 blur-2xl" />
         <div className="relative flex flex-wrap items-end justify-between gap-5">
@@ -205,14 +205,14 @@ function CoordinatorReports() {
             <h1 className="text-2xl font-black sm:text-3xl">Coordinator Reports</h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-white/65">Generate clear, filtered summaries for internship operations, compliance reviews, and institutional decision-making.</p>
           </div>
-          <button type="button" onClick={exportPdf} className="inline-flex items-center gap-2 rounded-xl bg-[#f1c54c] px-5 py-3 text-xs font-black text-[#430909] shadow-lg shadow-black/10 transition hover:bg-[#f7d979]"><FiDownload /> Export PDF</button>
+          <button type="button" onClick={exportPdf} className="inline-flex items-center gap-2 rounded-xl bg-[#f1c54c] px-5 py-3 text-xs font-black text-[#690016] shadow-lg shadow-black/10 transition hover:bg-[#f7d979]"><FiDownload /> Export PDF</button>
         </div>
       </header>
 
       <nav className="overflow-x-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-800 print:hidden" aria-label="Coordinator report types">
         <div className="flex min-w-max gap-1">
           {reportModules.map((module) => (
-            <button key={module.id} type="button" onClick={() => setActiveReport(module.id)} className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition sm:px-5 ${activeReport === module.id ? 'bg-[#800000] text-white shadow-md shadow-[#800000]/15' : 'text-slate-500 hover:bg-slate-50 hover:text-[#800000] dark:text-gray-300 dark:hover:bg-gray-700'}`}>
+            <button key={module.id} type="button" onClick={() => setActiveReport(module.id)} className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition sm:px-5 ${activeReport === module.id ? 'bg-[#7D001D] text-white shadow-md shadow-[#7D001D]/15' : 'text-slate-500 hover:bg-slate-50 hover:text-[#7D001D] dark:text-gray-300 dark:hover:bg-gray-700'}`}>
               <module.icon className="text-base" /><span>{module.shortLabel}</span>
             </button>
           ))}
@@ -222,8 +222,8 @@ function CoordinatorReports() {
       <ReportFilters dateFrom={dateFrom} dateTo={dateTo} program={program} search={search} onDateFrom={setDateFrom} onDateTo={setDateTo} onProgram={setProgram} onSearch={setSearch} />
 
       <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
-        <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8750b]">{activeModule.shortLabel}</p><h2 className="mt-1 text-xl font-black text-[#430909] dark:text-white">{activeModule.label}</h2><p className="mt-1 text-xs text-slate-400">{activeModule.description} · {reportPeriod}</p></div>
-        <button type="button" onClick={exportPdf} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-[#800000] shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-rose-300"><FiPrinter /> Print / Save PDF</button>
+        <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8750b]">{activeModule.shortLabel}</p><h2 className="mt-1 text-xl font-black text-[#690016] dark:text-white">{activeModule.label}</h2><p className="mt-1 text-xs text-slate-400">{activeModule.description} · {reportPeriod}</p></div>
+        <button type="button" onClick={exportPdf} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-[#7D001D] shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-rose-300"><FiPrinter /> Print / Save PDF</button>
       </div>
 
       {activeReport === 'attendance' && (
@@ -247,7 +247,7 @@ function CoordinatorReports() {
 
             <Panel title="Daily Rendered Hours" subtitle="Consolidated hours for the last seven workdays" icon={FiBarChart2}>
               <div className="flex h-52 items-end justify-between gap-3 border-b border-slate-200 pb-1 dark:border-gray-700">
-                {[['Jul 17', 72, 1034], ['Jul 18', 88, 1258], ['Jul 21', 81, 1162], ['Jul 22', 94, 1341], ['Jul 23', 86, 1227], ['Jul 24', 90, 1289], ['Jul 25', 77, 1101]].map(([day, height, hours]) => <div key={day} className="flex h-full flex-1 flex-col items-center justify-end gap-2"><span className="text-[9px] font-black text-slate-400">{hours}</span><div className="w-full max-w-10 rounded-t-lg bg-gradient-to-t from-[#800000] to-[#b82929]" style={{ height: `${height}%` }} /><span className="text-[8px] font-bold text-slate-400">{day}</span></div>)}
+                {[['Jul 17', 72, 1034], ['Jul 18', 88, 1258], ['Jul 21', 81, 1162], ['Jul 22', 94, 1341], ['Jul 23', 86, 1227], ['Jul 24', 90, 1289], ['Jul 25', 77, 1101]].map(([day, height, hours]) => <div key={day} className="flex h-full flex-1 flex-col items-center justify-end gap-2"><span className="text-[9px] font-black text-slate-400">{hours}</span><div className="w-full max-w-10 rounded-t-lg bg-gradient-to-t from-[#7D001D] to-[#b82929]" style={{ height: `${height}%` }} /><span className="text-[8px] font-bold text-slate-400">{day}</span></div>)}
               </div>
             </Panel>
           </div>
@@ -314,7 +314,7 @@ function CoordinatorReports() {
               <div className="flex flex-col items-center gap-7 sm:flex-row"><Donut value={83} label="active" /><div className="w-full flex-1 space-y-4">{[['Active', 104, 83, 'bg-emerald-500'], ['Completed', 14, 11, 'bg-blue-500'], ['Pending', 8, 6, 'bg-amber-500']].map(([label, count, percent, color]) => <div key={label}><div className="mb-1.5 flex justify-between text-xs"><span className="font-bold text-slate-500">{label}</span><span className="font-black text-slate-700 dark:text-gray-200 print:text-black">{count}</span></div><ProgressBar value={percent} color={color} /></div>)}</div></div>
             </Panel>
             <Panel title="Average Student Readiness" subtitle="Progress across core internship indicators" icon={FiTrendingUp}>
-              <div className="space-y-5">{[['OJT hours completion', 72, 'bg-[#800000]'], ['Attendance compliance', 92, 'bg-emerald-500'], ['Requirement completion', 88, 'bg-blue-500'], ['Journal completion', 90, 'bg-amber-500']].map(([label, value, color]) => <div key={label}><div className="mb-2 flex justify-between text-xs"><span className="font-bold text-slate-600 dark:text-gray-300">{label}</span><span className="font-black text-slate-800 dark:text-white print:text-black">{value}%</span></div><ProgressBar value={value} color={color} /></div>)}</div>
+              <div className="space-y-5">{[['OJT hours completion', 72, 'bg-[#7D001D]'], ['Attendance compliance', 92, 'bg-emerald-500'], ['Requirement completion', 88, 'bg-blue-500'], ['Journal completion', 90, 'bg-amber-500']].map(([label, value, color]) => <div key={label}><div className="mb-2 flex justify-between text-xs"><span className="font-bold text-slate-600 dark:text-gray-300">{label}</span><span className="font-black text-slate-800 dark:text-white print:text-black">{value}%</span></div><ProgressBar value={value} color={color} /></div>)}</div>
             </Panel>
           </div>
 
@@ -322,7 +322,7 @@ function CoordinatorReports() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] text-left">
                 <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Student</th><th className="pb-3 font-black">HTE Placement</th><th className="pb-3 font-black">OJT Hours</th><th className="pb-3 font-black">Attendance</th><th className="pb-3 font-black">Requirements</th><th className="pb-3 font-black">Journals</th><th className="pb-3 font-black">Status</th></tr></thead>
-                <tbody>{filteredStudents.map((row) => { const progress = Math.round((row.rendered / row.required) * 100); return <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-gray-700 print:border-slate-200"><td className="py-4"><p className="text-xs font-black text-slate-800 dark:text-white print:text-black">{row.name}</p><p className="mt-1 text-[9px] text-slate-400">{row.studentId} · {row.program}-{row.section}</p></td><td className="py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{row.hte}</td><td className="w-40 py-4"><div className="mb-1.5 flex justify-between text-[9px] font-bold"><span className="text-slate-500">{row.rendered}/{row.required}h</span><span className="text-[#800000]">{progress}%</span></div><ProgressBar value={progress} /></td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.attendance}%</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.requirements}%</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.journals}%</td><td className="py-4"><StatusBadge status={row.status} /></td></tr>; })}</tbody>
+                <tbody>{filteredStudents.map((row) => { const progress = Math.round((row.rendered / row.required) * 100); return <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-gray-700 print:border-slate-200"><td className="py-4"><p className="text-xs font-black text-slate-800 dark:text-white print:text-black">{row.name}</p><p className="mt-1 text-[9px] text-slate-400">{row.studentId} · {row.program}-{row.section}</p></td><td className="py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{row.hte}</td><td className="w-40 py-4"><div className="mb-1.5 flex justify-between text-[9px] font-bold"><span className="text-slate-500">{row.rendered}/{row.required}h</span><span className="text-[#7D001D]">{progress}%</span></div><ProgressBar value={progress} /></td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.attendance}%</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.requirements}%</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.journals}%</td><td className="py-4"><StatusBadge status={row.status} /></td></tr>; })}</tbody>
               </table>
             </div>
           </Panel>
@@ -340,7 +340,7 @@ function CoordinatorReports() {
 
           <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
             <Panel title="HTE Capacity Utilization" subtitle="Deployed interns compared with partner capacity" icon={FiBarChart2}>
-              <div className="space-y-5">{filteredDeployments.map((row) => { const utilization = Math.round((row.deployed / row.capacity) * 100); return <div key={row.id}><div className="mb-2 flex flex-wrap justify-between gap-2"><div><p className="text-xs font-black text-slate-700 dark:text-white print:text-black">{row.hte}</p><p className="mt-0.5 text-[9px] text-slate-400">{row.location} · {row.sector}</p></div><p className="text-xs font-black text-slate-600 dark:text-gray-300">{row.deployed}/{row.capacity} interns · {utilization}%</p></div><ProgressBar value={utilization} color={utilization >= 90 ? 'bg-amber-500' : 'bg-[#800000]'} /></div>; })}</div>
+              <div className="space-y-5">{filteredDeployments.map((row) => { const utilization = Math.round((row.deployed / row.capacity) * 100); return <div key={row.id}><div className="mb-2 flex flex-wrap justify-between gap-2"><div><p className="text-xs font-black text-slate-700 dark:text-white print:text-black">{row.hte}</p><p className="mt-0.5 text-[9px] text-slate-400">{row.location} · {row.sector}</p></div><p className="text-xs font-black text-slate-600 dark:text-gray-300">{row.deployed}/{row.capacity} interns · {utilization}%</p></div><ProgressBar value={utilization} color={utilization >= 90 ? 'bg-amber-500' : 'bg-[#7D001D]'} /></div>; })}</div>
             </Panel>
             <Panel title="Deployment Health" subtitle="Current placement indicators" icon={FiUserCheck}>
               <div className="flex justify-center"><Donut value={88} label="deployed" color="#059669" /></div>
@@ -373,7 +373,7 @@ function CoordinatorReports() {
               <div className="flex flex-col items-center gap-7 sm:flex-row"><Donut value={90} label="completed" color="#059669" /><div className="w-full flex-1 space-y-4">{[['Completed', 43, 90, 'bg-emerald-500'], ['Active', 2, 4, 'bg-blue-500'], ['Scheduled', 2, 4, 'bg-violet-500'], ['Delayed', 1, 2, 'bg-rose-500']].map(([label, count, percent, color]) => <div key={label}><div className="mb-1.5 flex justify-between text-xs"><span className="font-bold text-slate-500">{label}</span><span className="font-black text-slate-700 dark:text-gray-200 print:text-black">{count}</span></div><ProgressBar value={percent} color={color} /></div>)}</div></div>
             </Panel>
             <Panel title="Safety & Compliance" subtitle="Travel monitoring requirement completion" icon={FiTrendingUp}>
-              <div className="space-y-5">{[['Approved travel sessions', 100, 'bg-emerald-500'], ['Verified companion manifests', 94, 'bg-blue-500'], ['Checkpoint evidence submitted', 91, 'bg-[#800000]'], ['On-time route completion', 86, 'bg-amber-500']].map(([label, value, color]) => <div key={label}><div className="mb-2 flex justify-between text-xs"><span className="font-bold text-slate-600 dark:text-gray-300">{label}</span><span className="font-black text-slate-800 dark:text-white print:text-black">{value}%</span></div><ProgressBar value={value} color={color} /></div>)}</div>
+              <div className="space-y-5">{[['Approved travel sessions', 100, 'bg-emerald-500'], ['Verified companion manifests', 94, 'bg-blue-500'], ['Checkpoint evidence submitted', 91, 'bg-[#7D001D]'], ['On-time route completion', 86, 'bg-amber-500']].map(([label, value, color]) => <div key={label}><div className="mb-2 flex justify-between text-xs"><span className="font-bold text-slate-600 dark:text-gray-300">{label}</span><span className="font-black text-slate-800 dark:text-white print:text-black">{value}%</span></div><ProgressBar value={value} color={color} /></div>)}</div>
             </Panel>
           </div>
 
@@ -381,7 +381,7 @@ function CoordinatorReports() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[960px] text-left">
                 <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Session</th><th className="pb-3 font-black">Traveler</th><th className="pb-3 font-black">Destination</th><th className="pb-3 font-black">Date</th><th className="pb-3 font-black">Companions</th><th className="pb-3 font-black">Checkpoints</th><th className="pb-3 font-black">Duration</th><th className="pb-3 font-black">Compliance</th><th className="pb-3 font-black">Status</th></tr></thead>
-                <tbody>{filteredTravel.map((row) => <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-gray-700 print:border-slate-200"><td className="py-4 text-xs font-black text-[#800000] dark:text-rose-300">{row.id}</td><td className="py-4"><p className="text-xs font-black text-slate-800 dark:text-white print:text-black">{row.student}</p><p className="mt-1 text-[9px] text-slate-400">{row.studentId} · {row.program}</p></td><td className="py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{row.destination}</td><td className="py-4 text-xs text-slate-500">{new Date(`${row.date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.companions}</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.checkpoints}</td><td className="py-4 text-xs text-slate-500">{row.duration}</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.compliance}%</td><td className="py-4"><StatusBadge status={row.status} /></td></tr>)}</tbody>
+                <tbody>{filteredTravel.map((row) => <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-gray-700 print:border-slate-200"><td className="py-4 text-xs font-black text-[#7D001D] dark:text-rose-300">{row.id}</td><td className="py-4"><p className="text-xs font-black text-slate-800 dark:text-white print:text-black">{row.student}</p><p className="mt-1 text-[9px] text-slate-400">{row.studentId} · {row.program}</p></td><td className="py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{row.destination}</td><td className="py-4 text-xs text-slate-500">{new Date(`${row.date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.companions}</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.checkpoints}</td><td className="py-4 text-xs text-slate-500">{row.duration}</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.compliance}%</td><td className="py-4"><StatusBadge status={row.status} /></td></tr>)}</tbody>
               </table>
             </div>
           </Panel>

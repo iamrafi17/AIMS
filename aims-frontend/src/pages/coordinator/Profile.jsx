@@ -22,7 +22,7 @@ import UserAvatar from '../../components/UserAvatar';
 import useAuth from '../../context/useAuth';
 import api from '../../services/api';
 
-const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#800000]/45 focus:ring-4 focus:ring-[#800000]/8 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-700 dark:disabled:text-gray-400';
+const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-700 dark:disabled:text-gray-400';
 
 function SmallIcon({ icon: Icon, className = '' }) {
   return (
@@ -50,16 +50,16 @@ function SectionHeader({ icon, title, description, editing, onToggle }) {
   return (
     <div className="mb-6 flex flex-col justify-between gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center dark:border-gray-700">
       <div className="flex items-start gap-3">
-        <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#800000]/8 text-[#800000] dark:bg-rose-950 dark:text-rose-300">
+        <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#7D001D]/8 text-[#7D001D] dark:bg-rose-950 dark:text-rose-300">
           <SmallIcon icon={icon} />
         </div>
         <div>
-          <h2 className="font-black text-[#430909] dark:text-white">{title}</h2>
+          <h2 className="font-black text-[#690016] dark:text-white">{title}</h2>
           <p className="mt-1 text-xs leading-5 text-slate-400">{description}</p>
         </div>
       </div>
       {onToggle && (
-        <button type="button" onClick={onToggle} className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-[#800000] transition hover:bg-[#800000]/5 sm:self-auto dark:border-gray-600 dark:text-rose-300">
+        <button type="button" onClick={onToggle} className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-[#7D001D] transition hover:bg-[#7D001D]/5 sm:self-auto dark:border-gray-600 dark:text-rose-300">
           <SmallIcon icon={editing ? XMarkIcon : PencilSquareIcon} />
           {editing ? 'Cancel' : 'Edit'}
         </button>
@@ -221,16 +221,16 @@ function CoordinatorProfile() {
     <div className="space-y-6">
       <header>
         <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">{roleAccountLabel} account</p>
-        <h1 className="mt-1 text-2xl font-black text-[#430909] dark:text-white">My Profile</h1>
+        <h1 className="mt-1 text-2xl font-black text-[#690016] dark:text-white">My Profile</h1>
         <p className="mt-1 text-sm text-slate-400">Manage your coordinator identity, contact details, photo, and account security.</p>
       </header>
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
         <aside className="self-start overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm xl:sticky xl:top-28 dark:border-gray-700 dark:bg-gray-800">
-          <div className="bg-gradient-to-br from-[#800000] to-[#4b0000] px-6 py-8 text-center text-white">
+          <div className="bg-gradient-to-br from-[#7D001D] to-[#690016] px-6 py-8 text-center text-white">
             <div className="relative mx-auto w-fit">
               <UserAvatar user={user} className="size-32 ring-4 ring-white/20" textClassName="text-4xl" />
-              <button type="button" onClick={() => photoInput.current?.click()} disabled={busy === 'photo'} className="absolute bottom-1 right-1 grid size-11 place-items-center rounded-full border-4 border-[#650000] bg-[#d4af37] text-[#4b0000] shadow-lg transition hover:scale-105 disabled:opacity-60" aria-label="Upload coordinator profile photo">
+              <button type="button" onClick={() => photoInput.current?.click()} disabled={busy === 'photo'} className="absolute bottom-1 right-1 grid size-11 place-items-center rounded-full border-4 border-[#650000] bg-[#d4af37] text-[#690016] shadow-lg transition hover:scale-105 disabled:opacity-60" aria-label="Upload coordinator profile photo">
                 <SmallIcon icon={PhotoIcon} />
               </button>
               <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadPhoto} className="hidden" />
@@ -254,7 +254,7 @@ function CoordinatorProfile() {
               </div>
             </div>
 
-            <button type="button" onClick={() => photoInput.current?.click()} disabled={busy === 'photo'} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#800000] px-4 py-3 text-xs font-black text-white transition hover:bg-[#650000] disabled:opacity-60">
+            <button type="button" onClick={() => photoInput.current?.click()} disabled={busy === 'photo'} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-4 py-3 text-xs font-black text-white transition hover:bg-[#650000] disabled:opacity-60">
               <SmallIcon icon={PhotoIcon} /> {busy === 'photo' ? 'Uploading...' : user?.avatar_url ? 'Change Photo' : 'Upload Photo'}
             </button>
             {user?.avatar_url && (
@@ -280,7 +280,7 @@ function CoordinatorProfile() {
               </div>
               {editingAccount && (
                 <div className="mt-6 flex justify-end">
-                  <button disabled={busy === 'account'} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-60">
+                  <button disabled={busy === 'account'} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-60">
                     <SmallIcon icon={CheckIcon} /> {busy === 'account' ? 'Saving...' : `Save ${roleAccountLabel} Information`}
                   </button>
                 </div>
@@ -304,7 +304,7 @@ function CoordinatorProfile() {
               </div>
               {editingContact && (
                 <div className="mt-6 flex justify-end">
-                  <button disabled={busy === 'contact'} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-60">
+                  <button disabled={busy === 'contact'} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-60">
                     <SmallIcon icon={CheckIcon} /> {busy === 'contact' ? 'Saving...' : 'Save Contact Information'}
                   </button>
                 </div>
@@ -332,7 +332,7 @@ function CoordinatorProfile() {
                         className={`${inputClass} pr-11`}
                         required
                       />
-                      <button type="button" onClick={() => setShowPasswords((current) => !current)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:text-[#800000]" aria-label={showPasswords ? 'Hide passwords' : 'Show passwords'}>
+                      <button type="button" onClick={() => setShowPasswords((current) => !current)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:text-[#7D001D]" aria-label={showPasswords ? 'Hide passwords' : 'Show passwords'}>
                         <SmallIcon icon={showPasswords ? EyeSlashIcon : EyeIcon} />
                       </button>
                     </div>
@@ -341,7 +341,7 @@ function CoordinatorProfile() {
               </div>
               <div className="mt-5 flex flex-col justify-between gap-4 rounded-xl bg-slate-50 p-4 sm:flex-row sm:items-center dark:bg-gray-900/60">
                 <p className="text-xs leading-5 text-slate-500 dark:text-gray-400">Use at least 8 characters. The new password must differ from your current password.</p>
-                <button disabled={busy === 'password'} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-60">
+                <button disabled={busy === 'password'} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-60">
                   <SmallIcon icon={KeyIcon} /> {busy === 'password' ? 'Changing...' : 'Change Password'}
                 </button>
               </div>

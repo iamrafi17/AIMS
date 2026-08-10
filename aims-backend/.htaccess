@@ -1,0 +1,12 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # A Laravel deployment must expose only the public directory. Block direct
+    # web access to .env, source code, dependencies, storage, and configuration.
+    RewriteRule ^public(?:/|$) - [L]
+    RewriteRule ^ - [F,L]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    Require all denied
+</IfModule>

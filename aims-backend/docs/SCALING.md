@@ -15,6 +15,8 @@ SESSION_DRIVER=redis
 QUEUE_CONNECTION=redis
 ```
 
+Start from `.env.production.example`, generate a unique `APP_KEY`, and use a dedicated database account instead of the XAMPP `root` account. Configure the web server document root as `aims-backend/public`; the repository-level `.htaccess` is only a defense-in-depth block for accidental XAMPP exposure.
+
 Run the migration that adds the high-volume indexes:
 
 ```bash
@@ -32,5 +34,7 @@ Finally, cache Laravel's production configuration during deployment:
 ```bash
 php artisan optimize
 ```
+
+Configure and test the matching database/private-file backup process in [BACKUP_AND_RESTORE.md](BACKUP_AND_RESTORE.md) before production launch.
 
 Do not use `php artisan serve` as the production web server. Before launch, load-test the real deployment with representative attendance and dashboard traffic; 1,000 registered accounts is modest, but the required server capacity depends on how many are active at once and on the size of uploaded files.

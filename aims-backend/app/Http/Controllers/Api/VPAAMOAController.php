@@ -68,10 +68,10 @@ class VPAAMOAController extends Controller
     {
         abort_unless($approval->subject_type === ApprovalRecord::TYPE_MOA, 404);
         $moa = MOA::findOrFail($approval->subject_id);
-        $path = $this->publicStoragePath($moa->file_path);
-        abort_unless($path && $this->publicDisk()->exists($path), 404);
+        $path = $this->privateStoragePath($moa->file_path);
+        abort_unless($path && $this->privateDisk()->exists($path), 404);
 
-        return $this->publicDisk()->download($path);
+        return $this->privateDisk()->download($path);
     }
 
     private function payload(ApprovalRecord $approval, MOA $moa): array

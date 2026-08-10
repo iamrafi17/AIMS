@@ -90,12 +90,14 @@ class CoordinatorDashboardTest extends TestCase
             'status' => 'approved',
         ]);
 
-        TravelLog::create([
-            'student_id' => $student->id,
+        $travel = TravelLog::create([
+            'created_by' => $coordinator->id,
+            'hte_id' => $hte->id,
             'session_code' => 'TRAVEL-001',
             'start_time' => now(),
             'status' => 'active',
         ]);
+        $travel->participants()->attach($student->id);
 
         Sanctum::actingAs($coordinator);
 

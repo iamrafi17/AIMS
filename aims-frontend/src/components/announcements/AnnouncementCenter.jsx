@@ -53,7 +53,7 @@ function statusOf(item) {
 function LoadingState() {
   return (
     <div className="flex min-h-64 items-center justify-center rounded-3xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-      <div className="h-11 w-11 animate-spin rounded-full border-4 border-[#800000]/20 border-t-[#800000]" />
+      <div className="h-11 w-11 animate-spin rounded-full border-4 border-[#7D001D]/20 border-t-[#7D001D]" />
     </div>
   );
 }
@@ -106,11 +106,14 @@ function AnnouncementModal({ item, onClose, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4" onMouseDown={onClose}>
       <form
+        role="dialog"
+        aria-modal="true"
+        aria-label={item ? 'Edit announcement' : 'Create announcement'}
         onSubmit={submit}
         onMouseDown={(event) => event.stopPropagation()}
-        className="max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl dark:bg-slate-900"
+        className="max-h-[calc(100dvh-1rem)] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl dark:bg-slate-900 sm:max-h-[calc(100dvh-2rem)]"
       >
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white px-6 py-5 dark:border-slate-700 dark:bg-slate-900 sm:px-8">
           <div>
@@ -131,7 +134,7 @@ function AnnouncementModal({ item, onClose, onSaved }) {
             <input
               value={form.title}
               onChange={(event) => setForm({ ...form, title: event.target.value })}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-[#800000] focus:ring-4 focus:ring-[#800000]/10 dark:border-slate-700"
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700"
               placeholder="Enter a clear announcement title"
               required
             />
@@ -141,7 +144,7 @@ function AnnouncementModal({ item, onClose, onSaved }) {
             <textarea
               value={form.content}
               onChange={(event) => setForm({ ...form, content: event.target.value })}
-              className="min-h-40 w-full resize-y rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-[#800000] focus:ring-4 focus:ring-[#800000]/10 dark:border-slate-700"
+              className="min-h-40 w-full resize-y rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700"
               placeholder="Write the advisory, activity details, or deadline..."
               required
             />
@@ -181,7 +184,7 @@ function AnnouncementModal({ item, onClose, onSaved }) {
             </label>
           </div>
           <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
-            <input type="checkbox" checked={form.is_published} onChange={(event) => setForm({ ...form, is_published: event.target.checked })} className="h-5 w-5 accent-[#800000]" />
+            <input type="checkbox" checked={form.is_published} onChange={(event) => setForm({ ...form, is_published: event.target.checked })} className="h-5 w-5 accent-[#7D001D]" />
             <span>
               <span className="block text-sm font-bold text-slate-800 dark:text-white">Publish announcement</span>
               <span className="text-xs text-slate-500 dark:text-slate-400">Turn this off to keep it as a draft.</span>
@@ -191,7 +194,7 @@ function AnnouncementModal({ item, onClose, onSaved }) {
 
         <div className="sticky bottom-0 flex flex-col-reverse gap-3 border-t border-slate-200 bg-white px-6 py-5 dark:border-slate-700 dark:bg-slate-900 sm:flex-row sm:justify-end sm:px-8">
           <button type="button" onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Cancel</button>
-          <button disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#800000] px-6 py-3 font-bold text-white shadow-lg shadow-[#800000]/20 transition hover:bg-[#650000] disabled:opacity-60">
+          <button disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#7D001D] px-6 py-3 font-bold text-white shadow-lg shadow-[#7D001D]/20 transition hover:bg-[#650000] disabled:opacity-60">
             <DocumentPlusIcon className="h-5 w-5" />
             {saving ? 'Saving...' : item ? 'Save changes' : 'Create announcement'}
           </button>
@@ -281,14 +284,14 @@ export default function AnnouncementCenter({ managing = false }) {
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-[#5d0000] via-[#800000] to-[#9d1b1b] p-6 text-white shadow-xl shadow-[#800000]/15 sm:p-8">
+      <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-[#5d0000] via-[#7D001D] to-[#9d1b1b] p-4 text-white shadow-xl shadow-[#7D001D]/15 sm:p-6 lg:p-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
               <BellAlertIcon className="h-7 w-7 text-[#f4cf63]" />
             </div>
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#f4cf63]">MarSU AIMS</p>
-            <h1 className="mt-2 text-3xl font-black sm:text-4xl">{managing ? 'Announcement Management' : 'Announcements'}</h1>
+            <h1 className="mt-2 text-2xl font-black sm:text-3xl lg:text-4xl">{managing ? 'Announcement Management' : 'Announcements'}</h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-white/75 sm:text-base">
               {managing
                 ? 'Create, schedule, publish, archive, and monitor official university internship notices.'
@@ -296,7 +299,7 @@ export default function AnnouncementCenter({ managing = false }) {
             </p>
           </div>
           {managing ? (
-            <button onClick={() => setEditing(null)} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#430909] shadow-lg transition hover:-translate-y-0.5 hover:bg-[#e3c45e]">
+            <button onClick={() => setEditing(null)} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#690016] shadow-lg transition hover:-translate-y-0.5 hover:bg-[#e3c45e] sm:w-auto">
               <PlusIcon className="h-5 w-5" /> New announcement
             </button>
           ) : (
@@ -319,7 +322,7 @@ export default function AnnouncementCenter({ managing = false }) {
         <div className="flex flex-col gap-3 md:flex-row">
           <label className="relative flex-1">
             <MagnifyingGlassIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search announcements..." className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none transition focus:border-[#800000] focus:ring-4 focus:ring-[#800000]/10 dark:border-slate-700" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search announcements..." className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700" />
           </label>
           {managing ? (
             <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700 md:min-w-44">
@@ -347,11 +350,11 @@ export default function AnnouncementCenter({ managing = false }) {
           {items.map((item) => {
             const itemStatus = statusOf(item);
             return (
-              <article key={item.id} className={`group relative overflow-hidden rounded-3xl border bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl dark:bg-slate-900 ${!managing && !item.is_read ? 'border-[#800000]/30 ring-1 ring-[#800000]/10 dark:border-red-400/30' : 'border-slate-200 dark:border-slate-700'}`}>
-                {!managing && !item.is_read && <span className="absolute right-5 top-5 h-2.5 w-2.5 rounded-full bg-[#800000] ring-4 ring-[#800000]/10" />}
+              <article key={item.id} className={`group relative overflow-hidden rounded-3xl border bg-white p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-xl dark:bg-slate-900 sm:p-6 ${!managing && !item.is_read ? 'border-[#7D001D]/30 ring-1 ring-[#7D001D]/10 dark:border-red-400/30' : 'border-slate-200 dark:border-slate-700'}`}>
+                {!managing && !item.is_read && <span className="absolute right-5 top-5 h-2.5 w-2.5 rounded-full bg-[#7D001D] ring-4 ring-[#7D001D]/10" />}
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${categoryStyles[item.category] || categoryStyles.general}`}>{item.category || 'general'}</span>
-                  {managing && <span className="rounded-full bg-[#800000]/8 px-3 py-1 text-xs font-bold text-[#800000] dark:bg-red-400/10 dark:text-red-300">{itemStatus}</span>}
+                  {managing && <span className="rounded-full bg-[#7D001D]/8 px-3 py-1 text-xs font-bold text-[#7D001D] dark:bg-red-400/10 dark:text-red-300">{itemStatus}</span>}
                   <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{item.target_audience.replaceAll('_', ' ')}</span>
                 </div>
                 <h2 className="mt-4 pr-5 text-xl font-black leading-snug text-slate-900 dark:text-white">{item.title}</h2>
@@ -362,7 +365,7 @@ export default function AnnouncementCenter({ managing = false }) {
                   {managing && <span className="inline-flex items-center gap-1.5"><EyeIcon className="h-4 w-4" />{item.readers_count || 0} reads</span>}
                 </div>
                 <div className="mt-5 flex flex-wrap gap-2">
-                  <button onClick={() => openItem(item)} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#650000]"><EyeIcon className="h-4 w-4" />Read</button>
+                  <button onClick={() => openItem(item)} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#650000]"><EyeIcon className="h-4 w-4" />Read</button>
                   {item.attachment_name && <button onClick={() => download(item)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"><ArrowDownTrayIcon className="h-4 w-4" />Attachment</button>}
                   {managing && (
                     <>
@@ -379,8 +382,8 @@ export default function AnnouncementCenter({ managing = false }) {
       )}
 
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={() => setSelected(null)}>
-          <article onMouseDown={(event) => event.stopPropagation()} className="max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-900 sm:p-8">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4" onMouseDown={() => setSelected(null)}>
+          <article role="dialog" aria-modal="true" aria-label={selected.title} onMouseDown={(event) => event.stopPropagation()} className="max-h-[calc(100dvh-1rem)] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-4 shadow-2xl dark:bg-slate-900 sm:max-h-[calc(100dvh-2rem)] sm:p-8">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${categoryStyles[selected.category] || categoryStyles.general}`}>{selected.category || 'general'}</span>
@@ -395,7 +398,7 @@ export default function AnnouncementCenter({ managing = false }) {
             </div>
             <p className="mt-7 whitespace-pre-line text-base leading-8 text-slate-700 dark:text-slate-200">{selected.content}</p>
             {selected.attachment_name && (
-              <button onClick={() => download(selected)} className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-[#800000] px-5 py-3 font-bold text-white">
+              <button onClick={() => download(selected)} className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-[#7D001D] px-5 py-3 font-bold text-white">
                 <ArrowDownTrayIcon className="h-5 w-5" /> Download {selected.attachment_name}
               </button>
             )}

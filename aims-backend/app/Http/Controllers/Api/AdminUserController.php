@@ -14,19 +14,28 @@ class AdminUserController extends Controller
 {
     public function index(Request $request)
     {
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'role' => ['nullable', Rule::in(['student', 'coordinator', 'program_head', 'vpaa', 'admin', 'supervisor'])],
+            'college_id' => ['nullable', 'integer', Rule::exists('colleges', 'id')],
+            'per_page' => ['nullable', 'integer', Rule::in([10, 15, 25, 50])],
+        ]);
+
         $users = User::with(['college:id,name,code', 'program:id,college_id,name,code'])
-            ->when($request->search, function ($query) use ($request) {
-                $query->where(function ($q) use ($request) {
-                    $q->where('name', 'like', '%'.$request->search.'%')
-                        ->orWhere('email', 'like', '%'.$request->search.'%')
-                        ->orWhere('staff_id', 'like', '%'.$request->search.'%');
+            ->when($filters['search'] ?? null, function ($query) use ($filters) {
+                $query->where(function ($q) use ($filters) {
+                    $q->where('name', 'like', '%'.$filters['search'].'%')
+                        ->orWhere('email', 'like', '%'.$filters['search'].'%')
+                        ->orWhere('staff_id', 'like', '%'.$filters['search'].'%');
                 });
             })
-            ->when($request->role, function ($query) use ($request) {
-                $query->where('role', $request->role);
+            ->when($filters['role'] ?? null, function ($query) use ($filters) {
+                $query->where('role', $filters['role']);
             })
+            ->when($filters['college_id'] ?? null, fn ($query) => $query->where('college_id', $filters['college_id']))
             ->latest()
-            ->paginate(15);
+            ->paginate($filters['per_page'] ?? 15)
+            ->withQueryString();
 
         return response()->json($users);
     }
@@ -36,7 +45,7 @@ class AdminUserController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8',
+            'password' => 'required|string|min:8|max:255',
             'role' => 'required|in:student,coordinator,program_head,vpaa,admin,supervisor',
             ...$this->assignmentRules($request),
         ]);
@@ -63,6 +72,14 @@ class AdminUserController extends Controller
 
     public function update(Request $request, User $user)
     {
+        abort_if(
+            $request->user()->is($user)
+            && $request->filled('role')
+            && $request->input('role') !== $user->role,
+            422,
+            'You cannot change the role of your current account.',
+        );
+
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email,'.$user->id,
@@ -85,15 +102,18 @@ class AdminUserController extends Controller
         ]);
     }
 
-    public function destroy(User $user)
+    public function destroy(Request $request, User $user)
     {
-        $user->delete();
+        abort_if($request->user()->is($user), 422, 'You cannot deactivate your current account.');
+        $user->update(['is_active' => false]);
+        $user->tokens()->delete();
 
-        return response()->json(['message' => 'User deleted successfully']);
+        return response()->json(['message' => 'User account deactivated. Related historical records were preserved.']);
     }
 
     public function updateRole(Request $request, User $user)
     {
+        abort_if($request->user()->is($user), 422, 'You cannot change the role of your current account.');
         $data = $request->validate([
             'role' => 'required|in:student,coordinator,program_head,vpaa,admin,supervisor',
             ...$this->assignmentRules($request, $user),
@@ -111,9 +131,13 @@ class AdminUserController extends Controller
         ]);
     }
 
-    public function toggleStatus(User $user)
+    public function toggleStatus(Request $request, User $user)
     {
+        abort_if($request->user()->is($user), 422, 'You cannot change the status of your current account.');
         $user->update(['is_active' => ! $user->is_active]);
+        if (! $user->is_active) {
+            $user->tokens()->delete();
+        }
 
         return response()->json([
             'message' => 'User status updated successfully',
@@ -124,10 +148,11 @@ class AdminUserController extends Controller
     public function resetPassword(Request $request, User $user)
     {
         $request->validate([
-            'password' => 'required|string|min:8',
+            'password' => 'required|string|min:8|max:255',
         ]);
 
         $user->update(['password' => Hash::make($request->password)]);
+        $user->tokens()->delete();
 
         return response()->json(['message' => 'Password reset successfully']);
     }

@@ -5,12 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Student;
+use App\Support\ReverseGeocoder;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
-use Throwable;
 
 class StudentAttendanceController extends Controller
 {
@@ -313,7 +312,7 @@ class StudentAttendanceController extends Controller
         $location = [
             'latitude' => (float) $validated['latitude'],
             'longitude' => (float) $validated['longitude'],
-            'address' => $this->reverseGeocode(
+            'address' => ReverseGeocoder::describe(
                 (float) $validated['latitude'],
                 (float) $validated['longitude'],
             ),
@@ -675,28 +674,6 @@ class StudentAttendanceController extends Controller
             'pm_time_in' => 'Time In (PM)',
             'pm_time_out' => 'Time Out (PM)',
         };
-    }
-
-    private function reverseGeocode(float $latitude, float $longitude): string
-    {
-        try {
-            $response = Http::withHeaders([
-                'User-Agent' => 'AIMS-MarSU/1.0 (info@marsu.edu.ph)',
-            ])->timeout(3)->get('https://nominatim.openstreetmap.org/reverse', [
-                'format' => 'jsonv2',
-                'lat' => $latitude,
-                'lon' => $longitude,
-                'zoom' => 18,
-            ]);
-
-            if ($response->successful() && $response->json('display_name')) {
-                return $response->json('display_name');
-            }
-        } catch (Throwable) {
-            // Coordinates remain available when reverse geocoding is offline.
-        }
-
-        return sprintf('Coordinates %.6f, %.6f', $latitude, $longitude);
     }
 
     private function calculateDistance($lat1, $lon1, $lat2, $lon2)

@@ -45,8 +45,8 @@ class StudentRequirementController extends Controller
         $extension = $file->getClientOriginalExtension();
         $fileType = in_array($extension, ['pdf']) ? 'pdf' : (in_array($extension, ['jpg', 'jpeg', 'png']) ? 'image' : 'document');
 
-        $oldPath = $this->publicStoragePath($requirement->file_path);
-        $path = $file->store('requirements/'.$student->id, 'public');
+        $oldPath = $this->privateStoragePath($requirement->file_path);
+        $path = $file->store('requirements/'.$student->id, 'local');
 
         $requirement->update([
             'file_path' => $path,
@@ -58,7 +58,7 @@ class StudentRequirementController extends Controller
         ]);
 
         if ($oldPath && $oldPath !== $path) {
-            $this->publicDisk()->delete($oldPath);
+            $this->privateDisk()->delete($oldPath);
         }
 
         return response()->json([
@@ -75,11 +75,11 @@ class StudentRequirementController extends Controller
             ->where('student_id', $student->id)
             ->first();
 
-        $path = $this->publicStoragePath($requirement?->file_path);
-        if (! $requirement || ! $path || ! $this->publicDisk()->exists($path)) {
+        $path = $this->privateStoragePath($requirement?->file_path);
+        if (! $requirement || ! $path || ! $this->privateDisk()->exists($path)) {
             return response()->json(['message' => 'File not found'], 404);
         }
 
-        return $this->publicDisk()->download($path);
+        return $this->privateDisk()->download($path);
     }
 }

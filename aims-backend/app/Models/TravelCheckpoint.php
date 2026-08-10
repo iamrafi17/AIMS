@@ -13,9 +13,13 @@ class TravelCheckpoint extends Model
         'travel_log_id',
         'sequence',
         'checkpoint_name',
-        'expected_at',
+        'point_type',
+        'is_final_destination',
+        'captured_at',
+        'captured_by',
         'latitude',
         'longitude',
+        'readable_location',
         'photo_path',
         'notes',
         'is_verified',
@@ -28,7 +32,8 @@ class TravelCheckpoint extends Model
         return [
             'latitude' => 'decimal:8',
             'longitude' => 'decimal:8',
-            'expected_at' => 'datetime',
+            'captured_at' => 'datetime',
+            'is_final_destination' => 'boolean',
             'is_verified' => 'boolean',
             'verified_at' => 'datetime',
         ];
@@ -42,5 +47,10 @@ class TravelCheckpoint extends Model
     public function verifier()
     {
         return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    public function capturer()
+    {
+        return $this->belongsTo(User::class, 'captured_by');
     }
 }

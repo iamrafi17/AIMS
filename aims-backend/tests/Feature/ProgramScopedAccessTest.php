@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Attendance;
 use App\Models\College;
+use App\Models\HTE;
 use App\Models\InternshipRequirement;
 use App\Models\Program;
 use App\Models\Student;
@@ -59,6 +60,49 @@ class ProgramScopedAccessTest extends TestCase
         $this->putJson('/api/coordinator/attendance/'.$otherAttendance->id.'/verify', [
             'verified' => true,
         ])->assertNotFound();
+    }
+
+    public function test_coordinator_cannot_assign_a_student_to_another_programs_hte(): void
+    {
+        [$college, $bsis, $bsit] = $this->academicContext();
+        $coordinator = User::factory()->create([
+            'role' => 'coordinator',
+            'college_id' => $college->id,
+            'program_id' => $bsis->id,
+        ]);
+        $student = $this->student($college, $bsis, '2026-BSIS-03');
+        $otherHte = HTE::create([
+            'college_id' => $college->id,
+            'program_id' => $bsit->id,
+            'name' => 'BSIT Partner',
+            'address' => 'Santa Cruz, Marinduque',
+            'contact_person' => 'Supervisor',
+            'contact_email' => 'supervisor@example.com',
+            'contact_phone' => '09170000001',
+            'is_active' => true,
+        ]);
+        Sanctum::actingAs($coordinator);
+
+        $this->putJson("/api/coordinator/students/{$student->id}", [
+            'student_id' => $student->student_id,
+            'first_name' => $student->first_name,
+            'last_name' => $student->last_name,
+            'email' => $student->user->email,
+            'gender' => $student->gender,
+            'birth_date' => $student->birth_date->toDateString(),
+            'address' => $student->address,
+            'phone' => $student->phone,
+            'college_id' => $college->id,
+            'program_id' => $bsis->id,
+            'year_level' => $student->year_level,
+            'section' => $student->section,
+            'parent_name' => $student->parent_name,
+            'parent_address' => $student->parent_address,
+            'parent_phone' => $student->parent_phone,
+            'hte_id' => $otherHte->id,
+        ])->assertUnprocessable()->assertJsonValidationErrors('hte_id');
+
+        $this->assertNull($student->fresh()->hte_id);
     }
 
     public function test_program_head_only_sees_and_reviews_documents_from_the_assigned_program(): void

@@ -20,7 +20,7 @@ class VPAAApprovalManagementTest extends TestCase
 
     public function test_program_head_endorsement_can_be_reviewed_and_tracked_by_vpaa(): void
     {
-        Storage::fake('public');
+        Storage::fake('local');
         [$student] = $this->studentContext();
         $programHead = User::factory()->create([
             'role' => 'program_head',
@@ -28,7 +28,7 @@ class VPAAApprovalManagementTest extends TestCase
             'program_id' => $student->program_id,
         ]);
         $vpaa = User::factory()->create(['role' => 'vpaa']);
-        Storage::disk('public')->put('requirements/endorsed.pdf', 'endorsed document');
+        Storage::disk('local')->put('requirements/endorsed.pdf', 'endorsed document');
 
         $requirement = InternshipRequirement::create([
             'student_id' => $student->id,

@@ -11,11 +11,11 @@ use App\Http\Controllers\Api\CoordinatorHTEController;
 use App\Http\Controllers\Api\CoordinatorRequirementController;
 use App\Http\Controllers\Api\CoordinatorStudentController;
 use App\Http\Controllers\Api\CoordinatorTravelController;
+use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramHeadDocumentController;
 use App\Http\Controllers\Api\ProgramHeadTravelController;
 use App\Http\Controllers\Api\StudentAttendanceController;
 use App\Http\Controllers\Api\StudentRequirementController;
-use App\Http\Controllers\Api\StudentTravelController;
 use App\Http\Controllers\Api\SupervisorManagementController;
 use App\Http\Controllers\Api\VPAAApprovalController;
 use App\Http\Controllers\Api\VPAAMOAController;
@@ -47,31 +47,30 @@ class RecordActivityLog
     {
         return match ($request->route()?->getActionName()) {
             AuthController::class.'@logout' => ['Authentication', 'Logged out.'],
-            AuthController::class.'@updateProfile',
-            AuthController::class.'@updateAccountInformation',
-            AuthController::class.'@updateProfileInformation',
-            AuthController::class.'@updateContactInformation',
-            AuthController::class.'@changePassword',
-            AuthController::class.'@uploadAvatar',
-            AuthController::class.'@removeAvatar' => ['Profile', 'Updated profile.'],
+            ProfileController::class.'@update',
+            ProfileController::class.'@updateAccount',
+            ProfileController::class.'@updateStudentInformation',
+            ProfileController::class.'@updateContact',
+            ProfileController::class.'@changePassword',
+            ProfileController::class.'@uploadAvatar',
+            ProfileController::class.'@removeAvatar' => ['Profile', 'Updated profile.'],
 
             StudentAttendanceController::class.'@saveEntry' => ['Accomplishment Report', 'Submitted accomplishment report.'],
             StudentAttendanceController::class.'@smartLog' => $this->smartClockActivity($request, $response),
             StudentAttendanceController::class.'@clockIn' => ['Time In', 'Recorded time in.'],
             StudentAttendanceController::class.'@clockOut' => ['Time Out', 'Recorded time out.'],
             StudentRequirementController::class.'@upload' => ['Internship Requirement', 'Uploaded an internship requirement.'],
-            StudentTravelController::class.'@start' => ['Travel', 'Started a travel session.'],
-            StudentTravelController::class.'@checkpoint' => ['Travel', 'Recorded a travel checkpoint.'],
-            StudentTravelController::class.'@end' => ['Travel', 'Completed a travel session.'],
-
             CoordinatorAttendanceController::class.'@update' => ['Attendance Review', 'Updated a student attendance record.'],
             CoordinatorAttendanceController::class.'@verify' => ['Attendance Review', 'Reviewed student attendance.'],
             CoordinatorAttendanceController::class.'@reviewJournal' => ['Attendance Review', 'Reviewed a student accomplishment report.'],
             CoordinatorHTEController::class.'@store' => ['HTE Management', 'Added an HTE.'],
             CoordinatorHTEController::class.'@update' => ['HTE Management', 'Updated an HTE.'],
+            CoordinatorHTEController::class.'@destroy' => ['HTE Management', 'Deactivated an HTE.'],
             CoordinatorHTEController::class.'@deploy' => ['Student Assignment', 'Assigned a student to an HTE.'],
             CoordinatorStudentController::class.'@store' => ['Student Management', 'Added a student record.'],
             CoordinatorStudentController::class.'@update' => ['Student Management', 'Updated student information.'],
+            CoordinatorStudentController::class.'@destroy',
+            CoordinatorStudentController::class.'@deactivate' => ['Student Management', 'Deactivated a student record.'],
             CoordinatorStudentController::class.'@approveRegistration' => ['Registration', 'Approved a student registration.'],
             CoordinatorStudentController::class.'@rejectRegistration' => ['Registration', 'Rejected a student registration.'],
             CoordinatorStudentController::class.'@reviewRequirement' => [
@@ -82,12 +81,15 @@ class RecordActivityLog
             CoordinatorRequirementController::class.'@update',
             CoordinatorRequirementController::class.'@reorder',
             CoordinatorRequirementController::class.'@destroy' => ['Requirement Management', 'Updated the internship requirement checklist.'],
-            CoordinatorTravelController::class.'@store' => ['Travel Management', 'Created a student travel session.'],
-            CoordinatorTravelController::class.'@update' => ['Travel Management', 'Updated a student travel session.'],
+            CoordinatorTravelController::class.'@startTravel' => ['Travel Monitoring', 'Started a coordinator travel session.'],
+            CoordinatorTravelController::class.'@departure' => ['Travel Monitoring', 'Captured a travel departure point.'],
+            CoordinatorTravelController::class.'@arrival' => ['Travel Monitoring', 'Recorded travel arrival.'],
+            CoordinatorTravelController::class.'@uploadArrivalPhoto' => ['Travel Monitoring', 'Uploaded travel arrival evidence.'],
+            CoordinatorTravelController::class.'@endTravel' => ['Travel Monitoring', 'Completed a coordinator travel session.'],
             CoordinatorTravelController::class.'@cancel' => ['Travel Management', 'Cancelled a student travel session.'],
 
             ProgramHeadDocumentController::class.'@downloadRequirement',
-            ProgramHeadDocumentController::class.'@downloadMoa' => ['Document Review', 'Reviewed a document.'],
+            ProgramHeadDocumentController::class.'@downloadMoa' => ['Document Access', 'Downloaded a protected document.'],
             ProgramHeadDocumentController::class.'@reviewRequirement' => [
                 'Document Decision',
                 ucfirst((string) $request->input('decision')).' a document.',
@@ -116,7 +118,7 @@ class RecordActivityLog
 
             AdminUserController::class.'@store' => ['User Management', 'Created a user account.'],
             AdminUserController::class.'@update' => ['User Management', 'Updated a user account.'],
-            AdminUserController::class.'@destroy' => ['User Management', 'Deleted a user account.'],
+            AdminUserController::class.'@destroy' => ['User Management', 'Deactivated a user account.'],
             AdminUserController::class.'@updateRole' => ['Roles and Permissions', 'Updated roles or permissions.'],
             AdminUserController::class.'@toggleStatus' => $this->userStatusActivity($request),
             AdminUserController::class.'@resetPassword' => ['User Management', 'Reset a user account password.'],

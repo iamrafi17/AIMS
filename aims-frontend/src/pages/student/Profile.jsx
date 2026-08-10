@@ -22,7 +22,7 @@ import UserAvatar from '../../components/UserAvatar';
 import useAuth from '../../context/useAuth';
 import api from '../../services/api';
 
-const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-[#800000]/45 focus:ring-4 focus:ring-[#800000]/8 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-700 dark:disabled:text-gray-400';
+const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-700 dark:disabled:text-gray-400';
 
 function Field({ label, icon: Icon, children, className = '' }) {
   return (
@@ -46,14 +46,14 @@ function SectionHeader({ icon: Icon, title, description, editing, onEdit, onCanc
   return (
     <div className="mb-6 flex flex-col justify-between gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center dark:border-gray-700">
       <div className="flex items-start gap-3">
-        <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#800000]/8 text-[#800000] dark:bg-rose-950 dark:text-rose-300"><Icon className="size-5" /></div>
+        <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#7D001D]/8 text-[#7D001D] dark:bg-rose-950 dark:text-rose-300"><Icon className="size-5" /></div>
         <div>
-          <h2 className="font-black text-[#430909] dark:text-white">{title}</h2>
+          <h2 className="font-black text-[#690016] dark:text-white">{title}</h2>
           <p className="mt-1 text-xs leading-5 text-slate-400">{description}</p>
         </div>
       </div>
       {onEdit && (
-        <button type="button" onClick={editing ? onCancel : onEdit} className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-[#800000] transition hover:bg-[#800000]/5 sm:self-auto dark:border-gray-600 dark:text-rose-300">
+        <button type="button" onClick={editing ? onCancel : onEdit} className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-[#7D001D] transition hover:bg-[#7D001D]/5 sm:self-auto dark:border-gray-600 dark:text-rose-300">
           {editing ? <><XMarkIcon className="size-4" /> Cancel</> : <><PencilSquareIcon className="size-4" /> Edit</>}
         </button>
       )}
@@ -181,7 +181,7 @@ function StudentProfile() {
     <div className="space-y-6">
       <div>
         <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Account settings</p>
-        <h1 className="mt-1 text-2xl font-black text-[#430909] dark:text-white">My Profile</h1>
+        <h1 className="mt-1 text-2xl font-black text-[#690016] dark:text-white">My Profile</h1>
         <p className="mt-1 text-sm text-slate-400">Manage your personal details, contact information, profile photo, and password.</p>
       </div>
 
@@ -190,16 +190,16 @@ function StudentProfile() {
           <div className="text-center">
             <div className="relative mx-auto w-fit">
               <UserAvatar user={user} className="size-32" textClassName="text-4xl" />
-              <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="absolute bottom-1 right-1 grid size-11 place-items-center rounded-full border-4 border-white bg-[#800000] text-white shadow-lg transition hover:bg-[#5c0000] disabled:opacity-60 dark:border-gray-800" aria-label="Upload profile photo">
+              <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="absolute bottom-1 right-1 grid size-11 place-items-center rounded-full border-4 border-white bg-[#7D001D] text-white shadow-lg transition hover:bg-[#5c0000] disabled:opacity-60 dark:border-gray-800" aria-label="Upload profile photo">
                 {uploading ? <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <PlusCircleIcon className="size-5" />}
               </button>
               <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhoto} className="hidden" />
             </div>
             <h2 className="mt-5 text-xl font-black text-gray-800 dark:text-white">{user?.name}</h2>
             <p className="mt-1 break-all text-sm text-gray-500 dark:text-gray-400">{user?.email}</p>
-            <span className="mt-3 inline-flex rounded-full bg-[#800000]/8 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-[#800000] dark:bg-rose-950 dark:text-rose-300">Student Intern</span>
+            <span className="mt-3 inline-flex rounded-full bg-[#7D001D]/8 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-[#7D001D] dark:bg-rose-950 dark:text-rose-300">Student Intern</span>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-4 py-2.5 text-xs font-black text-white disabled:opacity-60"><PlusIcon className="size-4" /> {user?.avatar_url ? 'Change Photo' : 'Upload Photo'}</button>
+              <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-4 py-2.5 text-xs font-black text-white disabled:opacity-60"><PlusIcon className="size-4" /> {user?.avatar_url ? 'Change Photo' : 'Upload Photo'}</button>
               {user?.avatar_url && <button type="button" onClick={removePhoto} disabled={removing} className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-2.5 text-xs font-black text-rose-600 hover:bg-rose-50 disabled:opacity-60 dark:border-rose-900 dark:hover:bg-rose-950"><TrashIcon className="size-4" /> Remove</button>}
             </div>
             <p className="mt-3 text-[11px] text-gray-400">JPG, PNG, or WebP · maximum 5 MB</p>
@@ -234,7 +234,7 @@ function StudentProfile() {
                 <Field label="Birth Date" icon={CalendarDaysIcon}><input type="date" className={inputClass} value={personal.birth_date} onChange={(event) => setPersonal((current) => ({ ...current, birth_date: event.target.value }))} disabled={!editingPersonal} required /></Field>
                 <Field label="Student ID" icon={IdentificationIcon}><input className={inputClass} value={student?.student_id || ''} disabled /></Field>
               </div>
-              {editingPersonal && <div className="mt-6 flex justify-end"><button type="submit" disabled={savingSection === 'personal'} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-60"><CheckIcon className="size-4" /> {savingSection === 'personal' ? 'Saving...' : 'Save Profile Information'}</button></div>}
+              {editingPersonal && <div className="mt-6 flex justify-end"><button type="submit" disabled={savingSection === 'personal'} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-60"><CheckIcon className="size-4" /> {savingSection === 'personal' ? 'Saving...' : 'Save Profile Information'}</button></div>}
             </form>
           </section>
 
@@ -246,7 +246,7 @@ function StudentProfile() {
                 <Field label="Contact Number" icon={PhoneIcon}><input type="tel" className={inputClass} value={contact.phone} onChange={(event) => setContact((current) => ({ ...current, phone: event.target.value }))} disabled={!editingContact} required /></Field>
                 <Field label="Present Address" icon={MapPinIcon} className="md:col-span-2"><textarea rows="3" className={`${inputClass} resize-none`} value={contact.address} onChange={(event) => setContact((current) => ({ ...current, address: event.target.value }))} disabled={!editingContact} required /></Field>
               </div>
-              {editingContact && <div className="mt-6 flex justify-end"><button type="submit" disabled={savingSection === 'contact'} className="inline-flex items-center gap-2 rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-60"><CheckIcon className="size-4" /> {savingSection === 'contact' ? 'Saving...' : 'Save Contact Information'}</button></div>}
+              {editingContact && <div className="mt-6 flex justify-end"><button type="submit" disabled={savingSection === 'contact'} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-60"><CheckIcon className="size-4" /> {savingSection === 'contact' ? 'Saving...' : 'Save Contact Information'}</button></div>}
             </form>
           </section>
 
@@ -262,7 +262,7 @@ function StudentProfile() {
                   <Field key={name} label={label} icon={KeyIcon}>
                     <div className="relative">
                       <input type={showPasswords ? 'text' : 'password'} className={`${inputClass} pr-11`} value={passwords[name]} onChange={(event) => setPasswords((current) => ({ ...current, [name]: event.target.value }))} minLength={name === 'current_password' ? undefined : 8} autoComplete={name === 'current_password' ? 'current-password' : 'new-password'} required />
-                      <button type="button" onClick={() => setShowPasswords((visible) => !visible)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:text-[#800000]" aria-label={showPasswords ? 'Hide passwords' : 'Show passwords'}>
+                      <button type="button" onClick={() => setShowPasswords((visible) => !visible)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:text-[#7D001D]" aria-label={showPasswords ? 'Hide passwords' : 'Show passwords'}>
                         {showPasswords ? <EyeSlashIcon className="size-5" /> : <EyeIcon className="size-5" />}
                       </button>
                     </div>
@@ -271,7 +271,7 @@ function StudentProfile() {
               </div>
               <div className="mt-4 flex flex-col justify-between gap-4 rounded-xl bg-slate-50 p-4 sm:flex-row sm:items-center dark:bg-gray-900/60">
                 <p className="text-xs leading-5 text-slate-500 dark:text-gray-400">Use at least 8 characters. Your new password must differ from your current password.</p>
-                <button type="submit" disabled={savingSection === 'password'} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#800000] px-5 py-3 text-sm font-black text-white disabled:opacity-60"><KeyIcon className="size-4" /> {savingSection === 'password' ? 'Changing...' : 'Change Password'}</button>
+                <button type="submit" disabled={savingSection === 'password'} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-60"><KeyIcon className="size-4" /> {savingSection === 'password' ? 'Changing...' : 'Change Password'}</button>
               </div>
             </form>
           </section>

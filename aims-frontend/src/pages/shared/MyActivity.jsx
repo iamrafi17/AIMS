@@ -55,7 +55,7 @@ export default function MyActivity() {
       ) : error ? (
         <section className="rounded-3xl border border-rose-200 bg-rose-50 p-8 text-center dark:border-rose-900/60 dark:bg-rose-950/30">
           <p className="font-bold text-rose-700 dark:text-rose-300">{error}</p>
-          <button type="button" onClick={load} className="mt-4 rounded-xl bg-[#800000] px-5 py-2.5 text-sm font-black text-white">
+          <button type="button" onClick={load} className="mt-4 rounded-xl bg-[#7D001D] px-5 py-2.5 text-sm font-black text-white">
             Try again
           </button>
         </section>
@@ -87,7 +87,7 @@ export default function MyActivity() {
                         </span>
                       </td>
                       <td className="px-6 py-5">
-                        <span className="inline-flex rounded-full bg-[#800000]/10 px-3 py-1 text-xs font-black text-[#800000] dark:bg-red-400/10 dark:text-red-300">
+                        <span className="inline-flex rounded-full bg-[#7D001D]/10 px-3 py-1 text-xs font-black text-[#7D001D] dark:bg-red-400/10 dark:text-red-300">
                           {log.activity_type}
                         </span>
                       </td>

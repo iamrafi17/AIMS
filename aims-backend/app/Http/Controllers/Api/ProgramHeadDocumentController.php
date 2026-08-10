@@ -96,12 +96,12 @@ class ProgramHeadDocumentController extends Controller
     public function downloadRequirement(Request $request, InternshipRequirement $requirement)
     {
         ProgramAccess::authorizeRequirement($request->user(), $requirement);
-        $path = $this->publicStoragePath($requirement->file_path);
-        if (! $path || ! $this->publicDisk()->exists($path)) {
+        $path = $this->privateStoragePath($requirement->file_path);
+        if (! $path || ! $this->privateDisk()->exists($path)) {
             return response()->json(['message' => 'Requirement file not found.'], 404);
         }
 
-        return $this->publicDisk()->download($path);
+        return $this->privateDisk()->download($path);
     }
 
     public function reviewMoa(Request $request, MOA $moa)
@@ -134,12 +134,12 @@ class ProgramHeadDocumentController extends Controller
     public function downloadMoa(Request $request, MOA $moa)
     {
         ProgramAccess::authorizeMoa($request->user(), $moa);
-        $path = $this->publicStoragePath($moa->file_path);
-        if (! $path || ! $this->publicDisk()->exists($path)) {
+        $path = $this->privateStoragePath($moa->file_path);
+        if (! $path || ! $this->privateDisk()->exists($path)) {
             return response()->json(['message' => 'MOA file not found.'], 404);
         }
 
-        return $this->publicDisk()->download($path);
+        return $this->privateDisk()->download($path);
     }
 
     private function requirementPayload(InternshipRequirement $requirement): array

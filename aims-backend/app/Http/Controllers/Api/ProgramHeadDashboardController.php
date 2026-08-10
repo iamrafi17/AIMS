@@ -29,7 +29,7 @@ class ProgramHeadDashboardController extends Controller
             ->get();
         $monthTravel = TravelLog::whereMonth('start_time', now()->month)
             ->whereYear('start_time', now()->year)
-            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('participants', fn ($query) => $query->where('program_id', $programId))
             ->get();
 
         $present = $monthAttendance->where('status', 'present')->count();
@@ -136,7 +136,7 @@ class ProgramHeadDashboardController extends Controller
             ],
             'travel' => [
                 'active' => TravelLog::where('status', 'active')
-                    ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+                    ->whereHas('participants', fn ($query) => $query->where('program_id', $programId))
                     ->count(),
                 'total_this_month' => $monthTravel->count(),
                 'completed_this_month' => $monthTravel->where('status', 'completed')->count(),

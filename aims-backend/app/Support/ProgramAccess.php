@@ -64,14 +64,21 @@ final class ProgramAccess
 
     public static function authorizeTravel(User $user, TravelLog $travel): void
     {
-        $travel->loadMissing('student:id,program_id');
-        abort_unless((int) $travel->student?->program_id === self::programId($user), 404);
+        $programId = self::programId($user);
+        $travel->loadMissing('hte:id,program_id');
+
+        abort_unless(
+            (int) $travel->hte?->program_id === $programId
+            && $travel->participants()->where('program_id', $programId)->exists(),
+            404,
+        );
     }
 
     public static function authorizeCheckpoint(User $user, TravelCheckpoint $checkpoint): void
     {
-        $checkpoint->loadMissing('travelLog.student:id,program_id');
-        abort_unless((int) $checkpoint->travelLog?->student?->program_id === self::programId($user), 404);
+        $checkpoint->loadMissing('travelLog');
+        abort_unless($checkpoint->travelLog, 404);
+        self::authorizeTravel($user, $checkpoint->travelLog);
     }
 
     public static function authorizeHte(User $user, HTE $hte): void

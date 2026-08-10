@@ -55,10 +55,10 @@ class CoordinatorDashboardController extends Controller
 
         $monthTravel = TravelLog::whereMonth('start_time', now()->month)
             ->whereYear('start_time', now()->year)
-            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('participants', fn ($query) => $query->where('program_id', $programId))
             ->get();
         $activeTravel = TravelLog::where('status', 'active')
-            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('participants', fn ($query) => $query->where('program_id', $programId))
             ->count();
 
         $activeInterns = Student::with(['college', 'program', 'hte', 'attendance', 'requirements.definition'])

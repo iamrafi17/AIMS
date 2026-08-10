@@ -150,12 +150,12 @@ class VPAAApprovalController extends Controller
         }
 
         $requirement = InternshipRequirement::findOrFail($approval->subject_id);
-        $path = $this->publicStoragePath($requirement->file_path);
-        if (! $path || ! $this->publicDisk()->exists($path)) {
+        $path = $this->privateStoragePath($requirement->file_path);
+        if (! $path || ! $this->privateDisk()->exists($path)) {
             return response()->json(['message' => 'Endorsed document file not found.'], 404);
         }
 
-        return $this->publicDisk()->download($path);
+        return $this->privateDisk()->download($path);
     }
 
     private function documentPayload(ApprovalRecord $approval, InternshipRequirement $requirement): array

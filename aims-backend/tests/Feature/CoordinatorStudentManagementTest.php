@@ -19,7 +19,7 @@ class CoordinatorStudentManagementTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_coordinator_can_update_review_and_delete_a_registered_student(): void
+    public function test_coordinator_can_update_review_and_deactivate_a_registered_student_without_deleting_history(): void
     {
         [$coordinator, $college, $program, $hte] = $this->managementContext();
         Sanctum::actingAs($coordinator);
@@ -49,8 +49,14 @@ class CoordinatorStudentManagementTest extends TestCase
         $this->deleteJson('/api/coordinator/students/'.$student->id)
             ->assertOk();
 
-        $this->assertDatabaseMissing('students', ['id' => $student->id]);
-        $this->assertDatabaseMissing('users', ['id' => $userId]);
+        $this->assertDatabaseHas('students', [
+            'id' => $student->id,
+            'internship_status' => 'dropped',
+        ]);
+        $this->assertDatabaseHas('users', [
+            'id' => $userId,
+            'is_active' => false,
+        ]);
     }
 
     public function test_coordinator_can_manually_add_an_ojt_enrollment_without_credentials(): void

@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   CheckCircleIcon,
-  ExclamationTriangleIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  EyeIcon,
+  EyeSlashIcon,
   KeyIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
   PowerIcon,
   ShieldCheckIcon,
-  TrashIcon,
   UserGroupIcon,
   UsersIcon,
   XCircleIcon,
@@ -23,6 +25,7 @@ import { EmptyPanel, LoadingPanel, MetricCard, PageIntro } from '../../component
 const roles = ['student', 'coordinator', 'program_head', 'vpaa', 'admin', 'supervisor'];
 const staffRoles = ['coordinator', 'program_head', 'vpaa', 'supervisor'];
 const programScopedRoles = ['coordinator', 'program_head'];
+const pageSizeOptions = [10, 15, 25, 50];
 
 function roleLabel(role = '') {
   return role.replaceAll('_', ' ');
@@ -56,6 +59,7 @@ function UserModal({ item, onClose, onSaved }) {
       });
   const [colleges, setColleges] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [showTemporaryPassword, setShowTemporaryPassword] = useState(false);
   const programScoped = programScopedRoles.includes(form.role);
   const hasStaffId = staffRoles.includes(form.role);
   const programs = colleges.find((college) => String(college.id) === String(form.college_id))?.programs || [];
@@ -108,16 +112,19 @@ function UserModal({ item, onClose, onSaved }) {
     }
   };
 
-  const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-[#800000] focus:ring-4 focus:ring-[#800000]/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white';
+  const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4" onMouseDown={onClose}>
       <form
+        role="dialog"
+        aria-modal="true"
+        aria-label={item ? 'Update user account' : 'Create staff account'}
         onSubmit={submit}
         onMouseDown={(event) => event.stopPropagation()}
-        className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl dark:bg-slate-900"
+        className="max-h-[calc(100dvh-1rem)] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl dark:bg-slate-900 sm:max-h-[calc(100dvh-2rem)]"
       >
-        <div className="flex items-start justify-between border-b border-slate-200 p-6 dark:border-slate-700">
+        <div className="flex items-start justify-between border-b border-slate-200 p-4 dark:border-slate-700 sm:p-6">
           <div>
             <p className="text-xs font-black uppercase tracking-widest text-[#a8750b]">
               {item ? 'Account information and access' : 'Program-scoped access control'}
@@ -132,7 +139,7 @@ function UserModal({ item, onClose, onSaved }) {
           </button>
         </div>
 
-        <div className="space-y-5 p-6">
+        <div className="space-y-5 p-4 sm:p-6">
           <div className="grid gap-5 sm:grid-cols-2">
             <label className="block">
               <span className="mb-2 block text-sm font-bold">Full name</span>
@@ -218,14 +225,25 @@ function UserModal({ item, onClose, onSaved }) {
           {!item && (
             <label className="block">
               <span className="mb-2 block text-sm font-bold">Temporary password</span>
-              <input
-                required
-                minLength="8"
-                type="password"
-                value={form.password}
-                onChange={(event) => setForm({ ...form, password: event.target.value })}
-                className={inputClass}
-              />
+              <div className="relative">
+                <input
+                  required
+                  minLength="8"
+                  type={showTemporaryPassword ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={(event) => setForm({ ...form, password: event.target.value })}
+                  className={`${inputClass} pr-12`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowTemporaryPassword((visible) => !visible)}
+                  className="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-[#7D001D] focus:outline-none focus:ring-2 focus:ring-[#7D001D]/30 dark:hover:bg-slate-800"
+                  aria-label={showTemporaryPassword ? 'Hide temporary password' : 'Show temporary password'}
+                  title={showTemporaryPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showTemporaryPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                </button>
+              </div>
               <span className="mt-1 block text-xs text-slate-500">Use at least 8 characters. The user can change it from Profile.</span>
             </label>
           )}
@@ -239,7 +257,7 @@ function UserModal({ item, onClose, onSaved }) {
           <button type="button" onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold dark:border-slate-700">
             Cancel
           </button>
-          <button disabled={saving} className="rounded-2xl bg-[#800000] px-6 py-3 font-bold text-white disabled:opacity-50">
+          <button disabled={saving} className="rounded-2xl bg-[#7D001D] px-6 py-3 font-bold text-white disabled:opacity-50">
             {saving ? 'Saving...' : item ? 'Update account' : 'Create account'}
           </button>
         </div>
@@ -248,24 +266,20 @@ function UserModal({ item, onClose, onSaved }) {
   );
 }
 
-function AccountActionModal({ user, action, onClose, onCompleted }) {
+function AccountActionModal({ user, onClose, onCompleted }) {
   const [busy, setBusy] = useState(false);
-  const [confirmation, setConfirmation] = useState('');
-  const deleting = action === 'delete';
-  const deactivating = action === 'status' && user.is_active;
-  const actionLabel = deleting ? 'Delete permanently' : deactivating ? 'Deactivate account' : 'Activate account';
+  const deactivating = user.is_active;
+  const actionLabel = deactivating ? 'Deactivate account' : 'Activate account';
 
   const confirm = async () => {
     setBusy(true);
 
     try {
-      const response = deleting
-        ? await api.delete(`/admin/users/${user.id}`)
-        : await api.put(`/admin/users/${user.id}/status`);
+      const response = await api.put(`/admin/users/${user.id}/status`);
       toast.success(response.data.message);
       onCompleted();
     } catch (error) {
-      toast.error(error.response?.data?.message || `Unable to ${deleting ? 'delete' : 'update'} this account.`);
+      toast.error(error.response?.data?.message || 'Unable to update this account.');
     } finally {
       setBusy(false);
     }
@@ -280,20 +294,18 @@ function AccountActionModal({ user, action, onClose, onCompleted }) {
         onMouseDown={(event) => event.stopPropagation()}
         className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900"
       >
-        <div className={`p-6 ${deleting ? 'bg-rose-50 dark:bg-rose-950/30' : deactivating ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-emerald-50 dark:bg-emerald-950/30'}`}>
+        <div className={`p-6 ${deactivating ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-emerald-50 dark:bg-emerald-950/30'}`}>
           <div className="flex items-start gap-4">
-            <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${deleting ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300' : deactivating ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'}`}>
-              {deleting ? <TrashIcon className="h-6 w-6" /> : <PowerIcon className="h-6 w-6" />}
+            <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${deactivating ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'}`}>
+              <PowerIcon className="h-6 w-6" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs font-black uppercase tracking-widest text-slate-500">Account access confirmation</p>
               <h2 id="account-action-title" className="mt-1 text-2xl font-black">{actionLabel}</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                {deleting
-                  ? 'This permanently removes the account and cannot be undone from User Management.'
-                  : deactivating
-                    ? 'The user will no longer be able to sign in. Their account and related records will remain available.'
-                    : 'The user will regain access and can sign in using their existing credentials.'}
+                {deactivating
+                  ? 'The user will no longer be able to sign in. Their account and related records will remain available.'
+                  : 'The user will regain access and can sign in using their existing credentials.'}
               </p>
             </div>
             <button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-500 hover:bg-white/70 dark:hover:bg-slate-800" aria-label="Close confirmation">
@@ -308,24 +320,10 @@ function AccountActionModal({ user, action, onClose, onCompleted }) {
             <div className="min-w-0">
               <p className="truncate font-black">{user.name}</p>
               <p className="truncate text-sm text-slate-500">{user.email}</p>
-              <p className="mt-0.5 text-xs font-bold capitalize text-[#800000] dark:text-red-300">{roleLabel(user.role)}</p>
+              <p className="mt-0.5 text-xs font-bold capitalize text-[#7D001D] dark:text-red-300">{roleLabel(user.role)}</p>
             </div>
           </div>
 
-          {deleting && (
-            <label className="block">
-              <span className="mb-2 flex items-center gap-2 text-sm font-bold text-rose-700 dark:text-rose-300">
-                <ExclamationTriangleIcon className="h-5 w-5" />
-                Type DELETE to confirm permanent removal
-              </span>
-              <input
-                value={confirmation}
-                onChange={(event) => setConfirmation(event.target.value)}
-                className="w-full rounded-2xl border border-rose-200 px-4 py-3 font-mono font-black uppercase outline-none focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 dark:border-rose-900 dark:bg-slate-950"
-                autoComplete="off"
-              />
-            </label>
-          )}
         </div>
 
         <div className="flex justify-end gap-3 border-t border-slate-200 p-6 dark:border-slate-700">
@@ -334,9 +332,9 @@ function AccountActionModal({ user, action, onClose, onCompleted }) {
           </button>
           <button
             type="button"
-            disabled={busy || (deleting && confirmation !== 'DELETE')}
+            disabled={busy}
             onClick={confirm}
-            className={`rounded-2xl px-5 py-3 font-black text-white disabled:cursor-not-allowed disabled:opacity-40 ${deleting ? 'bg-rose-600' : deactivating ? 'bg-amber-600' : 'bg-emerald-600'}`}
+            className={`rounded-2xl px-5 py-3 font-black text-white disabled:cursor-not-allowed disabled:opacity-40 ${deactivating ? 'bg-amber-600' : 'bg-emerald-600'}`}
           >
             {busy ? 'Processing...' : actionLabel}
           </button>
@@ -352,22 +350,46 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('');
+  const [college, setCollege] = useState('');
+  const [colleges, setColleges] = useState([]);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(15);
+  const [pagination, setPagination] = useState({ currentPage: 1, lastPage: 1, total: 0, from: 0, to: 0 });
   const [editor, setEditor] = useState(null);
   const [accountAction, setAccountAction] = useState(null);
+
+  useEffect(() => {
+    api.get('/admin/academic')
+      .then((response) => setColleges(response.data.colleges || []))
+      .catch(() => toast.error('Unable to load colleges.'));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const response = await api.get('/admin/users', {
-        params: { search: search || undefined, role: role || undefined },
+        params: {
+          search: search || undefined,
+          role: role || undefined,
+          college_id: college || undefined,
+          page,
+          per_page: perPage,
+        },
       });
       setUsers(response.data.data || []);
+      setPagination({
+        currentPage: response.data.current_page || 1,
+        lastPage: response.data.last_page || 1,
+        total: response.data.total || 0,
+        from: response.data.from || 0,
+        to: response.data.to || 0,
+      });
     } catch {
       toast.error('Unable to load user accounts.');
     } finally {
       setLoading(false);
     }
-  }, [role, search]);
+  }, [college, page, perPage, role, search]);
 
   useEffect(() => {
     const timer = setTimeout(load, 250);
@@ -404,7 +426,7 @@ export default function AdminUsers() {
           <button
             type="button"
             onClick={() => setEditor({ item: null })}
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#430909]"
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#690016]"
           >
             <PlusIcon className="h-5 w-5" />
             Create account
@@ -419,23 +441,53 @@ export default function AdminUsers() {
       </div>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex flex-col gap-3 md:flex-row">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_12rem_15rem_9rem]">
           <label className="relative flex-1">
             <MagnifyingGlassIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:border-[#800000] focus:ring-4 focus:ring-[#800000]/10 dark:border-slate-700 dark:bg-slate-950"
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700 dark:bg-slate-950"
               placeholder="Search name, email, or Staff ID..."
             />
           </label>
           <select
             value={role}
-            onChange={(event) => setRole(event.target.value)}
-            className="rounded-2xl border border-slate-200 px-4 py-3 capitalize outline-none focus:border-[#800000] focus:ring-4 focus:ring-[#800000]/10 dark:border-slate-700 dark:bg-slate-950 md:min-w-48"
+            onChange={(event) => {
+              setRole(event.target.value);
+              setPage(1);
+            }}
+            aria-label="Filter by role"
+            className="rounded-2xl border border-slate-200 px-4 py-3 capitalize outline-none focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700 dark:bg-slate-950 md:min-w-48"
           >
             <option value="">All roles</option>
             {roles.map((name) => <option key={name} value={name}>{roleLabel(name)}</option>)}
+          </select>
+          <select
+            value={college}
+            onChange={(event) => {
+              setCollege(event.target.value);
+              setPage(1);
+            }}
+            aria-label="Filter by college"
+            className="rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700 dark:bg-slate-950"
+          >
+            <option value="">All colleges</option>
+            {colleges.map((item) => <option key={item.id} value={item.id}>{item.code} - {item.name}</option>)}
+          </select>
+          <select
+            value={perPage}
+            onChange={(event) => {
+              setPerPage(Number(event.target.value));
+              setPage(1);
+            }}
+            aria-label="Rows per page"
+            className="rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700 dark:bg-slate-950"
+          >
+            {pageSizeOptions.map((size) => <option key={size} value={size}>{size} per page</option>)}
           </select>
         </div>
       </section>
@@ -474,12 +526,12 @@ export default function AdminUsers() {
                               {isCurrentAccount && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">You</span>}
                             </div>
                             <p className="max-w-60 truncate text-xs text-slate-500">{user.email}</p>
-                            {user.staff_id && <p className="mt-0.5 font-mono text-xs font-bold text-[#800000] dark:text-red-300">{user.staff_id}</p>}
+                            {user.staff_id && <p className="mt-0.5 font-mono text-xs font-bold text-[#7D001D] dark:text-red-300">{user.staff_id}</p>}
                           </div>
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        <span className="rounded-full bg-[#800000]/10 px-3 py-1 text-xs font-black capitalize text-[#800000] dark:text-red-300">
+                        <span className="rounded-full bg-[#7D001D]/10 px-3 py-1 text-xs font-black capitalize text-[#7D001D] dark:text-red-300">
                           {roleLabel(user.role)}
                         </span>
                       </td>
@@ -513,7 +565,7 @@ export default function AdminUsers() {
                           <button
                             type="button"
                             onClick={() => setEditor({ item: user })}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 transition hover:border-[#800000]/30 hover:bg-[#800000]/5 hover:text-[#800000] dark:border-slate-700 dark:text-slate-300"
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 transition hover:border-[#7D001D]/30 hover:bg-[#7D001D]/5 hover:text-[#7D001D] dark:border-slate-700 dark:text-slate-300"
                             title="Edit and update user"
                           >
                             <PencilSquareIcon className="h-4 w-4" />
@@ -538,16 +590,6 @@ export default function AdminUsers() {
                           >
                             <PowerIcon className="h-4 w-4" />
                           </button>
-                          <button
-                            type="button"
-                            disabled={isCurrentAccount}
-                            onClick={() => setAccountAction({ user, action: 'delete' })}
-                            className="rounded-xl border border-rose-200 p-2 text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30"
-                            title={isCurrentAccount ? 'You cannot delete your current account' : 'Delete user permanently'}
-                            aria-label={`Delete ${user.name}`}
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -555,6 +597,32 @@ export default function AdminUsers() {
                 })}
               </tbody>
             </table>
+          </div>
+          <div className="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 text-sm dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-slate-500">Showing {pagination.from}-{pagination.to} of {pagination.total} accounts</p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={pagination.currentPage <= 1}
+                className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                aria-label="Previous page"
+                title="Previous page"
+              >
+                <ChevronLeftIcon className="h-5 w-5" />
+              </button>
+              <span className="whitespace-nowrap text-xs font-bold text-slate-600 dark:text-slate-300">Page {pagination.currentPage} of {pagination.lastPage}</span>
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.min(pagination.lastPage, current + 1))}
+                disabled={pagination.currentPage >= pagination.lastPage}
+                className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                aria-label="Next page"
+                title="Next page"
+              >
+                <ChevronRightIcon className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </section>
       )}

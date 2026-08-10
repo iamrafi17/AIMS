@@ -106,14 +106,6 @@ class CoordinatorAttendanceController extends Controller
         ]);
     }
 
-    public function destroy(Request $request, Attendance $attendance)
-    {
-        ProgramAccess::authorizeAttendance($request->user(), $attendance);
-        $attendance->delete();
-
-        return response()->json(['message' => 'Attendance log deleted successfully.']);
-    }
-
     public function verify(Request $request, Attendance $attendance)
     {
         ProgramAccess::authorizeAttendance($request->user(), $attendance);

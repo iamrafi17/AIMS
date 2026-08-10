@@ -63,7 +63,7 @@ const emptyDashboard = {
 
 function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   const tones = {
-    maroon: 'bg-[#800000]/10 text-[#800000] dark:bg-rose-950/50 dark:text-rose-300',
+    maroon: 'bg-[#7D001D]/10 text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300',
     green: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
     blue: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300',
     amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
@@ -71,14 +71,14 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   };
 
   return (
-    <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
-          <p className="mt-2 text-3xl font-black text-[#430909] dark:text-white">{value}</p>
+          <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
+          <p className="mt-2 text-2xl font-bold text-[#690016] dark:text-white">{value}</p>
           <p className="mt-1 text-xs text-slate-400">{note}</p>
         </div>
-        <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-xl ${tones[tone]}`}>
+        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg text-lg ${tones[tone]}`}>
           <Icon />
         </div>
       </div>
@@ -88,14 +88,14 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
 
 function Panel({ title, subtitle, icon: Icon, action, children, className = '' }) {
   return (
-    <section className={`rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-6 ${className}`}>
+    <section className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 ${className}`}>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#800000]/10 text-lg text-[#800000] dark:bg-rose-950/50 dark:text-rose-300">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#7D001D]/10 text-lg text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300">
             <Icon />
           </div>
           <div>
-            <h2 className="font-black text-[#430909] dark:text-white">{title}</h2>
+            <h2 className="font-black text-[#690016] dark:text-white">{title}</h2>
             <p className="mt-1 text-xs leading-5 text-slate-400">{subtitle}</p>
           </div>
         </div>
@@ -106,7 +106,7 @@ function Panel({ title, subtitle, icon: Icon, action, children, className = '' }
   );
 }
 
-function ProgressBar({ value, color = 'bg-[#800000]' }) {
+function ProgressBar({ value, color = 'bg-[#7D001D]' }) {
   const safeValue = Math.min(Math.max(Number(value) || 0, 0), 100);
 
   return (
@@ -116,7 +116,7 @@ function ProgressBar({ value, color = 'bg-[#800000]' }) {
   );
 }
 
-function Ring({ value, label, color = '#800000' }) {
+function Ring({ value, label, color = '#7D001D' }) {
   const safeValue = Math.min(Math.max(Number(value) || 0, 0), 100);
 
   return (
@@ -126,7 +126,7 @@ function Ring({ value, label, color = '#800000' }) {
     >
       <div className="grid h-28 w-28 place-items-center rounded-full bg-white text-center dark:bg-gray-800">
         <div>
-          <p className="text-2xl font-black text-[#430909] dark:text-white">{safeValue.toFixed(1)}%</p>
+          <p className="text-2xl font-black text-[#690016] dark:text-white">{safeValue.toFixed(1)}%</p>
           <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</p>
         </div>
       </div>
@@ -215,7 +215,7 @@ function SupervisorDashboard() {
     return (
       <div className="grid min-h-[420px] place-items-center">
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-[#800000]/15 border-b-[#800000]" />
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-[#7D001D]/15 border-b-[#7D001D]" />
           <p className="mt-4 text-xs font-black uppercase tracking-widest text-slate-400">Loading assigned interns</p>
         </div>
       </div>
@@ -229,16 +229,14 @@ function SupervisorDashboard() {
 
   return (
     <div className="space-y-6">
-      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#360707] via-[#650d0d] to-[#8b1717] p-6 text-white shadow-lg sm:p-8">
-        <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border-[44px] border-white/5" />
-        <div className="absolute bottom-0 right-24 h-32 w-32 rounded-full bg-[#f1c54c]/10 blur-2xl" />
-        <div className="relative flex flex-wrap items-end justify-between gap-5">
+      <header className="border-b border-slate-200 pb-5 dark:border-slate-700">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-[#f7d979]">
+            <div className="mb-1.5 inline-flex items-center gap-2 text-xs font-bold uppercase text-[#7D001D] dark:text-rose-300">
               <FiUserCheck /> HTE Supervisor Workspace
             </div>
-            <h1 className="text-2xl font-black sm:text-3xl">Intern Supervision Dashboard</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/65">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Intern Supervision Dashboard</h1>
+            <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
               Monitor your assigned interns, attendance, OJT progress, evaluation responsibilities, and completion status.
             </p>
           </div>
@@ -246,7 +244,7 @@ function SupervisorDashboard() {
             type="button"
             onClick={refreshDashboard}
             disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-xs font-black transition hover:bg-white/15 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-[#7D001D] transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-rose-300"
           >
             <FiRefreshCw className={refreshing ? 'animate-spin' : ''} /> Refresh Data
           </button>
@@ -256,7 +254,7 @@ function SupervisorDashboard() {
       <section>
         <div className="mb-4">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8750b]">Supervisor Overview</p>
-          <h2 className="mt-1 text-lg font-black text-[#430909] dark:text-white">Your internship supervision workload</h2>
+          <h2 className="mt-1 text-lg font-black text-[#690016] dark:text-white">Your internship supervision workload</h2>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard label="Assigned interns" value={overview.assigned} note="Students under your supervision" icon={FiUsers} />
@@ -279,7 +277,7 @@ function SupervisorDashboard() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search interns"
-              className="w-56 rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-xs font-bold text-slate-700 outline-none transition focus:border-[#800000]/40 focus:ring-4 focus:ring-[#800000]/10 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+              className="w-56 rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-xs font-bold text-slate-700 outline-none transition focus:border-[#7D001D]/40 focus:ring-4 focus:ring-[#7D001D]/10 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
             />
           </div>
         )}
@@ -305,7 +303,7 @@ function SupervisorDashboard() {
                         {intern.avatar_url ? (
                           <img src={intern.avatar_url} alt="" className="h-10 w-10 rounded-xl object-cover" />
                         ) : (
-                          <div className="grid h-10 w-10 rounded-xl bg-[#800000] text-xs font-black text-white">
+                          <div className="grid h-10 w-10 rounded-xl bg-[#7D001D] text-xs font-black text-white">
                             <span className="m-auto">{intern.name?.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span>
                           </div>
                         )}
@@ -319,7 +317,7 @@ function SupervisorDashboard() {
                     <td className="w-40 py-4">
                       <div className="mb-1.5 flex justify-between text-[9px] font-black">
                         <span className="text-slate-400">{intern.rendered_hours} / {intern.required_hours} hrs</span>
-                        <span className="text-[#800000] dark:text-rose-300">{intern.progress}%</span>
+                        <span className="text-[#7D001D] dark:text-rose-300">{intern.progress}%</span>
                       </div>
                       <ProgressBar value={intern.progress} />
                     </td>
@@ -360,14 +358,14 @@ function SupervisorDashboard() {
           title="Attendance Summary"
           subtitle={`${new Date().toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} attendance for assigned interns`}
           icon={FiClock}
-          action={<Link to="/supervisor/attendance" className="inline-flex items-center gap-1 text-xs font-black text-[#800000] dark:text-rose-300">View attendance <FiArrowRight /></Link>}
+          action={<Link to="/supervisor/attendance" className="inline-flex items-center gap-1 text-xs font-black text-[#7D001D] dark:text-rose-300">View attendance <FiArrowRight /></Link>}
         >
           <div className="flex flex-col items-center gap-7 sm:flex-row">
             <Ring value={attendance.rate} label="attendance" color="#059669" />
             <div className="w-full flex-1">
               <div className="mb-5 flex items-end justify-between">
                 <div>
-                  <p className="text-3xl font-black text-[#430909] dark:text-white">{attendance.total_hours}<span className="ml-1 text-sm text-slate-400">hrs</span></p>
+                  <p className="text-3xl font-black text-[#690016] dark:text-white">{attendance.total_hours}<span className="ml-1 text-sm text-slate-400">hrs</span></p>
                   <p className="mt-1 text-xs text-slate-400">Rendered this month</p>
                 </div>
                 <div className="text-right">
@@ -394,7 +392,7 @@ function SupervisorDashboard() {
             {attendance.trend.map((day) => (
               <div key={day.date} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
                 <span className="text-[8px] font-black text-slate-400">{day.rate}%</span>
-                <div className={`w-full max-w-10 rounded-t-lg ${day.rate >= 90 ? 'bg-emerald-500' : day.rate > 0 ? 'bg-[#800000]' : 'bg-slate-200 dark:bg-gray-700'}`} style={{ height: `${Math.max(day.rate, 4)}%` }} />
+                <div className={`w-full max-w-10 rounded-t-lg ${day.rate >= 90 ? 'bg-emerald-500' : day.rate > 0 ? 'bg-[#7D001D]' : 'bg-slate-200 dark:bg-gray-700'}`} style={{ height: `${Math.max(day.rate, 4)}%` }} />
                 <span className="text-[8px] font-black text-slate-500">{day.label}</span>
               </div>
             ))}
@@ -405,12 +403,12 @@ function SupervisorDashboard() {
           title="Progress Overview"
           subtitle="OJT hours rendered by your assigned interns"
           icon={FiBarChart2}
-          action={<Link to="/supervisor/progress" className="inline-flex items-center gap-1 text-xs font-black text-[#800000] dark:text-rose-300">Open progress <FiArrowRight /></Link>}
+          action={<Link to="/supervisor/progress" className="inline-flex items-center gap-1 text-xs font-black text-[#7D001D] dark:text-rose-300">Open progress <FiArrowRight /></Link>}
         >
           <div className="flex flex-col items-center gap-7 sm:flex-row">
             <Ring value={progress.average} label="average progress" />
             <div className="w-full flex-1">
-              <p className="text-3xl font-black text-[#430909] dark:text-white">{progress.total_rendered_hours}<span className="ml-1 text-sm text-slate-400">of {progress.total_required_hours} hrs</span></p>
+              <p className="text-3xl font-black text-[#690016] dark:text-white">{progress.total_rendered_hours}<span className="ml-1 text-sm text-slate-400">of {progress.total_required_hours} hrs</span></p>
               <p className="mt-1 text-xs text-slate-400">Combined supervised internship hours</p>
               <div className="mt-5 grid grid-cols-3 gap-2">
                 <div className="rounded-xl bg-emerald-50 p-3 text-center dark:bg-emerald-950/30"><p className="text-xl font-black text-emerald-600">{progress.on_track}</p><p className="mt-1 text-[8px] font-black uppercase text-slate-400">On track</p></div>
@@ -428,7 +426,7 @@ function SupervisorDashboard() {
           subtitle="Midterm and final evaluations requiring your action"
           icon={FiClipboard}
           action={(
-            <Link to="/supervisor/evaluations" className="inline-flex items-center gap-1 text-xs font-black text-[#800000] dark:text-rose-300">
+            <Link to="/supervisor/evaluations" className="inline-flex items-center gap-1 text-xs font-black text-[#7D001D] dark:text-rose-300">
               Evaluation workspace <FiArrowRight />
             </Link>
           )}
@@ -441,7 +439,7 @@ function SupervisorDashboard() {
           {evaluations.items.length ? (
             <div className="space-y-2">
               {evaluations.items.slice(0, 6).map((item) => (
-                <Link key={`${item.student_id}-${item.evaluation_type}`} to="/supervisor/evaluations" className="group flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-3 transition hover:border-[#800000]/20 hover:bg-[#800000]/[0.02] dark:border-gray-700">
+                <Link key={`${item.student_id}-${item.evaluation_type}`} to="/supervisor/evaluations" className="group flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-3 transition hover:border-[#7D001D]/20 hover:bg-[#7D001D]/[0.02] dark:border-gray-700">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"><FiAlertTriangle /></div>
                     <div className="min-w-0">
@@ -451,7 +449,7 @@ function SupervisorDashboard() {
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <span className="rounded-lg bg-slate-100 px-2 py-1 text-[8px] font-black uppercase text-slate-600 dark:bg-gray-700 dark:text-gray-200">{item.evaluation_type}</span>
-                    <FiArrowRight className="text-slate-300 transition group-hover:text-[#800000]" />
+                    <FiArrowRight className="text-slate-300 transition group-hover:text-[#7D001D]" />
                   </div>
                 </Link>
               ))}

@@ -24,10 +24,10 @@ function DashboardLayout() {
   }, []);
 
   return (
-    <div className="dashboard-shell min-h-screen bg-gray-100 text-gray-800 transition-colors duration-300 dark:bg-gray-950 dark:text-gray-100">
+    <div className="dashboard-shell min-h-screen bg-[#F6F7FB] text-[#1F2937] transition-colors duration-300 dark:bg-gray-950 dark:text-gray-100">
       <a
         href="#main-content"
-        className="sr-only fixed left-4 top-4 z-[100] rounded-xl bg-[#800000] px-4 py-3 font-bold text-white shadow-lg focus:not-sr-only"
+        className="sr-only fixed left-4 top-4 z-[100] rounded-xl bg-[#7D001D] px-4 py-3 font-bold text-white shadow-lg focus:not-sr-only"
       >
         Skip to main content
       </a>
@@ -36,8 +36,10 @@ function DashboardLayout() {
       <div className={`min-h-screen min-w-0 transition-[margin] duration-300 ease-out ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-0'}`}>
         <Header sidebarOpen={sidebarOpen} onMenuClick={() => setSidebarOpen((open) => !open)} />
 
-        <main id="main-content" tabIndex="-1" className="min-w-0 p-4 sm:p-6 lg:p-8">
-          <Outlet />
+        <main id="main-content" tabIndex="-1" className="min-w-0 px-3 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
+          <div className="mx-auto w-full min-w-0 max-w-[1600px]">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

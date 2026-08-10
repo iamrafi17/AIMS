@@ -13,7 +13,7 @@ import toast from 'react-hot-toast';
 import api from '../../services/api';
 import marsuLogo from '../../assets/marsu-logo.png';
 
-const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-slate-900 outline-none transition focus:border-[#800000] focus:ring-4 focus:ring-[#800000]/10 dark:border-gray-700 dark:bg-gray-950 dark:text-white';
+const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-slate-900 outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-gray-700 dark:bg-gray-950 dark:text-white';
 
 function errorMessage(error, fallback) {
   const errors = error.response?.data?.errors;
@@ -148,10 +148,10 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className="grid min-h-screen bg-[#f7f4ef] lg:grid-cols-[.9fr_1.1fr] dark:bg-gray-950">
-      <section className="relative hidden overflow-hidden bg-gradient-to-br from-[#4c0000] via-[#800000] to-[#a21d1d] p-12 text-white lg:flex lg:flex-col lg:justify-between">
+      <section className="relative hidden overflow-hidden bg-[#690016] p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-[#d4af37]/15 blur-3xl" />
         <div className="relative flex items-center gap-4">
-          <div className="grid h-16 w-16 place-items-center rounded-full bg-white p-2 shadow-xl">
+          <div className="grid h-16 w-16 place-items-center rounded-full bg-white p-2 shadow-sm">
             <img src={marsuLogo} className="h-full w-full object-contain" alt="MarSU seal" />
           </div>
           <div>
@@ -170,13 +170,13 @@ export default function ForgotPasswordPage() {
       </section>
 
       <section className="flex items-center justify-center p-5 sm:p-10">
-        <div className="w-full max-w-xl rounded-[2rem] border border-white bg-white p-7 shadow-2xl shadow-slate-900/10 dark:border-gray-700 dark:bg-gray-900 sm:p-10">
-          <Link to="/login" className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-[#800000]">
+        <div className="w-full max-w-xl rounded-xl border border-white bg-white p-7 shadow-sm shadow-slate-900/10 dark:border-gray-700 dark:bg-gray-900 sm:p-10">
+          <Link to="/login" className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-[#7D001D]">
             <ArrowLeftIcon className="h-4 w-4" />
             Back to login
           </Link>
 
-          <div className="mt-8 grid h-14 w-14 place-items-center rounded-2xl bg-[#800000]/10 text-[#800000] dark:text-red-300">
+          <div className="mt-8 grid h-14 w-14 place-items-center rounded-xl bg-[#7D001D]/10 text-[#7D001D] dark:text-red-300">
             <StepIcon className="h-7 w-7" />
           </div>
           <h2 className="mt-5 text-3xl font-black text-slate-900 dark:text-white">{page.title}</h2>
@@ -199,7 +199,7 @@ export default function ForgotPasswordPage() {
                   />
                 </div>
               </label>
-              <button disabled={loading} className="w-full rounded-2xl bg-[#800000] px-5 py-3.5 font-black text-white disabled:opacity-50">
+              <button disabled={loading} className="w-full rounded-xl bg-[#7D001D] px-5 py-3.5 font-black text-white disabled:opacity-50">
                 {loading ? 'Checking...' : 'Continue'}
               </button>
             </form>
@@ -208,7 +208,7 @@ export default function ForgotPasswordPage() {
           {step === 'questions' && (
             <form onSubmit={verifyAnswers} className="mt-8 space-y-5">
               {questions.map((question, index) => (
-                <label key={question.id} className="block rounded-2xl border border-slate-200 p-4 dark:border-gray-700">
+                <label key={question.id} className="block rounded-xl border border-slate-200 p-4 dark:border-gray-700">
                   <span className="mb-3 block text-sm font-black text-slate-800 dark:text-white">
                     Q{index + 1}: {question.question}
                   </span>
@@ -225,10 +225,10 @@ export default function ForgotPasswordPage() {
                 </label>
               ))}
               <div className="flex flex-col-reverse gap-3 sm:flex-row">
-                <button type="button" onClick={startOver} className="rounded-2xl border border-slate-200 px-5 py-3.5 font-bold dark:border-gray-700 sm:flex-1">
+                <button type="button" onClick={startOver} className="rounded-xl border border-slate-200 px-5 py-3.5 font-bold dark:border-gray-700 sm:flex-1">
                   Start over
                 </button>
-                <button disabled={loading} className="rounded-2xl bg-[#800000] px-5 py-3.5 font-black text-white disabled:opacity-50 sm:flex-1">
+                <button disabled={loading} className="rounded-xl bg-[#7D001D] px-5 py-3.5 font-black text-white disabled:opacity-50 sm:flex-1">
                   {loading ? 'Verifying...' : 'Verify Answers'}
                 </button>
               </div>
@@ -267,7 +267,7 @@ export default function ForgotPasswordPage() {
                   />
                 </div>
               </label>
-              <button disabled={loading} className="w-full rounded-2xl bg-[#800000] px-5 py-3.5 font-black text-white disabled:opacity-50">
+              <button disabled={loading} className="w-full rounded-xl bg-[#7D001D] px-5 py-3.5 font-black text-white disabled:opacity-50">
                 {loading ? 'Resetting...' : 'Reset Password'}
               </button>
             </form>
@@ -275,10 +275,10 @@ export default function ForgotPasswordPage() {
 
           {step === 'success' && (
             <div className="mt-8">
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm leading-6 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-sm leading-6 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
                 Your password has been successfully reset. You can now sign in using your new password.
               </div>
-              <Link to="/login" className="mt-5 block w-full rounded-2xl bg-[#800000] px-5 py-3.5 text-center font-black text-white">
+              <Link to="/login" className="mt-5 block w-full rounded-xl bg-[#7D001D] px-5 py-3.5 text-center font-black text-white">
                 Back to Login
               </Link>
             </div>

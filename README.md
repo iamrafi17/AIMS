@@ -15,9 +15,9 @@ A full-stack web application for MarSU Santa Cruz Campus to monitor and manage s
 - React Hot Toast for notifications
 
 ### Backend
-- Laravel 12 (compatible with Laravel 11)
+- Laravel 12 (the Laravel 11 PRD architecture with current security fixes)
 - Laravel Sanctum for authentication
-- SQLite (can be switched to MySQL)
+- MySQL or MariaDB
 - Eloquent ORM
 
 ## Features
@@ -35,7 +35,7 @@ A full-stack web application for MarSU Santa Cruz Campus to monitor and manage s
 - Multi-step student registration
 - GPS-enabled attendance tracking
 - Internship requirements management
-- Travel monitoring with checkpoints
+- Coordinator-led, action-based travel monitoring with ordered departure/arrival points
 - Announcement system
 - Report generation
 
@@ -58,7 +58,7 @@ composer install
 # Generate application key
 php artisan key:generate
 
-# Run migrations and seed database
+# Run migrations and seed reference data
 php artisan migrate:fresh --seed
 
 # Start development server
@@ -81,16 +81,7 @@ npm run dev
 
 The frontend will run on `http://localhost:5173`
 
-## Sample Credentials
-
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@marsu.edu.ph | password |
-| Coordinator | coordinator@marsu.edu.ph | password |
-| Program Head | prohead@marsu.edu.ph | password |
-| VPAA | vpaa@marsu.edu.ph | password |
-| Supervisor | supervisor@marsu.edu.ph | password |
-| Student | student@marsu.edu.ph | password |
+The production-safe seeder creates reference data only. Create authorized accounts through the administrator workflow; no shared sample credentials are installed.
 
 ## API Endpoints
 
@@ -119,7 +110,7 @@ The frontend will run on `http://localhost:5173`
 - `GET /api/admin/users` - List users
 - `POST /api/admin/users` - Create user
 - `PUT /api/admin/users/{id}` - Update user
-- `DELETE /api/admin/users/{id}` - Delete user
+- `DELETE /api/admin/users/{id}` - Deactivate user while preserving related records
 
 ## Database Schema
 
@@ -135,7 +126,7 @@ The application uses the following main tables:
 - travel_logs
 - travel_checkpoints
 - evaluations
-- audit_logs
+- activity_logs
 - moas (Memorandum of Agreement)
 - holidays
 
@@ -188,7 +179,12 @@ Backend `.env`:
 ```
 APP_NAME="AIMS - MarSU Santa Cruz"
 APP_URL=http://localhost:8000
-DB_CONNECTION=sqlite
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=aims_db
+DB_USERNAME=aims_app
+DB_PASSWORD=use-a-secret-password
 SANCTUM_STATEFUL_DOMAINS=localhost:5173
 ```
 
@@ -196,6 +192,11 @@ Frontend `.env`:
 ```
 VITE_API_URL=http://localhost:8000/api
 ```
+
+## Operations
+
+- [Scaling and production setup](aims-backend/docs/SCALING.md)
+- [Database and private-file backup/restore](aims-backend/docs/BACKUP_AND_RESTORE.md)
 
 ## License
 
