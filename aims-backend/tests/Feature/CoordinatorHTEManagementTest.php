@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademicSection;
 use App\Models\College;
 use App\Models\HTE;
 use App\Models\MOA;
@@ -61,7 +62,80 @@ class CoordinatorHTEManagementTest extends TestCase
             ->assertJsonPath('summary.total_htes', 2)
             ->assertJsonPath('summary.geofenced_htes', 1)
             ->assertJsonCount(2, 'htes')
-            ->assertJsonPath('colleges.0.id', $college->id);
+            ->assertJsonPath('colleges.0.id', $college->id)
+            ->assertJsonPath('batches.0.id', AcademicSection::firstOrFail()->id);
+    }
+
+    public function test_coordinator_can_create_an_hte_and_initial_batch_schedule_in_one_request(): void
+    {
+        [$coordinator, , , , $batch] = $this->context();
+        Sanctum::actingAs($coordinator);
+
+        $days = $this->batchScheduleDays();
+        $days['sat'] = [
+            'is_working' => true,
+            'am_start' => '07:30',
+            'am_end' => '11:30',
+            'pm_start' => '13:00',
+            'pm_end' => '16:00',
+        ];
+        $payload = [
+            'name' => 'Integrated Schedule Partner',
+            'address' => 'Boac, Marinduque',
+            'contact_person' => 'Initial Supervisor',
+            'contact_email' => 'integrated@example.com',
+            'contact_phone' => '09170000009',
+            'latitude' => null,
+            'longitude' => null,
+            'geofence_radius' => 100,
+            'geofence_enabled' => false,
+            'default_am_start' => '08:00',
+            'default_am_end' => '12:00',
+            'default_pm_start' => '13:00',
+            'default_pm_end' => '17:00',
+            'work_days' => ['mon', 'tue', 'wed', 'thu', 'fri'],
+            'is_active' => true,
+            'batch_schedule' => [
+                'academic_section_id' => $batch->id,
+                'days' => $days,
+            ],
+        ];
+
+        $hteId = $this->postJson('/api/coordinator/htes', $payload)
+            ->assertCreated()
+            ->assertJsonPath('message', 'HTE record and batch schedule created successfully.')
+            ->assertJsonPath('hte.name', 'Integrated Schedule Partner')
+            ->assertJsonPath('hte.batch_schedule_summary.batch_id', $batch->id)
+            ->assertJsonPath('hte.batch_schedule_summary.groups.1.days.0', 'sat')
+            ->json('hte.id');
+
+        $this->assertDatabaseHas('hte_batch_schedules', [
+            'hte_id' => $hteId,
+            'academic_section_id' => $batch->id,
+            'day_of_week' => 'sat',
+            'is_working' => true,
+            'am_start' => '07:30',
+            'pm_end' => '16:00',
+        ]);
+        $this->assertSame(7, HTE::findOrFail($hteId)->batchSchedules()->count());
+
+        $payload['name'] = 'Invalid Integrated Partner';
+        $payload['batch_schedule']['days']['mon']['am_end'] = '07:00';
+        $this->postJson('/api/coordinator/htes', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('batch_schedule.days.mon.am_end');
+        $this->assertDatabaseMissing('htes', ['name' => 'Invalid Integrated Partner']);
+
+        $payload['name'] = 'No Working Days Partner';
+        $payload['batch_schedule']['days']['mon']['am_end'] = '12:00';
+        foreach ($payload['batch_schedule']['days'] as &$day) {
+            $day['is_working'] = false;
+        }
+        unset($day);
+        $this->postJson('/api/coordinator/htes', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('batch_schedule.days');
+        $this->assertDatabaseMissing('htes', ['name' => 'No Working Days Partner']);
     }
 
     public function test_coordinator_can_configure_student_deployment_and_working_hours(): void
@@ -95,6 +169,84 @@ class CoordinatorHTEManagementTest extends TestCase
         ]);
     }
 
+    public function test_coordinator_can_save_and_retrieve_an_editable_per_day_batch_schedule(): void
+    {
+        [$coordinator, , $hte, , $batch] = $this->context();
+        Sanctum::actingAs($coordinator);
+
+        $this->getJson("/api/coordinator/htes/{$hte->id}/batch-schedules")
+            ->assertOk()
+            ->assertJsonPath('hte.id', $hte->id)
+            ->assertJsonPath('batches.0.id', $batch->id)
+            ->assertJsonPath('batches.0.has_saved_schedule', false)
+            ->assertJsonPath('batches.0.days.mon.am_start', '08:00');
+
+        $days = $this->batchScheduleDays();
+        $days['sat'] = [
+            'is_working' => true,
+            'am_start' => '09:00',
+            'am_end' => '12:30',
+            'pm_start' => '13:30',
+            'pm_end' => '15:00',
+        ];
+
+        $this->putJson("/api/coordinator/htes/{$hte->id}/batch-schedules/{$batch->id}", ['days' => $days])
+            ->assertOk()
+            ->assertJsonPath('message', 'Batch schedule saved successfully.')
+            ->assertJsonPath('batch.has_saved_schedule', true)
+            ->assertJsonPath('batch.days.mon.am_start', '08:00')
+            ->assertJsonPath('batch.days.sat.am_start', '09:00')
+            ->assertJsonPath('batch.days.sat.pm_end', '15:00');
+
+        $this->assertDatabaseCount('hte_batch_schedules', 7);
+        $this->assertDatabaseHas('hte_batch_schedules', [
+            'hte_id' => $hte->id,
+            'academic_section_id' => $batch->id,
+            'day_of_week' => 'sat',
+            'is_working' => true,
+            'am_start' => '09:00',
+            'pm_end' => '15:00',
+        ]);
+
+        $this->getJson('/api/coordinator/htes')
+            ->assertOk()
+            ->assertJsonPath('htes.0.batch_schedule_summary.batch_id', $batch->id)
+            ->assertJsonPath('htes.0.batch_schedule_summary.configured_batches', 1)
+            ->assertJsonPath('htes.0.batch_schedule_summary.groups.1.am_start', '09:00')
+            ->assertJsonPath('htes.0.batch_schedule_summary.groups.1.days.0', 'sat');
+
+        $days['sat']['am_end'] = '08:30';
+        $this->putJson("/api/coordinator/htes/{$hte->id}/batch-schedules/{$batch->id}", ['days' => $days])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('days.sat.am_end');
+        $this->assertDatabaseCount('hte_batch_schedules', 7);
+    }
+
+    public function test_coordinator_cannot_configure_a_batch_from_another_program(): void
+    {
+        [$coordinator, $college, $hte] = $this->context();
+        $otherProgram = Program::create([
+            'college_id' => $college->id,
+            'name' => 'Computer Science',
+            'code' => 'BSCS',
+            'is_active' => true,
+        ]);
+        $otherBatch = AcademicSection::create([
+            'program_id' => $otherProgram->id,
+            'name' => 'A',
+            'year_level' => 4,
+            'academic_year' => '2026-2027',
+            'is_active' => true,
+        ]);
+        Sanctum::actingAs($coordinator);
+
+        $this->putJson("/api/coordinator/htes/{$hte->id}/batch-schedules/{$otherBatch->id}", [
+            'days' => $this->batchScheduleDays(),
+        ])->assertNotFound();
+
+        $this->assertDatabaseCount('hte_batch_schedules', 0);
+    }
+
     public function test_coordinator_can_manage_holidays_upload_moa_and_receive_expiration_alerts(): void
     {
         Storage::fake('local');
@@ -117,13 +269,14 @@ class CoordinatorHTEManagementTest extends TestCase
 
         $this->post('/api/coordinator/htes/moas', [
             'hte_id' => $hte->id,
-            'college_id' => $college->id,
             'effective_date' => now()->subMonth()->toDateString(),
             'expiration_date' => now()->addYear()->toDateString(),
             'file' => UploadedFile::fake()->create('agreement.pdf', 100, 'application/pdf'),
         ], ['Accept' => 'application/json'])
             ->assertCreated()
-            ->assertJsonPath('moa.status', 'pending');
+            ->assertJsonPath('moa.status', 'pending')
+            ->assertJsonPath('moa.college_id', $college->id)
+            ->assertJsonPath('moa.program_id', $coordinator->program_id);
 
         $moa = MOA::firstOrFail();
         /** @var FilesystemAdapter $privateDisk */
@@ -191,6 +344,13 @@ class CoordinatorHTEManagementTest extends TestCase
             'work_days' => ['mon', 'tue', 'wed', 'thu', 'fri'],
             'is_active' => true,
         ]);
+        $batch = AcademicSection::create([
+            'program_id' => $program->id,
+            'name' => 'A',
+            'year_level' => 4,
+            'academic_year' => '2026-2027',
+            'is_active' => true,
+        ]);
         $student = Student::create([
             'user_id' => $studentUser->id,
             'student_id' => '2026-4001',
@@ -211,6 +371,19 @@ class CoordinatorHTEManagementTest extends TestCase
             'internship_status' => 'pending',
         ]);
 
-        return [$coordinator, $college, $hte, $student];
+        return [$coordinator, $college, $hte, $student, $batch];
+    }
+
+    private function batchScheduleDays(): array
+    {
+        return collect(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
+            ->mapWithKeys(fn (string $day) => [$day => [
+                'is_working' => in_array($day, ['mon', 'tue', 'wed', 'thu', 'fri'], true),
+                'am_start' => '08:00',
+                'am_end' => '12:00',
+                'pm_start' => '13:00',
+                'pm_end' => '17:00',
+            ]])
+            ->all();
     }
 }

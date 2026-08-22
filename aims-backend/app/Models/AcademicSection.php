@@ -26,4 +26,9 @@ class AcademicSection extends Model
     {
         return $this->belongsTo(Program::class);
     }
+
+    public function hteBatchSchedules()
+    {
+        return $this->hasMany(HteBatchSchedule::class);
+    }
 }

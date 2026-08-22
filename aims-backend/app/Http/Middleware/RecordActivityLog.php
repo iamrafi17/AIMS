@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\ProgramHeadDocumentController;
 use App\Http\Controllers\Api\ProgramHeadTravelController;
 use App\Http\Controllers\Api\StudentAttendanceController;
 use App\Http\Controllers\Api\StudentRequirementController;
+use App\Http\Controllers\Api\StudentTravelController;
 use App\Http\Controllers\Api\SupervisorManagementController;
 use App\Http\Controllers\Api\VPAAApprovalController;
 use App\Http\Controllers\Api\VPAAMOAController;
@@ -81,12 +82,16 @@ class RecordActivityLog
             CoordinatorRequirementController::class.'@update',
             CoordinatorRequirementController::class.'@reorder',
             CoordinatorRequirementController::class.'@destroy' => ['Requirement Management', 'Updated the internship requirement checklist.'],
-            CoordinatorTravelController::class.'@startTravel' => ['Travel Monitoring', 'Started a coordinator travel session.'],
-            CoordinatorTravelController::class.'@departure' => ['Travel Monitoring', 'Captured a travel departure point.'],
-            CoordinatorTravelController::class.'@arrival' => ['Travel Monitoring', 'Recorded travel arrival.'],
-            CoordinatorTravelController::class.'@uploadArrivalPhoto' => ['Travel Monitoring', 'Uploaded travel arrival evidence.'],
-            CoordinatorTravelController::class.'@endTravel' => ['Travel Monitoring', 'Completed a coordinator travel session.'],
-            CoordinatorTravelController::class.'@cancel' => ['Travel Management', 'Cancelled a student travel session.'],
+            StudentTravelController::class.'@start' => ['Travel Monitoring', 'Started a travel session.'],
+            StudentTravelController::class.'@departure' => ['Travel Monitoring', 'Started travel departure.'],
+            StudentTravelController::class.'@checkpoint' => ['Travel Monitoring', 'Recorded a travel checkpoint.'],
+            StudentTravelController::class.'@arrival' => ['Travel Monitoring', 'Marked final travel arrival.'],
+            StudentTravelController::class.'@uploadArrivalPhoto' => ['Travel Monitoring', 'Uploaded arrival photo evidence.'],
+            StudentTravelController::class.'@end' => ['Travel Monitoring', 'Ended a travel session.'],
+            CoordinatorTravelController::class.'@show' => ['Travel Review', 'Reviewed a completed student travel session.'],
+            CoordinatorTravelController::class.'@generateReport' => ['Travel Report', 'Generated a travel report.'],
+            CoordinatorTravelController::class.'@updateReport' => ['Travel Report', 'Revised a travel report.'],
+            CoordinatorTravelController::class.'@submitReport' => ['Travel Report', 'Submitted a travel report to the Program Head.'],
 
             ProgramHeadDocumentController::class.'@downloadRequirement',
             ProgramHeadDocumentController::class.'@downloadMoa' => ['Document Access', 'Downloaded a protected document.'],
@@ -98,7 +103,8 @@ class RecordActivityLog
                 'Document Decision',
                 ucfirst((string) $request->input('decision')).' an MOA document.',
             ],
-            ProgramHeadTravelController::class.'@verifyCheckpoint' => ['Travel Review', 'Reviewed a student travel checkpoint.'],
+            ProgramHeadTravelController::class.'@reviewReport' => ['Travel Report Validation', 'Validated a travel report and automatically forwarded it to the VPAA.'],
+            ProgramHeadTravelController::class.'@finalReviewReport' => ['Travel Report Validation', 'Final validated a travel report.'],
 
             VPAAApprovalController::class.'@review',
             VPAAMOAController::class.'@review' => [

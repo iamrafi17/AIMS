@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\College;
+use App\Models\Program;
+use App\Models\Student;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -28,5 +30,50 @@ class AdminUserListTest extends TestCase
             ->assertJsonPath('total', 1)
             ->assertJsonPath('data.0.id', $matchingUser->id)
             ->assertJsonMissing(['id' => $otherUser->id]);
+    }
+
+    public function test_admin_user_list_includes_student_college_and_program_assignments(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $college = College::create(['name' => 'College of Computing', 'code' => 'CCS']);
+        $program = Program::create([
+            'college_id' => $college->id,
+            'name' => 'Information Technology',
+            'code' => 'BSIT',
+        ]);
+        $studentUser = User::factory()->create([
+            'role' => 'student',
+            'college_id' => null,
+            'program_id' => null,
+        ]);
+
+        Student::create([
+            'user_id' => $studentUser->id,
+            'student_id' => '2026-0001',
+            'first_name' => 'Student',
+            'last_name' => 'Account',
+            'gender' => 'female',
+            'birth_date' => '2002-01-01',
+            'address' => 'Boac, Marinduque',
+            'phone' => '09170000000',
+            'college_id' => $college->id,
+            'program_id' => $program->id,
+            'year_level' => 4,
+            'section' => 'A',
+            'parent_name' => 'Test Parent',
+            'parent_address' => 'Boac, Marinduque',
+            'parent_phone' => '09171111111',
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson("/api/admin/users?role=student&college_id={$college->id}")
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.id', $studentUser->id)
+            ->assertJsonPath('data.0.college.code', 'CCS')
+            ->assertJsonPath('data.0.program.code', 'BSIT')
+            ->assertJsonPath('data.0.student.college.code', 'CCS')
+            ->assertJsonPath('data.0.student.program.code', 'BSIT');
     }
 }

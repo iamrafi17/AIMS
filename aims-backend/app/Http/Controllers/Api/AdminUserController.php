@@ -21,7 +21,13 @@ class AdminUserController extends Controller
             'per_page' => ['nullable', 'integer', Rule::in([10, 15, 25, 50])],
         ]);
 
-        $users = User::with(['college:id,name,code', 'program:id,college_id,name,code'])
+        $users = User::with([
+            'college:id,name,code',
+            'program:id,college_id,name,code',
+            'student:id,user_id,college_id,program_id',
+            'student.college:id,name,code',
+            'student.program:id,college_id,name,code',
+        ])
             ->when($filters['search'] ?? null, function ($query) use ($filters) {
                 $query->where(function ($q) use ($filters) {
                     $q->where('name', 'like', '%'.$filters['search'].'%')
@@ -32,10 +38,25 @@ class AdminUserController extends Controller
             ->when($filters['role'] ?? null, function ($query) use ($filters) {
                 $query->where('role', $filters['role']);
             })
-            ->when($filters['college_id'] ?? null, fn ($query) => $query->where('college_id', $filters['college_id']))
+            ->when($filters['college_id'] ?? null, function ($query) use ($filters) {
+                $query->where(function ($collegeQuery) use ($filters) {
+                    $collegeQuery->where('college_id', $filters['college_id'])
+                        ->orWhereHas('student', fn ($studentQuery) => $studentQuery
+                            ->where('college_id', $filters['college_id']));
+                });
+            })
             ->latest()
             ->paginate($filters['per_page'] ?? 15)
             ->withQueryString();
+
+        $users->getCollection()->each(function (User $user): void {
+            if (! $user->isStudent() || ! $user->student) {
+                return;
+            }
+
+            $user->setRelation('college', $user->student->college);
+            $user->setRelation('program', $user->student->program);
+        });
 
         return response()->json($users);
     }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Evaluation;
 use App\Models\Student;
+use App\Support\AttendanceHours;
 use Illuminate\Http\Request;
 
 class SupervisorDashboardController extends Controller
@@ -204,15 +205,6 @@ class SupervisorDashboardController extends Controller
 
     private function renderedHours(Attendance $attendance): float
     {
-        $regular = collect([
-            [$attendance->am_time_in, $attendance->am_time_out],
-            [$attendance->pm_time_in, $attendance->pm_time_out],
-        ])->sum(fn (array $slot) => $slot[0] && $slot[1] ? $slot[0]->diffInSeconds($slot[1]) / 3600 : 0);
-
-        if ($regular <= 0 && ! $attendance->am_time_in && ! $attendance->pm_time_in && $attendance->time_in && $attendance->time_out) {
-            $regular = $attendance->time_in->diffInSeconds($attendance->time_out) / 3600;
-        }
-
-        return $regular + (float) $attendance->overtime_hours;
+        return AttendanceHours::total($attendance);
     }
 }

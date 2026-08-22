@@ -15,6 +15,7 @@ class TravelLog extends Model
 
     protected $fillable = [
         'created_by',
+        'coordinator_id',
         'hte_id',
         'session_code',
         'destination',
@@ -22,6 +23,7 @@ class TravelLog extends Model
         'route_notes',
         'scheduled_at',
         'start_time',
+        'departed_at',
         'end_time',
         'arrived_at',
         'arrival_photo_path',
@@ -32,6 +34,7 @@ class TravelLog extends Model
     {
         return [
             'start_time' => 'datetime',
+            'departed_at' => 'datetime',
             'end_time' => 'datetime',
             'arrived_at' => 'datetime',
             'scheduled_at' => 'datetime',
@@ -58,8 +61,14 @@ class TravelLog extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function companions()
+    public function coordinator()
     {
-        return $this->hasMany(TravelCompanion::class);
+        return $this->belongsTo(User::class, 'coordinator_id');
     }
+
+    public function report()
+    {
+        return $this->hasOne(TravelReport::class);
+    }
+
 }

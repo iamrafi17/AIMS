@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\CollegeController;
 use App\Http\Controllers\Api\CoordinatorAttendanceController;
 use App\Http\Controllers\Api\CoordinatorDashboardController;
 use App\Http\Controllers\Api\CoordinatorHTEController;
+use App\Http\Controllers\Api\CoordinatorReportController;
 use App\Http\Controllers\Api\CoordinatorRequirementController;
 use App\Http\Controllers\Api\CoordinatorStudentController;
 use App\Http\Controllers\Api\CoordinatorTravelController;
@@ -83,11 +84,19 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::post('/requirements/{id}/upload', [StudentRequirementController::class, 'upload']);
         Route::get('/requirements/{id}/download', [StudentRequirementController::class, 'download']);
         Route::get('/travel', [StudentTravelController::class, 'index']);
+        Route::post('/travel/start', [StudentTravelController::class, 'start']);
+        Route::post('/travel/{travel}/departure', [StudentTravelController::class, 'departure']);
+        Route::post('/travel/{travel}/checkpoints', [StudentTravelController::class, 'checkpoint']);
+        Route::post('/travel/{travel}/arrival', [StudentTravelController::class, 'arrival']);
+        Route::post('/travel/{travel}/arrival-photo', [StudentTravelController::class, 'uploadArrivalPhoto']);
+        Route::get('/travel/{travel}/arrival-photo', [StudentTravelController::class, 'arrivalPhoto']);
+        Route::post('/travel/{travel}/end', [StudentTravelController::class, 'end']);
     });
 
     // Coordinator Routes
     Route::middleware('role:coordinator')->prefix('coordinator')->group(function () {
         Route::get('/dashboard', [CoordinatorDashboardController::class, 'index']);
+        Route::get('/reports', [CoordinatorReportController::class, 'index']);
         Route::get('/attendance', [CoordinatorAttendanceController::class, 'index']);
         Route::get('/attendance/{attendance}', [CoordinatorAttendanceController::class, 'show']);
         Route::put('/attendance/{attendance}', [CoordinatorAttendanceController::class, 'update']);
@@ -102,6 +111,8 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::post('/htes/moas', [CoordinatorHTEController::class, 'storeMoa']);
         Route::put('/htes/moas/{moa}', [CoordinatorHTEController::class, 'updateMoa']);
         Route::get('/htes/moas/{moa}/download', [CoordinatorHTEController::class, 'downloadMoa']);
+        Route::get('/htes/{hte}/batch-schedules', [CoordinatorHTEController::class, 'batchSchedules']);
+        Route::put('/htes/{hte}/batch-schedules/{academicSection}', [CoordinatorHTEController::class, 'saveBatchSchedule']);
         Route::get('/htes/{hte}', [CoordinatorHTEController::class, 'show']);
         Route::put('/htes/{hte}', [CoordinatorHTEController::class, 'update']);
         Route::delete('/htes/{hte}', [CoordinatorHTEController::class, 'destroy']);
@@ -120,18 +131,12 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::put('/students/{student}/deactivate', [CoordinatorStudentController::class, 'deactivate']);
         Route::post('/students/{student}/requirements/{requirement}/review', [CoordinatorStudentController::class, 'reviewRequirement']);
         Route::get('/students/{student}/requirements/{requirement}/download', [CoordinatorStudentController::class, 'downloadRequirement']);
-        Route::get('/travel/setup', [CoordinatorTravelController::class, 'setup']);
-        Route::get('/travel/active', [CoordinatorTravelController::class, 'active']);
-        Route::get('/travel/htes/{hte}/students', [CoordinatorTravelController::class, 'studentsForHte']);
-        Route::post('/travel/start', [CoordinatorTravelController::class, 'startTravel']);
-        Route::post('/travel/{travel}/departure', [CoordinatorTravelController::class, 'departure']);
-        Route::post('/travel/{travel}/arrival', [CoordinatorTravelController::class, 'arrival']);
-        Route::post('/travel/{travel}/arrival-photo', [CoordinatorTravelController::class, 'uploadArrivalPhoto']);
         Route::get('/travel/{travel}/arrival-photo', [CoordinatorTravelController::class, 'arrivalPhoto']);
-        Route::post('/travel/{travel}/end', [CoordinatorTravelController::class, 'endTravel']);
+        Route::post('/travel/{travel}/reports', [CoordinatorTravelController::class, 'generateReport']);
+        Route::put('/travel/reports/{report}', [CoordinatorTravelController::class, 'updateReport']);
+        Route::post('/travel/reports/{report}/submit', [CoordinatorTravelController::class, 'submitReport']);
         Route::get('/travel/{travel}', [CoordinatorTravelController::class, 'show']);
         Route::get('/travel', [CoordinatorTravelController::class, 'index']);
-        Route::put('/travel/{travel}/cancel', [CoordinatorTravelController::class, 'cancel']);
     });
 
     // Program Head Routes
@@ -143,8 +148,7 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::post('/documents/moas/{moa}/review', [ProgramHeadDocumentController::class, 'reviewMoa']);
         Route::get('/documents/moas/{moa}/download', [ProgramHeadDocumentController::class, 'downloadMoa']);
         Route::get('/travel', [ProgramHeadTravelController::class, 'index']);
-        Route::put('/travel/checkpoints/{checkpoint}/verify', [ProgramHeadTravelController::class, 'verifyCheckpoint']);
-        Route::get('/travel/checkpoints/{checkpoint}/photo', [ProgramHeadTravelController::class, 'photo']);
+        Route::put('/travel/reports/{report}/review', [ProgramHeadTravelController::class, 'reviewReport']);
         Route::get('/travel/{travel}/arrival-photo', [ProgramHeadTravelController::class, 'arrivalPhoto']);
         Route::get('/students', [ProgramHeadStudentController::class, 'index']);
     });
@@ -193,8 +197,7 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::put('/moas/{approval}', [VPAAMOAController::class, 'review']);
         Route::get('/moas/{approval}/download', [VPAAMOAController::class, 'download']);
         Route::get('/travel', [ProgramHeadTravelController::class, 'index']);
-        Route::put('/travel/checkpoints/{checkpoint}/verify', [ProgramHeadTravelController::class, 'verifyCheckpoint']);
-        Route::get('/travel/checkpoints/{checkpoint}/photo', [ProgramHeadTravelController::class, 'photo']);
+        Route::put('/travel/reports/{report}/review', [ProgramHeadTravelController::class, 'finalReviewReport']);
         Route::get('/travel/{travel}/arrival-photo', [ProgramHeadTravelController::class, 'arrivalPhoto']);
         Route::get('/announcements', [AnnouncementController::class, 'manage']);
         Route::post('/announcements', [AnnouncementController::class, 'store']);

@@ -306,6 +306,21 @@ textarea {
   font: inherit;
 }
 
+/* Keep credential fields readable even when the app theme is dark. */
+.login-input {
+  color-scheme: light;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a;
+}
+
+.login-input:-webkit-autofill,
+.login-input:-webkit-autofill:hover,
+.login-input:-webkit-autofill:focus {
+  box-shadow: 0 0 0 1000px #ffffff inset;
+  -webkit-text-fill-color: #0f172a;
+}
+
 img,
 video,
 canvas,
@@ -414,6 +429,32 @@ svg {
   outline: none;
 }
 
+/* The compact Smart Clock pickers sit inside their own bordered controls.
+   Keep the shared form treatment from drawing a second field inside them. */
+.dashboard-shell main .quick-smart-clock select,
+.dashboard-shell main .quick-smart-clock select:disabled {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #FFFFFF;
+  -webkit-text-fill-color: #FFFFFF;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.dashboard-shell main .quick-smart-clock select:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.dashboard-shell main .quick-smart-clock option {
+  background-color: #720B0B;
+  color: #FFFFFF;
+}
+
 .dashboard-shell main :where(input, textarea)::placeholder {
   color: #9CA3AF;
 }
@@ -502,7 +543,6 @@ svg {
 }
 
 .dashboard-shell [role='dialog'] {
-  max-width: calc(100vw - 1rem);
   max-height: calc(100dvh - 1rem);
 }
 

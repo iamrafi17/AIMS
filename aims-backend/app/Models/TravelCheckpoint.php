@@ -19,6 +19,7 @@ class TravelCheckpoint extends Model
         'captured_by',
         'latitude',
         'longitude',
+        'gps_accuracy',
         'readable_location',
         'photo_path',
         'notes',
@@ -32,6 +33,7 @@ class TravelCheckpoint extends Model
         return [
             'latitude' => 'decimal:8',
             'longitude' => 'decimal:8',
+            'gps_accuracy' => 'decimal:2',
             'captured_at' => 'datetime',
             'is_final_destination' => 'boolean',
             'is_verified' => 'boolean',

@@ -187,7 +187,8 @@ class AuthController extends Controller
                 'phone' => $request->phone,
                 'college_id' => $enrollment->college_id,
                 'program_id' => $enrollment->program_id,
-                'year_level' => $request->year_level,
+                'academic_section_id' => $enrollment->academic_section_id,
+                'year_level' => $enrollment->academicSection?->year_level ?? $request->year_level,
                 'section' => $enrollment->section,
                 'required_ojt_hours' => $enrollment->college?->required_ojt_hours ?? 486,
                 'parent_name' => $request->parent_name,
@@ -237,7 +238,11 @@ class AuthController extends Controller
 
     public function enrollment(string $schoolId)
     {
-        $enrollment = OjtEnrollment::with(['college:id,name,code,required_ojt_hours', 'program:id,college_id,name,code'])
+        $enrollment = OjtEnrollment::with([
+            'college:id,name,code,required_ojt_hours',
+            'program:id,college_id,name,code',
+            'academicSection:id,program_id,name,year_level,academic_year',
+        ])
             ->where('school_id', trim($schoolId))
             ->first();
 
@@ -261,6 +266,7 @@ class AuthController extends Controller
             'first_name' => $firstName,
             'last_name' => $lastName,
             'section' => $enrollment->section,
+            'academic_section' => $enrollment->academicSection,
             'college' => $enrollment->college,
             'program' => $enrollment->program,
             'required_ojt_hours' => (float) ($enrollment->college?->required_ojt_hours ?? 486),

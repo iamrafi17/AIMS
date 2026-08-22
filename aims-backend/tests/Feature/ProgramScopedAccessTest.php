@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademicSection;
 use App\Models\Attendance;
 use App\Models\College;
 use App\Models\HTE;
@@ -103,6 +104,107 @@ class ProgramScopedAccessTest extends TestCase
         ])->assertUnprocessable()->assertJsonValidationErrors('hte_id');
 
         $this->assertNull($student->fresh()->hte_id);
+    }
+
+    public function test_coordinator_reports_are_automatically_scoped_to_the_assigned_program(): void
+    {
+        [$college, $bsis, $bsit] = $this->academicContext();
+        $coordinator = User::factory()->create([
+            'role' => 'coordinator',
+            'college_id' => $college->id,
+            'program_id' => $bsis->id,
+        ]);
+        $ownStudent = $this->student($college, $bsis, '2026-BSIS-REPORT');
+        $otherStudent = $this->student($college, $bsit, '2026-BSIT-REPORT');
+
+        Attendance::create([
+            'student_id' => $ownStudent->id,
+            'date' => '2026-08-17',
+            'status' => 'present',
+            'work_mode' => 'wfo',
+            'session_type' => 'full_day',
+        ]);
+        Attendance::create([
+            'student_id' => $otherStudent->id,
+            'date' => '2026-08-17',
+            'status' => 'present',
+            'work_mode' => 'wfo',
+            'session_type' => 'full_day',
+        ]);
+
+        Sanctum::actingAs($coordinator);
+
+        $this->getJson("/api/coordinator/reports?date_from=2026-08-17&date_to=2026-08-17&program_id={$bsit->id}")
+            ->assertOk()
+            ->assertJsonPath('program.id', $bsis->id)
+            ->assertJsonPath('program.code', 'BSIS')
+            ->assertJsonCount(1, 'students')
+            ->assertJsonCount(1, 'attendance')
+            ->assertJsonPath('students.0.studentId', '2026-BSIS-REPORT')
+            ->assertJsonPath('attendance.0.studentId', '2026-BSIS-REPORT')
+            ->assertJsonMissing(['studentId' => '2026-BSIT-REPORT']);
+    }
+
+    public function test_coordinator_and_program_head_reports_can_filter_their_program_by_section(): void
+    {
+        [$college, $bsis, $bsit] = $this->academicContext();
+        $sectionA = AcademicSection::create([
+            'program_id' => $bsis->id,
+            'name' => '4A',
+            'year_level' => 4,
+            'academic_year' => '2026-2027',
+            'is_active' => true,
+        ]);
+        $sectionB = AcademicSection::create([
+            'program_id' => $bsis->id,
+            'name' => '4B',
+            'year_level' => 4,
+            'academic_year' => '2026-2027',
+            'is_active' => true,
+        ]);
+        $otherProgramSection = AcademicSection::create([
+            'program_id' => $bsit->id,
+            'name' => '4A',
+            'year_level' => 4,
+            'academic_year' => '2026-2027',
+            'is_active' => true,
+        ]);
+        $sectionAStudent = $this->student($college, $bsis, '2026-BSIS-4A');
+        $sectionAStudent->update(['academic_section_id' => $sectionA->id, 'section' => '4A']);
+        $sectionBStudent = $this->student($college, $bsis, '2026-BSIS-4B');
+        $sectionBStudent->update(['academic_section_id' => $sectionB->id, 'section' => '4B']);
+        $coordinator = User::factory()->create([
+            'role' => 'coordinator',
+            'college_id' => $college->id,
+            'program_id' => $bsis->id,
+        ]);
+        $programHead = User::factory()->create([
+            'role' => 'program_head',
+            'college_id' => $college->id,
+            'program_id' => $bsis->id,
+        ]);
+
+        Sanctum::actingAs($coordinator);
+        $this->getJson("/api/coordinator/reports?academic_section_id={$sectionA->id}")
+            ->assertOk()
+            ->assertJsonCount(2, 'sections')
+            ->assertJsonPath('selected_section.id', $sectionA->id)
+            ->assertJsonCount(1, 'students')
+            ->assertJsonPath('students.0.studentId', '2026-BSIS-4A');
+        $this->getJson("/api/coordinator/reports?academic_section_id={$otherProgramSection->id}")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('academic_section_id');
+
+        Sanctum::actingAs($programHead);
+        $this->getJson("/api/program-head/dashboard?academic_section_id={$sectionB->id}")
+            ->assertOk()
+            ->assertJsonPath('scope.selected_section.id', $sectionB->id)
+            ->assertJsonPath('overview.total_students', 1)
+            ->assertJsonPath('analytics.section_performance.0.section', '4B');
+        $this->getJson("/api/program-head/students?academic_section_id={$sectionA->id}")
+            ->assertOk()
+            ->assertJsonPath('summary.total', 1)
+            ->assertJsonPath('students.0.student_id', '2026-BSIS-4A');
     }
 
     public function test_program_head_only_sees_and_reviews_documents_from_the_assigned_program(): void

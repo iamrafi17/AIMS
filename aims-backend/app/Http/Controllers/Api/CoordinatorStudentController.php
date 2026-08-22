@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicSection;
 use App\Models\Attendance;
 use App\Models\College;
 use App\Models\HTE;
@@ -12,6 +13,7 @@ use App\Models\Program;
 use App\Models\Student;
 use App\Models\SystemNotification;
 use App\Models\User;
+use App\Support\AttendanceHours;
 use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -26,8 +28,14 @@ class CoordinatorStudentController extends Controller
     public function index(Request $request)
     {
         $programId = ProgramAccess::programId($request->user());
+        $filters = $request->validate([
+            'per_page' => ['nullable', 'integer', Rule::in([10, 25, 50, 100])],
+            'academic_section_id' => ['nullable', 'integer', ...$this->sectionExistsRule($programId)],
+        ]);
+        $sectionId = isset($filters['academic_section_id']) ? (int) $filters['academic_section_id'] : null;
         $students = Student::with(['user', 'college', 'program', 'hte', 'attendance'])
             ->where('program_id', $programId)
+            ->when($sectionId, fn ($query) => $query->where('academic_section_id', $sectionId))
             ->when($request->search, function ($query, $search) {
                 $query->where(function ($nested) use ($search) {
                     $nested->where('first_name', 'like', '%'.$search.'%')
@@ -40,7 +48,8 @@ class CoordinatorStudentController extends Controller
             ->when($request->internship_status, fn ($query, $status) => $query->where('internship_status', $status))
             ->orderBy('last_name')
             ->orderBy('first_name')
-            ->paginate(12);
+            ->paginate($filters['per_page'] ?? 10)
+            ->withQueryString();
 
         InternshipRequirement::ensureForStudents($students->getCollection()->pluck('id'));
         $students->getCollection()->load('requirements');
@@ -49,11 +58,11 @@ class CoordinatorStudentController extends Controller
         return response()->json([
             ...$students->toArray(),
             'summary' => [
-                'total' => Student::where('program_id', $programId)->count(),
-                'pending' => Student::where('program_id', $programId)->where('registration_status', 'pending')->count(),
-                'approved' => Student::where('program_id', $programId)->where('registration_status', 'approved')->count(),
-                'rejected' => Student::where('program_id', $programId)->where('registration_status', 'rejected')->count(),
-                'active' => Student::where('program_id', $programId)->where('internship_status', 'active')->count(),
+                'total' => $this->studentScope($programId, $sectionId)->count(),
+                'pending' => $this->studentScope($programId, $sectionId)->where('registration_status', 'pending')->count(),
+                'approved' => $this->studentScope($programId, $sectionId)->where('registration_status', 'approved')->count(),
+                'rejected' => $this->studentScope($programId, $sectionId)->where('registration_status', 'rejected')->count(),
+                'active' => $this->studentScope($programId, $sectionId)->where('internship_status', 'active')->count(),
             ],
         ]);
     }
@@ -67,31 +76,45 @@ class CoordinatorStudentController extends Controller
             'colleges' => College::with(['programs' => fn ($query) => $query->whereKey($programId)->where('is_active', true)])
                 ->whereKey($collegeId)->where('is_active', true)->get(),
             'htes' => HTE::where('program_id', $programId)->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'sections' => AcademicSection::where('program_id', $programId)
+                ->where('is_active', true)
+                ->orderByDesc('academic_year')
+                ->orderBy('year_level')
+                ->orderBy('name')
+                ->get(['id', 'program_id', 'name', 'year_level', 'academic_year']),
         ]);
     }
 
     public function enrollments(Request $request)
     {
         $programId = ProgramAccess::programId($request->user());
-        $search = trim((string) $request->query('search', ''));
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'per_page' => ['nullable', 'integer', Rule::in([10, 25, 50, 100])],
+            'academic_section_id' => ['nullable', 'integer', ...$this->sectionExistsRule($programId)],
+        ]);
+        $sectionId = isset($filters['academic_section_id']) ? (int) $filters['academic_section_id'] : null;
+        $search = trim((string) ($filters['search'] ?? ''));
+        $enrollments = OjtEnrollment::with(['student.user'])
+            ->where('program_id', $programId)
+            ->when($sectionId, fn ($query) => $query->where('academic_section_id', $sectionId))
+            ->when($search, function ($query) use ($search) {
+                $query->where(function ($nested) use ($search) {
+                    $nested->where('school_id', 'like', '%'.$search.'%')
+                        ->orWhere('full_name', 'like', '%'.$search.'%')
+                        ->orWhere('section', 'like', '%'.$search.'%');
+                });
+            })
+            ->latest()
+            ->paginate($filters['per_page'] ?? 10)
+            ->withQueryString();
 
         return response()->json([
-            'data' => OjtEnrollment::with(['student.user'])
-                ->where('program_id', $programId)
-                ->when($search, function ($query) use ($search) {
-                    $query->where(function ($nested) use ($search) {
-                        $nested->where('school_id', 'like', '%'.$search.'%')
-                            ->orWhere('full_name', 'like', '%'.$search.'%')
-                            ->orWhere('section', 'like', '%'.$search.'%');
-                    });
-                })
-                ->latest()
-                ->limit(500)
-                ->get(),
+            ...$enrollments->toArray(),
             'summary' => [
-                'total' => OjtEnrollment::where('program_id', $programId)->count(),
-                'awaiting_registration' => OjtEnrollment::where('program_id', $programId)->whereNull('registered_at')->count(),
-                'registered' => OjtEnrollment::where('program_id', $programId)->whereNotNull('registered_at')->count(),
+                'total' => $this->enrollmentScope($programId, $sectionId)->count(),
+                'awaiting_registration' => $this->enrollmentScope($programId, $sectionId)->whereNull('registered_at')->count(),
+                'registered' => $this->enrollmentScope($programId, $sectionId)->whereNotNull('registered_at')->count(),
             ],
         ]);
     }
@@ -102,15 +125,17 @@ class CoordinatorStudentController extends Controller
         $validated = $request->validate([
             'full_name' => ['required', 'string', 'max:255'],
             'school_id' => ['required', 'string', 'max:20', Rule::unique('ojt_enrollments', 'school_id'), Rule::unique('students', 'student_id')],
-            'section' => ['required', 'string', 'max:50'],
+            'academic_section_id' => ['required', 'integer', ...$this->sectionExistsRule($programId)],
         ]);
+        $section = AcademicSection::findOrFail($validated['academic_section_id']);
 
         $enrollment = OjtEnrollment::create([
             'school_id' => trim($validated['school_id']),
             'full_name' => preg_replace('/\s+/', ' ', trim($validated['full_name'])),
-            'section' => trim($validated['section']),
+            'section' => $section->name,
             'college_id' => $request->user()->college_id,
             'program_id' => $programId,
+            'academic_section_id' => $section->id,
             'source' => 'manual',
             'added_by' => $request->user()->id,
         ]);
@@ -251,12 +276,18 @@ class CoordinatorStudentController extends Controller
 
     public function importCsv(Request $request)
     {
-        $request->validate(['file' => ['required', 'file', 'mimes:csv', 'max:5120']]);
+        $programId = ProgramAccess::programId($request->user());
+        $validated = $request->validate([
+            'file' => ['required', 'file', 'mimes:csv', 'max:5120'],
+            'academic_section_id' => ['required', 'integer', ...$this->sectionExistsRule($programId)],
+        ]);
+        $section = AcademicSection::findOrFail($validated['academic_section_id']);
         $students = $this->analyzePredefinedCsv($request->file('file'));
 
         return response()->json([
             'message' => 'Student list is ready for review.',
             'file_name' => $request->file('file')->getClientOriginalName(),
+            'section' => $this->sectionPayload($section),
             'students' => $students,
             'summary' => $this->importSummary($students),
         ]);
@@ -264,13 +295,16 @@ class CoordinatorStudentController extends Controller
 
     public function confirmCsvImport(Request $request)
     {
-        $request->validate(['file' => ['required', 'file', 'mimes:csv', 'max:5120']]);
         $programId = ProgramAccess::programId($request->user());
-        $program = Program::findOrFail($programId);
+        $validated = $request->validate([
+            'file' => ['required', 'file', 'mimes:csv', 'max:5120'],
+            'academic_section_id' => ['required', 'integer', ...$this->sectionExistsRule($programId)],
+        ]);
+        $section = AcademicSection::findOrFail($validated['academic_section_id']);
         $students = $this->analyzePredefinedCsv($request->file('file'));
         $imported = 0;
 
-        DB::transaction(function () use ($request, $students, $program, &$imported) {
+        DB::transaction(function () use ($request, $students, $programId, $section, &$imported) {
             foreach ($students as $student) {
                 if ($student['status'] !== 'Ready') {
                     continue;
@@ -286,9 +320,10 @@ class CoordinatorStudentController extends Controller
                 OjtEnrollment::create([
                     'school_id' => $student['school_no'],
                     'full_name' => $student['full_name'],
-                    'section' => $program->code,
+                    'section' => $section->name,
                     'college_id' => $request->user()->college_id,
-                    'program_id' => $program->id,
+                    'program_id' => $programId,
+                    'academic_section_id' => $section->id,
                     'source' => 'csv',
                     'added_by' => $request->user()->id,
                 ]);
@@ -299,6 +334,7 @@ class CoordinatorStudentController extends Controller
         return response()->json([
             'message' => 'Student list imported successfully.',
             'detail' => $imported.' students were successfully imported.',
+            'section' => $this->sectionPayload($section),
             'imported' => $imported,
             'skipped' => count($students) - $imported,
         ]);
@@ -424,6 +460,37 @@ class CoordinatorStudentController extends Controller
         ]);
     }
 
+    private function sectionExistsRule(int $programId): array
+    {
+        return [Rule::exists('academic_sections', 'id')->where(fn ($query) => $query
+            ->where('program_id', $programId)
+            ->where('is_active', true))];
+    }
+
+    private function sectionPayload(AcademicSection $section): array
+    {
+        return [
+            'id' => $section->id,
+            'name' => $section->name,
+            'year_level' => $section->year_level,
+            'academic_year' => $section->academic_year,
+        ];
+    }
+
+    private function studentScope(int $programId, ?int $sectionId)
+    {
+        return Student::query()
+            ->where('program_id', $programId)
+            ->when($sectionId, fn ($query) => $query->where('academic_section_id', $sectionId));
+    }
+
+    private function enrollmentScope(int $programId, ?int $sectionId)
+    {
+        return OjtEnrollment::query()
+            ->where('program_id', $programId)
+            ->when($sectionId, fn ($query) => $query->where('academic_section_id', $sectionId));
+    }
+
     private function studentRules(?Student $student, User $coordinator): array
     {
         return [
@@ -486,7 +553,6 @@ class CoordinatorStudentController extends Controller
 
     private function renderedHours(Attendance $record): float
     {
-        return collect([[$record->am_time_in, $record->am_time_out], [$record->pm_time_in, $record->pm_time_out]])
-            ->sum(fn ($slot) => $slot[0] && $slot[1] ? $slot[0]->diffInSeconds($slot[1]) / 3600 : 0) + (float) $record->overtime_hours;
+        return AttendanceHours::total($record);
     }
 }

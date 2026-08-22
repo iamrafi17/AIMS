@@ -157,13 +157,13 @@ function ActivityModal({ period, activity, setActivity, submitting, onCancel, on
   );
 }
 
-function CompletionModal({ onClose }) {
+function CompletionModal({ onClose, usesServerTime }) {
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="completion-title">
       <div className="w-full max-w-sm rounded-3xl bg-white p-8 text-center shadow-2xl dark:bg-gray-800">
         <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-100 text-4xl text-emerald-600"><FiCheck /></div>
         <h2 id="completion-title" className="mt-6 text-2xl font-black text-[#690016]">Attendance complete!</h2>
-        <p className="mt-3 text-sm leading-6 text-slate-500">All required time slots for today were saved successfully using server time.</p>
+        <p className="mt-3 text-sm leading-6 text-slate-500">All required time slots for today were saved successfully using {usesServerTime ? 'server time' : 'device time in test mode'}.</p>
         <button type="button" onClick={onClose} className="mt-7 w-full rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-extrabold text-white">Done</button>
       </div>
     </div>
@@ -198,8 +198,10 @@ function StudentDashboard() {
   }, []);
 
   const applyClockState = (data) => {
-    serverOffsetRef.current = new Date(data.server_time).getTime() - Date.now();
-    setCurrentTime(new Date(data.server_time));
+    serverOffsetRef.current = data.uses_server_time
+      ? new Date(data.server_time).getTime() - Date.now()
+      : 0;
+    setCurrentTime(data.uses_server_time ? new Date(data.server_time) : new Date());
     setClockState(data);
 
     if (data.attendance) {
@@ -268,6 +270,7 @@ function StudentDashboard() {
         work_mode: status === 'present' ? workMode : null,
         session_type: status === 'present' ? sessionType : null,
         activity: activityReport || null,
+        client_time: new Date().toISOString(),
         ...location,
       });
 
@@ -391,6 +394,7 @@ function StudentDashboard() {
             {clockLoading ? '--:--:--' : formattedTime}
           </time>
           <p className="mt-2 text-sm font-bold text-white/70 sm:text-base">{formattedDate}</p>
+          <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-white/55">{clockState?.uses_server_time ? 'Server-synchronized time' : 'Device time · test mode'}</p>
 
           {status === 'present' && displaySlots.length > 0 && (
             <ol className={'mt-5 grid w-full max-w-xs gap-2 ' + (displaySlots.length === 4 ? 'grid-cols-4' : 'grid-cols-2')} aria-label="Clock progress">
@@ -569,7 +573,7 @@ function StudentDashboard() {
           onSubmit={handleActivitySubmit}
         />
       )}
-      {completionModalOpen && <CompletionModal onClose={() => setCompletionModalOpen(false)} />}
+      {completionModalOpen && <CompletionModal usesServerTime={clockState?.uses_server_time} onClose={() => setCompletionModalOpen(false)} />}
     </div>
   );
 }

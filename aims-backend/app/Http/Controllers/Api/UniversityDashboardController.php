@@ -10,6 +10,7 @@ use App\Models\MOA;
 use App\Models\Student;
 use App\Models\TravelCheckpoint;
 use App\Models\TravelLog;
+use App\Support\AttendanceHours;
 use Illuminate\Http\Request;
 
 class UniversityDashboardController extends Controller
@@ -177,7 +178,7 @@ class UniversityDashboardController extends Controller
                 'travel_verification_rate' => round($travelVerificationRate, 1),
             ],
             'travel' => [
-                'active' => TravelLog::where('status', 'active')->count(),
+                'active' => TravelLog::whereIn('status', ['active', 'traveling', 'arrived'])->count(),
                 'total_this_month' => $monthTravel->count(),
                 'completed_this_month' => $monthTravel->where('status', 'completed')->count(),
                 'cancelled_this_month' => $monthTravel->where('status', 'cancelled')->count(),
@@ -201,15 +202,6 @@ class UniversityDashboardController extends Controller
 
     private function renderedHours(Attendance $attendance): float
     {
-        $regular = collect([
-            [$attendance->am_time_in, $attendance->am_time_out],
-            [$attendance->pm_time_in, $attendance->pm_time_out],
-        ])->sum(fn (array $slot) => $slot[0] && $slot[1] ? $slot[0]->diffInSeconds($slot[1]) / 3600 : 0);
-
-        if ($regular <= 0 && ! $attendance->am_time_in && ! $attendance->pm_time_in && $attendance->time_in && $attendance->time_out) {
-            $regular = $attendance->time_in->diffInSeconds($attendance->time_out) / 3600;
-        }
-
-        return $regular + (float) $attendance->overtime_hours;
+        return AttendanceHours::total($attendance);
     }
 }

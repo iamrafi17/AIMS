@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademicSection;
 use App\Models\College;
 use App\Models\OjtEnrollment;
 use App\Models\Program;
@@ -19,6 +20,13 @@ class RegistrationEnrollmentTest extends TestCase
         $coordinator = User::factory()->create(['role' => 'coordinator']);
         $college = College::create(['name' => 'Computing', 'code' => 'CICS', 'required_ojt_hours' => 600, 'is_active' => true]);
         $program = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
+        $section = AcademicSection::create([
+            'program_id' => $program->id,
+            'name' => '4A',
+            'year_level' => 4,
+            'academic_year' => '2026-2027',
+            'is_active' => true,
+        ]);
         $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
         OjtEnrollment::create([
             'school_id' => '2026-REG-001',
@@ -26,6 +34,7 @@ class RegistrationEnrollmentTest extends TestCase
             'section' => 'BSIT 4A',
             'college_id' => $college->id,
             'program_id' => $program->id,
+            'academic_section_id' => $section->id,
             'source' => 'csv',
             'added_by' => $coordinator->id,
         ]);
@@ -36,6 +45,7 @@ class RegistrationEnrollmentTest extends TestCase
             ->assertJsonPath('first_name', 'Maria Dela')
             ->assertJsonPath('last_name', 'Santos')
             ->assertJsonPath('section', 'BSIT 4A')
+            ->assertJsonPath('academic_section.id', $section->id)
             ->assertJsonPath('required_ojt_hours', 600);
 
         $payload = [
@@ -76,6 +86,7 @@ class RegistrationEnrollmentTest extends TestCase
             'first_name' => 'Maria Dela',
             'last_name' => 'Santos',
             'section' => 'BSIT 4A',
+            'academic_section_id' => $section->id,
             'required_ojt_hours' => 600,
         ]);
         $this->assertDatabaseHas('ojt_enrollments', [

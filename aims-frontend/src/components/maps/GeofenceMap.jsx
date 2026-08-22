@@ -151,6 +151,7 @@ function GeofenceMap({
   onPositionChange = () => {},
   onRadiusChange = () => {},
   className = '',
+  compact = false,
 }) {
   const parsedLatitude = validCoordinate(latitude, -90, 90);
   const parsedLongitude = validCoordinate(longitude, -180, 180);
@@ -171,7 +172,7 @@ function GeofenceMap({
 
   return (
     <section className={`overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 dark:border-gray-600 dark:bg-gray-900 ${className}`}>
-      <div className="relative h-[280px] min-h-[260px] sm:h-[360px] sm:min-h-[300px]">
+      <div className={`relative ${compact ? 'h-[220px] min-h-[200px] sm:h-[260px] sm:min-h-[240px]' : 'h-[280px] min-h-[260px] sm:h-[360px] sm:min-h-[300px]'}`}>
         <MapContainer
           center={position}
           zoom={hasSelectedLocation ? 17 : 13}

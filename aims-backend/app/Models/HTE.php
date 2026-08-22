@@ -67,4 +67,9 @@ class HTE extends Model
     {
         return $this->hasMany(MOA::class, 'hte_id');
     }
+
+    public function batchSchedules()
+    {
+        return $this->hasMany(HteBatchSchedule::class, 'hte_id');
+    }
 }

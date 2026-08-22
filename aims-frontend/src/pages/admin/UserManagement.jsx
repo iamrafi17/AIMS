@@ -514,6 +514,8 @@ export default function AdminUsers() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {users.map((user) => {
                   const isCurrentAccount = user.id === authenticatedUser?.id;
+                  const assignedCollege = user.college || user.student?.college;
+                  const assignedProgram = user.program || user.student?.program;
 
                   return (
                     <tr key={user.id} className="align-middle transition hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -531,23 +533,23 @@ export default function AdminUsers() {
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        <span className="rounded-full bg-[#7D001D]/10 px-3 py-1 text-xs font-black capitalize text-[#7D001D] dark:text-red-300">
+                        <span className="inline-flex whitespace-nowrap rounded-full bg-[#7D001D]/10 px-3 py-1 text-xs font-black capitalize text-[#7D001D] dark:text-red-300">
                           {roleLabel(user.role)}
                         </span>
                       </td>
                       <td className="px-5 py-4">
-                        {user.college ? (
+                        {assignedCollege ? (
                           <div>
-                            <p className="text-sm font-black">{user.college.code}</p>
-                            <p className="mt-0.5 max-w-44 text-xs leading-4 text-slate-500">{user.college.name}</p>
+                            <p className="text-sm font-black">{assignedCollege.code}</p>
+                            <p className="mt-0.5 max-w-44 text-xs leading-4 text-slate-500">{assignedCollege.name}</p>
                           </div>
                         ) : <span className="text-sm text-slate-400">Not assigned</span>}
                       </td>
                       <td className="px-5 py-4">
-                        {user.program ? (
+                        {assignedProgram ? (
                           <div>
-                            <p className="text-sm font-black">{user.program.code}</p>
-                            <p className="mt-0.5 max-w-44 text-xs leading-4 text-slate-500">{user.program.name}</p>
+                            <p className="text-sm font-black">{assignedProgram.code}</p>
+                            <p className="mt-0.5 max-w-44 text-xs leading-4 text-slate-500">{assignedProgram.name}</p>
                           </div>
                         ) : <span className="text-sm text-slate-400">Not assigned</span>}
                       </td>

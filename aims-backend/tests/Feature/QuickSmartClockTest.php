@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Attendance;
 use App\Models\College;
+use App\Models\HTE;
 use App\Models\Program;
 use App\Models\Student;
 use App\Models\User;
@@ -16,6 +17,13 @@ use Tests\TestCase;
 class QuickSmartClockTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['attendance.use_server_time' => true]);
+    }
 
     public function test_full_day_smart_clock_enforces_slot_order_and_activity_reports(): void
     {
@@ -97,6 +105,67 @@ class QuickSmartClockTest extends TestCase
             'student_id' => $user->student->id,
             'status' => 'absent',
         ]);
+    }
+
+    public function test_smart_clock_can_use_device_time_in_local_test_mode(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-03-18 10:00:00', 'Asia/Manila'));
+        config(['attendance.use_server_time' => false]);
+
+        try {
+            $user = $this->studentUser();
+            Sanctum::actingAs($user);
+            Http::fake();
+
+            $payload = [
+                'status' => 'present',
+                'work_mode' => 'wfh',
+                'session_type' => 'full_day',
+                'latitude' => 13.4753,
+                'longitude' => 122.0275,
+            ];
+
+            $this->postJson('/api/student/attendance/quick-clock', [
+                ...$payload,
+                'client_time' => '2026-03-17T23:00:00.000Z',
+            ])->assertOk()
+                ->assertJsonPath('uses_server_time', false)
+                ->assertJsonPath('next_action.key', 'am_time_out');
+
+            $this->postJson('/api/student/attendance/quick-clock', [
+                ...$payload,
+                'activity' => 'Tested the device-time clock.',
+                'client_time' => '2026-03-18T04:00:00.000Z',
+            ])->assertOk()
+                ->assertJsonPath('next_action.key', 'pm_time_in');
+
+            $this->postJson('/api/student/attendance/quick-clock', [
+                ...$payload,
+                'client_time' => '2026-03-18T05:00:00.000Z',
+            ])->assertOk()
+                ->assertJsonPath('next_action.key', 'pm_time_out');
+
+            $this->postJson('/api/student/attendance/quick-clock', [
+                ...$payload,
+                'activity' => 'Completed overtime testing.',
+                'client_time' => '2026-03-18T09:30:00.000Z',
+            ])->assertOk()
+                ->assertJsonPath('completed', true)
+                ->assertJsonPath('attendance.overtime_hours', 1.5);
+
+            $attendance = Attendance::where('student_id', $user->student->id)->firstOrFail();
+            $this->assertSame('07:00', $attendance->am_time_in->format('H:i'));
+            $this->assertSame('12:00', $attendance->am_time_out->format('H:i'));
+            $this->assertSame('13:00', $attendance->pm_time_in->format('H:i'));
+            $this->assertSame('17:30', $attendance->pm_time_out->format('H:i'));
+            $this->assertSame('07:00', $attendance->time_in->format('H:i'));
+            $this->assertSame('17:30', $attendance->time_out->format('H:i'));
+            $this->assertSame('07:00', $attendance->ot_start->format('H:i'));
+            $this->assertSame('17:30', $attendance->ot_end->format('H:i'));
+            $this->assertSame('1.50', $attendance->overtime_hours);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_student_dashboard_returns_database_driven_ojt_progress(): void
@@ -192,7 +261,11 @@ class QuickSmartClockTest extends TestCase
             $this->getJson('/api/student/attendance/workspace?month=2026-03&date=2026-03-17')
                 ->assertOk()
                 ->assertJsonPath('selected_attendance.overtime_hours', 4)
-                ->assertJsonPath('week_summary.rendered_hours', 8)
+                ->assertJsonPath('selected_attendance.regular_hours', 8)
+                ->assertJsonPath('selected_attendance.total_hours', 12)
+                ->assertJsonPath('calendar.0.hours', 12)
+                ->assertJsonPath('calendar.0.regular_hours', 8)
+                ->assertJsonPath('week_summary.rendered_hours', 12)
                 ->assertJsonPath('week_summary.overtime_hours', 4)
                 ->assertJsonPath('settings.allow_past_attendance', true);
 
@@ -212,6 +285,44 @@ class QuickSmartClockTest extends TestCase
                 'session_type' => 'am_half',
                 'am_activity' => 'Updated morning work',
             ]);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_workspace_counts_only_remaining_configured_workdays(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-15 12:00:00', 'Asia/Manila'));
+
+        try {
+            $user = $this->studentUser();
+            $hte = HTE::create([
+                'name' => 'Example HTE',
+                'address' => 'Santa Cruz, Marinduque',
+                'contact_person' => 'HTE Supervisor',
+                'contact_email' => 'hte@example.test',
+                'contact_phone' => '09170000001',
+                'work_days' => ['mon', 'tue', 'wed', 'thu', 'fri'],
+            ]);
+
+            $user->student->update([
+                'hte_id' => $hte->id,
+                'ojt_start_date' => '2026-08-15',
+                'ojt_end_date' => '2026-08-28',
+                'work_days' => null,
+            ]);
+            Sanctum::actingAs($user);
+
+            $this->getJson('/api/student/attendance/workspace?month=2026-08&date=2026-08-15')
+                ->assertOk()
+                ->assertJsonPath('week_summary.days_left', 0)
+                ->assertJsonPath('settings.work_days', ['mon', 'tue', 'wed', 'thu', 'fri']);
+
+            Carbon::setTestNow(Carbon::parse('2026-08-17 12:00:00', 'Asia/Manila'));
+
+            $this->getJson('/api/student/attendance/workspace?month=2026-08&date=2026-08-17')
+                ->assertOk()
+                ->assertJsonPath('week_summary.days_left', 4);
         } finally {
             Carbon::setTestNow();
         }

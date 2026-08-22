@@ -18,6 +18,7 @@ class CoreDatabaseSchemaTest extends TestCase
         'programs',
         'academic_sections',
         'htes',
+        'hte_batch_schedules',
         'moas',
         'attendance',
         'program_requirements',
@@ -25,7 +26,8 @@ class CoreDatabaseSchemaTest extends TestCase
         'travel_logs',
         'travel_checkpoints',
         'travel_participants',
-        'travel_companions',
+        'travel_reports',
+        'travel_report_validations',
         'internship_tasks',
         'evaluations',
         'approval_records',
@@ -52,11 +54,14 @@ class CoreDatabaseSchemaTest extends TestCase
             'students' => ['user_id', 'program_id', 'academic_section_id', 'hte_id', 'supervisor_id'],
             'ojt_enrollments' => ['student_record_id', 'college_id', 'program_id', 'academic_section_id'],
             'programs' => ['college_id'],
+            'hte_batch_schedules' => ['hte_id', 'academic_section_id'],
             'attendance' => ['student_id'],
             'internship_requirements' => ['student_id', 'program_requirement_id'],
             'moas' => ['hte_id'],
             'travel_checkpoints' => ['travel_log_id', 'captured_by'],
             'travel_participants' => ['travel_log_id', 'student_id'],
+            'travel_reports' => ['travel_log_id', 'coordinator_id'],
+            'travel_report_validations' => ['travel_report_id', 'reviewer_id'],
             'internship_tasks' => ['student_id', 'supervisor_id'],
             'evaluations' => ['student_id', 'supervisor_id'],
         ];
@@ -92,7 +97,18 @@ class CoreDatabaseSchemaTest extends TestCase
             'longitude',
             'readable_location',
             'captured_at',
+            'gps_accuracy',
         ]));
+
+        $this->assertTrue(Schema::hasColumns('travel_logs', [
+            'created_by', 'coordinator_id', 'hte_id', 'start_time', 'departed_at', 'arrived_at', 'end_time', 'status',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('travel_reports', [
+            'travel_log_id', 'report_number', 'remarks', 'status', 'version', 'generated_at', 'submitted_at',
+        ]));
+
+        $this->assertTrue(Schema::hasColumn('hte_batch_schedules', 'is_working'));
     }
 
     public function test_critical_prd_uniqueness_rules_are_enforced(): void
@@ -100,6 +116,7 @@ class CoreDatabaseSchemaTest extends TestCase
         $this->assertUniqueIndex('students', ['user_id']);
         $this->assertUniqueIndex('ojt_enrollments', ['school_id']);
         $this->assertUniqueIndex('attendance', ['student_id', 'date']);
+        $this->assertUniqueIndex('hte_batch_schedules', ['hte_id', 'academic_section_id', 'day_of_week']);
         $this->assertUniqueIndex('travel_logs', ['session_code']);
         $this->assertUniqueIndex('travel_checkpoints', ['travel_log_id', 'sequence']);
         $this->assertUniqueIndex('travel_participants', ['travel_log_id', 'student_id']);

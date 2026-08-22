@@ -7,6 +7,7 @@ use App\Models\Announcement;
 use App\Models\Attendance;
 use App\Models\InternshipRequirement;
 use App\Models\Student;
+use App\Support\AttendanceHours;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -42,7 +43,7 @@ class StudentDashboardController extends Controller
             && $attendance->date->year === now()->year
         );
 
-        $renderedHours = $attendanceRecords->sum(fn (Attendance $attendance) => $this->attendanceHours($attendance)
+        $renderedHours = $attendanceRecords->sum(fn (Attendance $attendance) => $this->attendanceHours($attendance, $student)
         );
 
         $attendanceDays = $attendanceRecords
@@ -54,11 +55,11 @@ class StudentDashboardController extends Controller
         );
 
         $weekStart = now()->startOfWeek(Carbon::MONDAY)->startOfDay();
-        $weeklyHours = collect(range(0, 6))->map(function (int $offset) use ($attendanceRecords, $weekStart) {
+        $weeklyHours = collect(range(0, 6))->map(function (int $offset) use ($attendanceRecords, $student, $weekStart) {
             $date = $weekStart->copy()->addDays($offset);
             $hours = $attendanceRecords
                 ->filter(fn (Attendance $attendance) => $attendance->date->isSameDay($date))
-                ->sum(fn (Attendance $attendance) => $this->attendanceHours($attendance));
+                ->sum(fn (Attendance $attendance) => $this->attendanceHours($attendance, $student));
 
             return [
                 'day' => $date->format('D'),
@@ -149,24 +150,9 @@ class StudentDashboardController extends Controller
         ]);
     }
 
-    private function attendanceHours(Attendance $attendance): float
+    private function attendanceHours(Attendance $attendance, Student $student): float
     {
-        $slotHours = collect([
-            [$attendance->am_time_in, $attendance->am_time_out],
-            [$attendance->pm_time_in, $attendance->pm_time_out],
-        ])->sum(fn (array $slot) => $slot[0] && $slot[1]
-            ? $slot[0]->diffInSeconds($slot[1]) / 3600
-            : 0);
-
-        if ($slotHours > 0 || $attendance->am_time_in || $attendance->pm_time_in) {
-            return $slotHours + (float) $attendance->overtime_hours;
-        }
-
-        $regularHours = $attendance->time_in && $attendance->time_out
-            ? $attendance->time_in->diffInSeconds($attendance->time_out) / 3600
-            : 0;
-
-        return $regularHours + (float) $attendance->overtime_hours;
+        return AttendanceHours::total($attendance, $student);
     }
 
     private function scheduleProgress(Student $student): array

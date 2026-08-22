@@ -3,33 +3,58 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicSection;
 use App\Models\Attendance;
 use App\Models\InternshipRequirement;
 use App\Models\Student;
 use App\Models\TravelLog;
+use App\Support\AttendanceHours;
 use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ProgramHeadDashboardController extends Controller
 {
     public function index(Request $request)
     {
         $programId = ProgramAccess::programId($request->user());
+        $filters = $request->validate([
+            'academic_section_id' => ['nullable', 'integer', Rule::exists('academic_sections', 'id')->where(fn ($query) => $query
+                ->where('program_id', $programId)
+                ->where('is_active', true))],
+        ]);
+        $sectionId = isset($filters['academic_section_id']) ? (int) $filters['academic_section_id'] : null;
+        $sections = AcademicSection::where('program_id', $programId)
+            ->where('is_active', true)
+            ->orderByDesc('academic_year')
+            ->orderBy('year_level')
+            ->orderBy('name')
+            ->get(['id', 'program_id', 'name', 'year_level', 'academic_year']);
         $students = Student::with(['program', 'hte', 'attendance', 'requirements'])
-            ->where('program_id', $programId)->get();
+            ->where('program_id', $programId)
+            ->when($sectionId, fn ($query) => $query->where('academic_section_id', $sectionId))
+            ->get();
         $monthAttendance = Attendance::whereMonth('date', now()->month)
             ->whereYear('date', now()->year)
-            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('student', fn ($query) => $query
+                ->where('program_id', $programId)
+                ->when($sectionId, fn ($studentQuery) => $studentQuery->where('academic_section_id', $sectionId)))
             ->get();
         $recentAttendance = Attendance::whereDate('date', '>=', now()->subDays(6)->toDateString())
-            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('student', fn ($query) => $query
+                ->where('program_id', $programId)
+                ->when($sectionId, fn ($studentQuery) => $studentQuery->where('academic_section_id', $sectionId)))
             ->get();
         $requirements = InternshipRequirement::activeDefinitionOrLegacy()
-            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('student', fn ($query) => $query
+                ->where('program_id', $programId)
+                ->when($sectionId, fn ($studentQuery) => $studentQuery->where('academic_section_id', $sectionId)))
             ->get();
         $monthTravel = TravelLog::whereMonth('start_time', now()->month)
             ->whereYear('start_time', now()->year)
-            ->whereHas('participants', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('participants', fn ($query) => $query
+                ->where('students.program_id', $programId)
+                ->when($sectionId, fn ($studentQuery) => $studentQuery->where('academic_section_id', $sectionId)))
             ->get();
 
         $present = $monthAttendance->where('status', 'present')->count();
@@ -78,6 +103,30 @@ class ProgramHeadDashboardController extends Controller
             ->sortByDesc('students')
             ->values();
 
+        $sectionPerformance = $students
+            ->groupBy(fn (Student $student) => $student->section ?: 'Unassigned')
+            ->map(function ($sectionStudents, string $section) {
+                $attendance = $sectionStudents->flatMap->attendance;
+                $present = $attendance->whereIn('status', ['present', 'late'])->count();
+                $workdays = $present + $attendance->where('status', 'absent')->count();
+                $progress = $sectionStudents->avg(function (Student $student) {
+                    $required = max((float) $student->required_ojt_hours, 0);
+                    $rendered = $student->attendance->sum(fn (Attendance $record) => $this->renderedHours($record));
+
+                    return $required > 0 ? min(($rendered / $required) * 100, 100) : 0;
+                });
+
+                return [
+                    'section' => $section,
+                    'students' => $sectionStudents->count(),
+                    'active' => $sectionStudents->where('internship_status', 'active')->count(),
+                    'progress' => round($progress, 1),
+                    'attendance_rate' => $workdays > 0 ? round(($present / $workdays) * 100, 1) : 0,
+                ];
+            })
+            ->sortByDesc('students')
+            ->values();
+
         $attendanceTrend = collect(range(6, 0))->map(function (int $daysAgo) use ($recentAttendance) {
             $date = now()->subDays($daysAgo);
             $records = $recentAttendance->filter(fn (Attendance $record) => $record->date->isSameDay($date));
@@ -105,6 +154,8 @@ class ProgramHeadDashboardController extends Controller
             'scope' => [
                 'college' => $request->user()->college,
                 'program' => $request->user()->program,
+                'sections' => $sections,
+                'selected_section' => $sectionId ? $sections->firstWhere('id', $sectionId) : null,
             ],
             'overview' => [
                 'total_students' => $students->count(),
@@ -135,8 +186,10 @@ class ProgramHeadDashboardController extends Controller
                 'completion_rate' => $requirementTotal > 0 ? round(($approvedRequirements / $requirementTotal) * 100, 1) : 0,
             ],
             'travel' => [
-                'active' => TravelLog::where('status', 'active')
-                    ->whereHas('participants', fn ($query) => $query->where('program_id', $programId))
+                'active' => TravelLog::whereIn('status', ['active', 'traveling', 'arrived'])
+                    ->whereHas('participants', fn ($query) => $query
+                        ->where('students.program_id', $programId)
+                        ->when($sectionId, fn ($studentQuery) => $studentQuery->where('academic_section_id', $sectionId)))
                     ->count(),
                 'total_this_month' => $monthTravel->count(),
                 'completed_this_month' => $monthTravel->where('status', 'completed')->count(),
@@ -161,21 +214,13 @@ class ProgramHeadDashboardController extends Controller
                     ['label' => 'Dropped', 'value' => $students->where('internship_status', 'dropped')->count(), 'color' => '#dc2626'],
                 ],
                 'program_performance' => $programPerformance,
+                'section_performance' => $sectionPerformance,
             ],
         ]);
     }
 
     private function renderedHours(Attendance $attendance): float
     {
-        $regular = collect([
-            [$attendance->am_time_in, $attendance->am_time_out],
-            [$attendance->pm_time_in, $attendance->pm_time_out],
-        ])->sum(fn (array $slot) => $slot[0] && $slot[1] ? $slot[0]->diffInSeconds($slot[1]) / 3600 : 0);
-
-        if ($regular <= 0 && ! $attendance->am_time_in && ! $attendance->pm_time_in && $attendance->time_in && $attendance->time_out) {
-            $regular = $attendance->time_in->diffInSeconds($attendance->time_out) / 3600;
-        }
-
-        return $regular + (float) $attendance->overtime_hours;
+        return AttendanceHours::total($attendance);
     }
 }

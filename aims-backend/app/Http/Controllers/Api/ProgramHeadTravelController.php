@@ -3,183 +3,149 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\TravelCheckpoint;
+use App\Models\SystemNotification;
 use App\Models\TravelLog;
+use App\Models\TravelReport;
+use App\Models\User;
 use App\Support\ProgramAccess;
+use App\Support\TravelWorkflow;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ProgramHeadTravelController extends Controller
 {
     public function index(Request $request)
     {
-        $sessionsQuery = TravelLog::with([
-            'creator:id,name',
-            'hte:id,program_id,name,address',
-            'participants.user',
-            'participants.program',
-            'participants.college',
-            'participants.hte',
-            'checkpoints.verifier',
-        ]);
-
+        $query = TravelLog::query()->with(TravelWorkflow::relations());
         if ($request->user()->role === 'program_head') {
             $programId = ProgramAccess::programId($request->user());
-            $sessionsQuery->whereHas('participants', fn ($query) => $query->where('program_id', $programId));
+            $query->whereHas('participants', fn ($participant) => $participant->where('program_id', $programId));
+            $photoBase = '/program-head/travel';
+        } else {
+            $query->whereHas('report', fn ($report) => $report->whereIn('status', ['pending_vpaa', 'final_validated']));
+            $photoBase = '/vpaa/travel';
         }
 
-        $sessions = $sessionsQuery
-            ->latest('start_time')
-            ->get();
-
-        $checkpoints = $sessions->flatMap->checkpoints;
-        $monthSessions = $sessions->filter(fn (TravelLog $session) => $session->start_time?->isSameMonth(now()));
+        $sessions = $query->latest('start_time')->get();
+        $reports = $sessions->pluck('report')->filter();
 
         return response()->json([
+            'role' => $request->user()->role,
             'summary' => [
-                'total_sessions' => $sessions->count(),
-                'active_sessions' => $sessions->where('status', 'active')->count(),
-                'completed_this_month' => $monthSessions->where('status', 'completed')->count(),
-                'participants' => $sessions->flatMap->participants->pluck('id')->unique()->count(),
-                'total_checkpoints' => $checkpoints->count(),
-                'pending_checkpoints' => $checkpoints->where('is_verified', false)->count(),
-                'photos_for_review' => $checkpoints->whereNotNull('photo_path')->where('is_verified', false)->count(),
-                'verified_checkpoints' => $checkpoints->where('is_verified', true)->count(),
+                'active_sessions' => $sessions->whereIn('status', ['active', 'traveling', 'arrived'])->count(),
+                'completed_sessions' => $sessions->where('status', 'completed')->count(),
+                'pending_validation' => $request->user()->role === 'vpaa'
+                    ? $reports->where('status', 'pending_vpaa')->count()
+                    : $reports->where('status', 'pending_program_head')->count(),
+                'validated_reports' => $request->user()->role === 'vpaa'
+                    ? $reports->where('status', 'final_validated')->count()
+                    : $reports->whereIn('status', ['pending_vpaa', 'final_validated'])->count(),
             ],
-            'sessions' => $sessions->map(fn (TravelLog $session) => $this->sessionPayload($session))->values(),
+            'sessions' => $sessions->map(fn (TravelLog $session) => TravelWorkflow::sessionPayload($session, $photoBase))->values(),
         ]);
     }
 
-    public function verifyCheckpoint(Request $request, TravelCheckpoint $checkpoint)
+    public function reviewReport(Request $request, TravelReport $report)
     {
-        if ($request->user()->role === 'program_head') {
-            ProgramAccess::authorizeCheckpoint($request->user(), $checkpoint);
-        }
-        $validated = $request->validate([
-            'verified' => ['sometimes', 'boolean'],
+        abort_unless($request->user()->role === 'program_head', 403);
+        $report->loadMissing('travelLog.participants');
+        ProgramAccess::authorizeTravel($request->user(), $report->travelLog);
+        abort_unless($report->status === 'pending_program_head', 422, 'Only reports submitted by the Coordinator can be reviewed.');
+        $data = $request->validate([
+            'decision' => ['prohibited'],
+            'reason' => ['prohibited'],
+            'comments' => ['nullable', 'string', 'max:2000'],
         ]);
-        $verified = $validated['verified'] ?? true;
 
-        $checkpoint->update([
-            'is_verified' => $verified,
-            'verified_by' => $verified ? $request->user()->id : null,
-            'verified_at' => $verified ? now() : null,
-        ]);
+        DB::transaction(function () use ($request, $report, $data) {
+            $locked = TravelReport::query()->lockForUpdate()->findOrFail($report->id);
+            abort_unless($locked->status === 'pending_program_head', 422, 'This report is no longer pending Program Head validation.');
+            $locked->update([
+                'status' => 'pending_vpaa',
+                'program_head_validated_at' => now(),
+                'forwarded_at' => now(),
+            ]);
+            $locked->validations()->create([
+                'reviewer_id' => $request->user()->id,
+                'reviewer_role' => 'program_head',
+                'action' => 'validated_and_forwarded',
+                'comments' => $data['comments'] ?? null,
+                'reviewed_at' => now(),
+                'report_version' => $locked->version,
+            ]);
+        });
+
+        SystemNotification::sendToUser(
+            $report->coordinator_id,
+            'Travel report validated and forwarded',
+            $report->report_number.' was validated by the Program Head and forwarded to the VPAA.',
+            'travel',
+            '/coordinator/travel',
+        );
+
+        User::query()->where('role', 'vpaa')->where('is_active', true)->pluck('id')->each(
+            fn (int $userId) => SystemNotification::sendToUser($userId, 'Travel report ready for final validation', $report->report_number.' was forwarded by the Program Head.', 'travel', '/vpaa/travel')
+        );
 
         return response()->json([
-            'message' => $verified ? 'Checkpoint evidence verified.' : 'Checkpoint verification removed.',
-            'checkpoint' => $this->checkpointPayload($checkpoint->fresh('verifier')),
+            'message' => 'Report validated and automatically forwarded to the VPAA.',
+            'report' => TravelWorkflow::reportPayload($report->fresh()),
         ]);
     }
 
-    public function photo(Request $request, TravelCheckpoint $checkpoint)
+    public function finalReviewReport(Request $request, TravelReport $report)
     {
-        if ($request->user()->role === 'program_head') {
-            ProgramAccess::authorizeCheckpoint($request->user(), $checkpoint);
-        }
-        $path = $this->privateStoragePath($checkpoint->photo_path);
-        if (! $path || ! $this->privateDisk()->exists($path)) {
-            return response()->json(['message' => 'Verification photo not found.'], 404);
-        }
+        abort_unless($request->user()->role === 'vpaa', 403);
+        abort_unless($report->status === 'pending_vpaa', 422, 'Only Program Head-forwarded reports can receive final validation.');
+        $data = $request->validate([
+            'decision' => ['prohibited'],
+            'reason' => ['prohibited'],
+            'comments' => ['nullable', 'string', 'max:2000'],
+        ]);
 
-        return response()->file($this->privateDisk()->path($path));
+        DB::transaction(function () use ($request, $report, $data) {
+            $locked = TravelReport::query()->lockForUpdate()->findOrFail($report->id);
+            abort_unless($locked->status === 'pending_vpaa', 422, 'This report is no longer pending VPAA validation.');
+            $locked->update([
+                'status' => 'final_validated',
+                'final_validated_at' => now(),
+            ]);
+            $locked->validations()->create([
+                'reviewer_id' => $request->user()->id,
+                'reviewer_role' => 'vpaa',
+                'action' => 'final_validated',
+                'comments' => $data['comments'] ?? null,
+                'reviewed_at' => now(),
+                'report_version' => $locked->version,
+            ]);
+        });
+
+        $report->loadMissing('travelLog.participants.user');
+        SystemNotification::sendToUser(
+            $report->coordinator_id,
+            'Travel report final validated',
+            $report->report_number.' completed final VPAA validation.',
+            'travel',
+            '/coordinator/travel',
+        );
+        SystemNotification::sendToUser($report->travelLog->participants->first()?->user_id, 'Travel report final validated', 'Your travel report '.$report->report_number.' completed final validation.', 'travel', '/student/travel');
+
+        return response()->json([
+            'message' => 'Travel report received final VPAA validation and is now read-only.',
+            'report' => TravelWorkflow::reportPayload($report->fresh()),
+        ]);
     }
 
     public function arrivalPhoto(Request $request, TravelLog $travel)
     {
         if ($request->user()->role === 'program_head') {
             ProgramAccess::authorizeTravel($request->user(), $travel);
+        } else {
+            abort_unless($travel->report()->whereIn('status', ['pending_vpaa', 'final_validated'])->exists(), 404);
         }
-
         $path = $this->privateStoragePath($travel->arrival_photo_path);
         abort_unless($path && $this->privateDisk()->exists($path), 404, 'Arrival photo not found.');
 
         return response()->file($this->privateDisk()->path($path));
-    }
-
-    private function sessionPayload(TravelLog $session): array
-    {
-        $checkpoints = $session->checkpoints
-            ->sortBy('sequence')
-            ->map(fn (TravelCheckpoint $checkpoint) => $this->checkpointPayload($checkpoint, $session))
-            ->values();
-        $verified = $checkpoints->where('is_verified', true)->count();
-        $total = $checkpoints->count();
-        $participants = $session->participants->map(fn ($student) => [
-            'id' => $student->id,
-            'name' => trim($student->first_name.' '.$student->last_name),
-            'student_id' => $student->student_id,
-            'program' => $student->program?->code,
-            'college' => $student->college?->code,
-            'hte' => $student->hte?->name ?? 'Not deployed',
-            'contact' => $student->phone,
-            'role' => 'Travel participant',
-        ])->values();
-        $leadParticipant = $participants->first();
-
-        return [
-            'id' => $session->id,
-            'session_code' => $session->session_code,
-            'status' => $session->status,
-            'coordinator' => $session->creator?->name,
-            'hte' => $session->hte ? [
-                'id' => $session->hte->id,
-                'name' => $session->hte->name,
-                'address' => $session->hte->address,
-            ] : null,
-            'start_time' => $session->start_time?->toIso8601String(),
-            'arrived_at' => $session->arrived_at?->toIso8601String(),
-            'end_time' => $session->end_time?->toIso8601String(),
-            'duration_minutes' => $session->start_time
-                ? (int) $session->start_time->diffInMinutes($session->end_time ?? now())
-                : 0,
-            'participant_count' => $participants->count(),
-            'participants' => $participants,
-            'student' => $leadParticipant,
-            'route' => [
-                'origin' => $checkpoints->first()['checkpoint_name'] ?? 'No origin recorded',
-                'destination' => $checkpoints->last()['checkpoint_name'] ?? 'No destination recorded',
-                'stops' => $checkpoints->pluck('checkpoint_name')->values(),
-                'progress' => $total > 0 ? round(($verified / $total) * 100, 1) : 0,
-            ],
-            'checkpoint_summary' => [
-                'total' => $total,
-                'verified' => $verified,
-                'pending' => $total - $verified,
-                'with_photos' => $checkpoints->whereNotNull('photo_path')->count(),
-            ],
-            'checkpoints' => $checkpoints,
-            'has_arrival_photo' => (bool) $session->arrival_photo_path,
-        ];
-    }
-
-    private function checkpointPayload(TravelCheckpoint $checkpoint, ?TravelLog $session = null): array
-    {
-        $photoPath = $this->privateStoragePath($checkpoint->photo_path);
-        $session ??= $checkpoint->travelLog;
-        $leadParticipant = $session?->participants?->first();
-
-        return [
-            'id' => $checkpoint->id,
-            'travel_log_id' => $checkpoint->travel_log_id,
-            'checkpoint_name' => $checkpoint->checkpoint_name,
-            'sequence' => (int) $checkpoint->sequence,
-            'point_type' => $checkpoint->point_type,
-            'is_final_destination' => (bool) $checkpoint->is_final_destination,
-            'latitude' => (float) $checkpoint->latitude,
-            'longitude' => (float) $checkpoint->longitude,
-            'readable_location' => $checkpoint->readable_location,
-            'photo_path' => $photoPath ? 'protected' : null,
-            'has_photo' => (bool) $photoPath,
-            'notes' => $checkpoint->notes,
-            'is_verified' => (bool) $checkpoint->is_verified,
-            'verified_by' => $checkpoint->verifier?->name,
-            'verified_at' => $checkpoint->verified_at?->toIso8601String(),
-            'recorded_at' => $checkpoint->captured_at?->toIso8601String(),
-            'session_code' => $session?->session_code,
-            'student' => $leadParticipant ? [
-                'id' => $leadParticipant->id,
-                'name' => trim($leadParticipant->first_name.' '.$leadParticipant->last_name),
-            ] : null,
-        ];
     }
 }

@@ -60,7 +60,7 @@ class CoordinatorAttendanceManagementTest extends TestCase
             ->assertJsonPath('data.0.total_hours', 8);
     }
 
-    public function test_coordinator_can_verify_edit_and_review_a_daily_journal(): void
+    public function test_coordinator_can_verify_edit_and_mark_a_daily_journal_as_reviewed(): void
     {
         [$coordinator, $student] = $this->context();
         $attendance = Attendance::create([
@@ -81,13 +81,20 @@ class CoordinatorAttendanceManagementTest extends TestCase
 
         $this->postJson("/api/coordinator/attendance/{$attendance->id}/journal-review", [
             'decision' => 'approved',
-        ])->assertOk()->assertJsonPath('attendance.journal_status', 'approved');
+        ])->assertUnprocessable()->assertJsonValidationErrors('decision');
+
+        $this->postJson("/api/coordinator/attendance/{$attendance->id}/journal-review", [
+            'feedback' => 'Reviewed by the assigned coordinator.',
+        ])->assertOk()
+            ->assertJsonPath('message', 'Daily journal marked as reviewed.')
+            ->assertJsonPath('attendance.journal_status', 'reviewed');
 
         $this->assertDatabaseHas('attendance', [
             'id' => $attendance->id,
             'is_verified' => true,
             'verified_by' => $coordinator->id,
-            'journal_status' => 'approved',
+            'journal_status' => 'reviewed',
+            'journal_feedback' => 'Reviewed by the assigned coordinator.',
             'journal_reviewed_by' => $coordinator->id,
         ]);
 
@@ -115,6 +122,31 @@ class CoordinatorAttendanceManagementTest extends TestCase
             'journal_status' => 'pending',
             'journal_reviewed_by' => null,
         ]);
+    }
+
+    public function test_coordinator_can_choose_the_attendance_page_size(): void
+    {
+        [$coordinator, $student] = $this->context();
+
+        foreach (range(1, 11) as $day) {
+            Attendance::create([
+                'student_id' => $student->id,
+                'date' => sprintf('2026-07-%02d', $day),
+                'status' => 'present',
+                'work_mode' => 'wfo',
+                'session_type' => 'full_day',
+            ]);
+        }
+
+        Sanctum::actingAs($coordinator);
+
+        $this->getJson('/api/coordinator/attendance?per_page=10&page=2')
+            ->assertOk()
+            ->assertJsonPath('per_page', 10)
+            ->assertJsonPath('current_page', 2)
+            ->assertJsonPath('last_page', 2)
+            ->assertJsonPath('total', 11)
+            ->assertJsonCount(1, 'data');
     }
 
     public function test_attendance_history_cannot_be_deleted(): void

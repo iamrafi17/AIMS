@@ -10,6 +10,7 @@ use App\Models\InternshipRequirement;
 use App\Models\MOA;
 use App\Models\Student;
 use App\Models\TravelLog;
+use App\Support\AttendanceHours;
 use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 
@@ -57,7 +58,7 @@ class CoordinatorDashboardController extends Controller
             ->whereYear('start_time', now()->year)
             ->whereHas('participants', fn ($query) => $query->where('program_id', $programId))
             ->get();
-        $activeTravel = TravelLog::where('status', 'active')
+        $activeTravel = TravelLog::whereIn('status', ['active', 'traveling', 'arrived'])
             ->whereHas('participants', fn ($query) => $query->where('program_id', $programId))
             ->count();
 
@@ -175,15 +176,6 @@ class CoordinatorDashboardController extends Controller
 
     private function renderedHours(Attendance $attendance): float
     {
-        $regular = collect([
-            [$attendance->am_time_in, $attendance->am_time_out],
-            [$attendance->pm_time_in, $attendance->pm_time_out],
-        ])->sum(fn (array $slot) => $slot[0] && $slot[1] ? $slot[0]->diffInSeconds($slot[1]) / 3600 : 0);
-
-        if ($regular <= 0 && ! $attendance->am_time_in && ! $attendance->pm_time_in && $attendance->time_in && $attendance->time_out) {
-            $regular = $attendance->time_in->diffInSeconds($attendance->time_out) / 3600;
-        }
-
-        return $regular + (float) $attendance->overtime_hours;
+        return AttendanceHours::total($attendance);
     }
 }

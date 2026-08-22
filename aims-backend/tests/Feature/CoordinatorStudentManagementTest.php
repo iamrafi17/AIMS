@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademicSection;
 use App\Models\College;
 use App\Models\HTE;
 use App\Models\InternshipRequirement;
@@ -61,27 +62,89 @@ class CoordinatorStudentManagementTest extends TestCase
 
     public function test_coordinator_can_manually_add_an_ojt_enrollment_without_credentials(): void
     {
-        [$coordinator] = $this->managementContext();
+        [$coordinator, , , , $section] = $this->managementContext();
         Sanctum::actingAs($coordinator);
 
         $this->postJson('/api/coordinator/students', [
             'full_name' => 'Juan Dela Cruz',
             'school_id' => '2026-QUICK-01',
-            'section' => 'BSIT 4A',
+            'academic_section_id' => $section->id,
         ])->assertCreated()
             ->assertJsonPath('enrollment.school_id', '2026-QUICK-01')
             ->assertJsonPath('enrollment.full_name', 'Juan Dela Cruz')
-            ->assertJsonPath('enrollment.section', 'BSIT 4A')
+            ->assertJsonPath('enrollment.section', '4A')
             ->assertJsonMissingPath('temporary_password');
 
         $this->assertDatabaseHas('ojt_enrollments', [
             'school_id' => '2026-QUICK-01',
             'full_name' => 'Juan Dela Cruz',
-            'section' => 'BSIT 4A',
+            'section' => '4A',
+            'academic_section_id' => $section->id,
             'source' => 'manual',
         ]);
         $this->assertDatabaseMissing('students', ['student_id' => '2026-QUICK-01']);
         $this->assertDatabaseMissing('users', ['name' => 'Juan Dela Cruz']);
+    }
+
+    public function test_coordinator_can_choose_the_ojt_enrollment_page_size(): void
+    {
+        [$coordinator, $college, $program] = $this->managementContext();
+        Sanctum::actingAs($coordinator);
+
+        foreach (range(1, 11) as $number) {
+            OjtEnrollment::create([
+                'school_id' => '2026-PAGE-'.str_pad((string) $number, 2, '0', STR_PAD_LEFT),
+                'full_name' => 'Enrollment Student '.$number,
+                'section' => 'BSIT 4A',
+                'college_id' => $college->id,
+                'program_id' => $program->id,
+                'source' => 'manual',
+                'added_by' => $coordinator->id,
+            ]);
+        }
+
+        $this->getJson('/api/coordinator/students/enrollments?per_page=10&page=2')
+            ->assertOk()
+            ->assertJsonPath('per_page', 10)
+            ->assertJsonPath('current_page', 2)
+            ->assertJsonPath('last_page', 2)
+            ->assertJsonPath('total', 11)
+            ->assertJsonCount(1, 'data');
+    }
+
+    public function test_coordinator_can_choose_the_student_list_page_size(): void
+    {
+        [$coordinator, $college, $program] = $this->managementContext();
+        Sanctum::actingAs($coordinator);
+
+        foreach (range(1, 11) as $number) {
+            $user = User::factory()->create(['role' => 'student']);
+            Student::create([
+                'user_id' => $user->id,
+                'student_id' => '2026-STUDENT-'.str_pad((string) $number, 2, '0', STR_PAD_LEFT),
+                'first_name' => 'Paged',
+                'last_name' => 'Student '.$number,
+                'gender' => 'female',
+                'birth_date' => '2002-01-01',
+                'address' => 'Boac, Marinduque',
+                'phone' => '09170000000',
+                'college_id' => $college->id,
+                'program_id' => $program->id,
+                'year_level' => 4,
+                'section' => 'A',
+                'parent_name' => 'Test Parent',
+                'parent_address' => 'Boac, Marinduque',
+                'parent_phone' => '09171111111',
+            ]);
+        }
+
+        $this->getJson('/api/coordinator/students?per_page=10&page=2')
+            ->assertOk()
+            ->assertJsonPath('per_page', 10)
+            ->assertJsonPath('current_page', 2)
+            ->assertJsonPath('last_page', 2)
+            ->assertJsonPath('total', 11)
+            ->assertJsonCount(1, 'data');
     }
 
     public function test_coordinator_can_approve_and_reject_student_requirements(): void
@@ -222,7 +285,7 @@ class CoordinatorStudentManagementTest extends TestCase
 
     public function test_predefined_school_csv_is_previewed_before_ready_students_are_confirmed(): void
     {
-        [$coordinator, $college, $program] = $this->managementContext();
+        [$coordinator, $college, $program, , $section] = $this->managementContext();
         Sanctum::actingAs($coordinator);
 
         OjtEnrollment::create([
@@ -231,6 +294,7 @@ class CoordinatorStudentManagementTest extends TestCase
             'section' => 'BSIT',
             'college_id' => $college->id,
             'program_id' => $program->id,
+            'academic_section_id' => $section->id,
             'source' => 'manual',
             'added_by' => $coordinator->id,
         ]);
@@ -246,10 +310,13 @@ class CoordinatorStudentManagementTest extends TestCase
 
         $preview = $this->post('/api/coordinator/students/import', [
             'file' => UploadedFile::fake()->createWithContent('students.csv', $csv),
+            'academic_section_id' => $section->id,
         ], ['Accept' => 'application/json'])
             ->assertOk()
             ->assertJsonPath('message', 'Student list is ready for review.')
             ->assertJsonPath('file_name', 'students.csv')
+            ->assertJsonPath('section.id', $section->id)
+            ->assertJsonPath('section.name', '4A')
             ->assertJsonPath('summary.students_found', 6)
             ->assertJsonPath('summary.ready', 1)
             ->assertJsonPath('summary.duplicates', 3)
@@ -269,6 +336,7 @@ class CoordinatorStudentManagementTest extends TestCase
 
         $this->post('/api/coordinator/students/import/confirm', [
             'file' => UploadedFile::fake()->createWithContent('students.csv', $csv),
+            'academic_section_id' => $section->id,
         ], ['Accept' => 'application/json'])
             ->assertOk()
             ->assertJsonPath('message', 'Student list imported successfully.')
@@ -278,9 +346,10 @@ class CoordinatorStudentManagementTest extends TestCase
         $this->assertDatabaseHas('ojt_enrollments', [
             'school_id' => '23S0160',
             'full_name' => 'BRIONES, Terrence C',
-            'section' => 'BSIT',
+            'section' => '4A',
             'college_id' => $college->id,
             'program_id' => $program->id,
+            'academic_section_id' => $section->id,
             'source' => 'csv',
         ]);
         $this->assertDatabaseMissing('ojt_enrollments', ['school_id' => '23S0019']);
@@ -290,9 +359,40 @@ class CoordinatorStudentManagementTest extends TestCase
         $preview->assertJsonMissingPath('credentials');
     }
 
+    public function test_csv_import_only_accepts_active_sections_from_the_coordinators_program(): void
+    {
+        [$coordinator, $college] = $this->managementContext();
+        $otherProgram = Program::create([
+            'college_id' => $college->id,
+            'name' => 'Information Systems',
+            'code' => 'BSIS',
+            'is_active' => true,
+        ]);
+        $otherSection = AcademicSection::create([
+            'program_id' => $otherProgram->id,
+            'name' => '4B',
+            'year_level' => 4,
+            'academic_year' => '2026-2027',
+            'is_active' => true,
+        ]);
+        Sanctum::actingAs($coordinator);
+
+        $this->post('/api/coordinator/students/import', [
+            'file' => UploadedFile::fake()->createWithContent(
+                'students.csv',
+                $this->predefinedSchoolCsv([['1.', '23S1000', 'OUTSIDE, Program']]),
+            ),
+            'academic_section_id' => $otherSection->id,
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('academic_section_id');
+
+        $this->assertDatabaseMissing('ojt_enrollments', ['school_id' => '23S1000']);
+    }
+
     public function test_predefined_import_rejects_wrong_and_empty_templates_without_saving(): void
     {
-        [$coordinator] = $this->managementContext();
+        [$coordinator, , , , $section] = $this->managementContext();
         Sanctum::actingAs($coordinator);
 
         foreach ([
@@ -301,6 +401,7 @@ class CoordinatorStudentManagementTest extends TestCase
         ] as $fileName => $contents) {
             $this->post('/api/coordinator/students/import', [
                 'file' => UploadedFile::fake()->createWithContent($fileName, $contents),
+                'academic_section_id' => $section->id,
             ], ['Accept' => 'application/json'])
                 ->assertUnprocessable()
                 ->assertJsonValidationErrors('file')
@@ -315,6 +416,7 @@ class CoordinatorStudentManagementTest extends TestCase
                 'students.txt',
                 $this->predefinedSchoolCsv([['1.', '23S0160', 'BRIONES, Terrence C']]),
             ),
+            'academic_section_id' => $section->id,
         ], ['Accept' => 'application/json'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('file');
@@ -324,7 +426,7 @@ class CoordinatorStudentManagementTest extends TestCase
 
     public function test_uploading_the_same_predefined_csv_twice_marks_every_student_duplicate(): void
     {
-        [$coordinator] = $this->managementContext();
+        [$coordinator, , , , $section] = $this->managementContext();
         Sanctum::actingAs($coordinator);
 
         $csv = $this->predefinedSchoolCsv([
@@ -334,12 +436,14 @@ class CoordinatorStudentManagementTest extends TestCase
 
         $this->post('/api/coordinator/students/import/confirm', [
             'file' => UploadedFile::fake()->createWithContent('students.csv', $csv),
+            'academic_section_id' => $section->id,
         ], ['Accept' => 'application/json'])
             ->assertOk()
             ->assertJsonPath('imported', 2);
 
         $this->post('/api/coordinator/students/import', [
             'file' => UploadedFile::fake()->createWithContent('students.csv', $csv),
+            'academic_section_id' => $section->id,
         ], ['Accept' => 'application/json'])
             ->assertOk()
             ->assertJsonPath('summary.ready', 0)
@@ -347,6 +451,7 @@ class CoordinatorStudentManagementTest extends TestCase
 
         $this->post('/api/coordinator/students/import/confirm', [
             'file' => UploadedFile::fake()->createWithContent('students.csv', $csv),
+            'academic_section_id' => $section->id,
         ], ['Accept' => 'application/json'])
             ->assertOk()
             ->assertJsonPath('imported', 0)
@@ -360,6 +465,13 @@ class CoordinatorStudentManagementTest extends TestCase
         $coordinator = User::factory()->create(['role' => 'coordinator']);
         $college = College::create(['name' => 'Computing', 'code' => 'CICS', 'is_active' => true]);
         $program = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
+        $section = AcademicSection::create([
+            'program_id' => $program->id,
+            'name' => '4A',
+            'year_level' => 4,
+            'academic_year' => '2026-2027',
+            'is_active' => true,
+        ]);
         $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
         $hte = HTE::create([
             'college_id' => $college->id,
@@ -372,7 +484,7 @@ class CoordinatorStudentManagementTest extends TestCase
             'is_active' => true,
         ]);
 
-        return [$coordinator, $college, $program, $hte];
+        return [$coordinator, $college, $program, $hte, $section];
     }
 
     private function predefinedSchoolCsv(array $students): string

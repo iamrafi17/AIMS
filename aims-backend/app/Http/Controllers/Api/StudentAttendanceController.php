@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Student;
+use App\Support\AttendanceHours;
 use App\Support\ReverseGeocoder;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -57,6 +58,7 @@ class StudentAttendanceController extends Controller
         $selectedDate = Carbon::createFromFormat('Y-m-d', $validated['date'])->startOfDay();
         $weekStart = now()->startOfWeek(Carbon::MONDAY)->startOfDay();
         $weekEnd = $weekStart->copy()->endOfWeek(Carbon::SUNDAY)->endOfDay();
+        $workDays = $this->effectiveWorkDays($student);
 
         $calendarRecords = Attendance::where('student_id', $student->id)
             ->whereBetween('date', [$month->toDateString(), $month->copy()->endOfMonth()->toDateString()])
@@ -81,15 +83,16 @@ class StudentAttendanceController extends Controller
             'server_date' => now()->toDateString(),
             'timezone' => config('app.timezone'),
             'week_summary' => [
-                'rendered_hours' => round($weekRecords->sum(fn (Attendance $record) => $this->regularHours($record)), 2),
+                'rendered_hours' => round($weekRecords->sum(fn (Attendance $record) => AttendanceHours::total($record)), 2),
                 'overtime_hours' => round($weekRecords->sum(fn (Attendance $record) => (float) $record->overtime_hours), 2),
                 'days_present' => $weekRecords->whereIn('status', ['present', 'late'])->count(),
-                'days_left' => max(7 - now()->dayOfWeekIso, 0),
+                'days_left' => $this->remainingWorkdaysThisWeek($student, $workDays),
             ],
             'calendar' => $calendarRecords->map(fn (Attendance $record) => [
                 'date' => $record->date->toDateString(),
                 'status' => $record->status,
-                'hours' => round($this->regularHours($record), 2),
+                'hours' => round(AttendanceHours::total($record), 2),
+                'regular_hours' => round($this->regularHours($record), 2),
                 'overtime_hours' => (float) $record->overtime_hours,
             ])->values(),
             'selected_attendance' => $this->workspaceAttendance($selectedAttendance),
@@ -97,6 +100,7 @@ class StudentAttendanceController extends Controller
                 'allow_past_attendance' => $student->allow_past_attendance,
                 'ojt_start_date' => $student->ojt_start_date?->toDateString(),
                 'ojt_end_date' => $student->ojt_end_date?->toDateString(),
+                'work_days' => $workDays,
                 'official_schedule' => [
                     'am_start' => substr($student->official_am_start, 0, 5),
                     'am_end' => substr($student->official_am_end, 0, 5),
@@ -202,7 +206,7 @@ class StudentAttendanceController extends Controller
                     : 'OT End is required when OT Start is entered.']);
             }
 
-            [$overtimeHours, $otWarnings] = $this->calculateOvertime($student, $date, $otStart, $otEnd);
+            [$overtimeHours, $otWarnings] = $this->calculateOvertime($student, $date, $otStart, $otEnd, $sessionType);
             $updates['ot_start'] = $otStart;
             $updates['ot_end'] = $otEnd;
             $updates['overtime_hours'] = $overtimeHours;
@@ -246,12 +250,20 @@ class StudentAttendanceController extends Controller
             'latitude' => 'required_if:status,present|nullable|numeric|between:-90,90',
             'longitude' => 'required_if:status,present|nullable|numeric|between:-180,180',
             'activity' => 'nullable|string|max:2000',
+            'client_time' => 'nullable|date',
         ]);
 
         $student = $request->user()->student;
 
         if (! $student) {
             return response()->json(['message' => 'Student profile not found'], 404);
+        }
+
+        $usesServerTime = (bool) config('attendance.use_server_time', true);
+        if (! $usesServerTime && $validated['status'] === 'present' && empty($validated['client_time'])) {
+            throw ValidationException::withMessages([
+                'client_time' => 'Device time is required while Smart Clock test mode is enabled.',
+            ]);
         }
 
         $today = now()->toDateString();
@@ -282,6 +294,10 @@ class StudentAttendanceController extends Controller
                 ...$this->quickClockPayload($attendance),
             ]);
         }
+
+        $recordedTime = $usesServerTime
+            ? now()
+            : Carbon::parse($validated['client_time'])->setTimezone(config('app.timezone'));
 
         if (
             $validated['work_mode'] === 'wfo'
@@ -318,7 +334,7 @@ class StudentAttendanceController extends Controller
             ),
         ];
 
-        $result = DB::transaction(function () use ($student, $today, $validated, $location) {
+        $result = DB::transaction(function () use ($student, $today, $validated, $location, $recordedTime) {
             $attendance = Attendance::where('student_id', $student->id)
                 ->whereDate('date', $today)
                 ->lockForUpdate()
@@ -358,9 +374,8 @@ class StudentAttendanceController extends Controller
                 return ['error' => 'Please describe your activities before timing out.', 'activity_required' => true];
             }
 
-            $serverTime = now();
             $updates = [
-                $nextSlot => $serverTime,
+                $nextSlot => $recordedTime,
                 $nextSlot.'_location' => $location,
             ];
 
@@ -369,15 +384,29 @@ class StudentAttendanceController extends Controller
             }
 
             if ($attendance->time_in === null && str_ends_with($nextSlot, 'time_in')) {
-                $updates['time_in'] = $serverTime;
+                $updates['time_in'] = $recordedTime;
                 $updates['latitude_in'] = $location['latitude'];
                 $updates['longitude_in'] = $location['longitude'];
             }
 
             if ($nextSlot === end($sequence)) {
-                $updates['time_out'] = $serverTime;
+                $updates['time_out'] = $recordedTime;
                 $updates['latitude_out'] = $location['latitude'];
                 $updates['longitude_out'] = $location['longitude'];
+
+                $firstTimeIn = $attendance->am_time_in ?? $attendance->pm_time_in;
+                if ($firstTimeIn) {
+                    [$overtimeHours] = $this->calculateOvertime(
+                        $student,
+                        Carbon::parse($today),
+                        $firstTimeIn,
+                        $recordedTime,
+                        $attendance->session_type,
+                    );
+                    $updates['ot_start'] = $overtimeHours > 0 ? $firstTimeIn : null;
+                    $updates['ot_end'] = $overtimeHours > 0 ? $recordedTime : null;
+                    $updates['overtime_hours'] = $overtimeHours;
+                }
             }
 
             $attendance->update($updates);
@@ -402,7 +431,7 @@ class StudentAttendanceController extends Controller
         return response()->json([
             'message' => $result['completed']
                 ? $slotLabel.' recorded. Your attendance is complete for today!'
-                : $slotLabel.' recorded using server time.',
+                : $slotLabel.' recorded using '.($usesServerTime ? 'server' : 'device test').' time.',
             'just_completed' => $result['completed'],
             ...$this->quickClockPayload($result['attendance']),
         ]);
@@ -439,7 +468,7 @@ class StudentAttendanceController extends Controller
         return Carbon::parse($date->toDateString().' '.$time, config('app.timezone'));
     }
 
-    private function calculateOvertime(Student $student, Carbon $date, Carbon $start, Carbon $end): array
+    private function calculateOvertime(Student $student, Carbon $date, Carbon $start, Carbon $end, string $sessionType = 'full_day'): array
     {
         $minimum = $this->dateTime($date, '06:00');
         $maximum = $this->dateTime($date, '23:00');
@@ -455,8 +484,13 @@ class StudentAttendanceController extends Controller
             throw ValidationException::withMessages($errors);
         }
 
-        $scheduleStart = $this->dateTime($date, substr($student->official_am_start, 0, 5));
-        $scheduleEnd = $this->dateTime($date, substr($student->official_pm_end, 0, 5));
+        [$scheduleStartField, $scheduleEndField] = match ($sessionType) {
+            'am_half' => ['official_am_start', 'official_am_end'],
+            'pm_half' => ['official_pm_start', 'official_pm_end'],
+            default => ['official_am_start', 'official_pm_end'],
+        };
+        $scheduleStart = $this->dateTime($date, substr($student->{$scheduleStartField}, 0, 5));
+        $scheduleEnd = $this->dateTime($date, substr($student->{$scheduleEndField}, 0, 5));
         $overlapStart = $start->greaterThan($scheduleStart) ? $start : $scheduleStart;
         $overlapEnd = $end->lessThan($scheduleEnd) ? $end : $scheduleEnd;
         $overlapSeconds = $overlapEnd->gt($overlapStart) ? $overlapStart->diffInSeconds($overlapEnd) : 0;
@@ -476,20 +510,7 @@ class StudentAttendanceController extends Controller
 
     private function regularHours(Attendance $attendance): float
     {
-        $slotHours = collect([
-            [$attendance->am_time_in, $attendance->am_time_out],
-            [$attendance->pm_time_in, $attendance->pm_time_out],
-        ])->sum(fn (array $slot) => $slot[0] && $slot[1]
-            ? $slot[0]->diffInSeconds($slot[1]) / 3600
-            : 0);
-
-        if ($slotHours > 0 || $attendance->am_time_in || $attendance->pm_time_in) {
-            return $slotHours;
-        }
-
-        return $attendance->time_in && $attendance->time_out
-            ? $attendance->time_in->diffInSeconds($attendance->time_out) / 3600
-            : 0;
+        return AttendanceHours::regular($attendance);
     }
 
     private function workspaceAttendance(?Attendance $attendance): ?array
@@ -514,6 +535,7 @@ class StudentAttendanceController extends Controller
             'am_activity' => $attendance->am_activity,
             'pm_activity' => $attendance->pm_activity,
             'regular_hours' => round($this->regularHours($attendance), 2),
+            'total_hours' => round(AttendanceHours::total($attendance), 2),
         ];
     }
 
@@ -633,6 +655,7 @@ class StudentAttendanceController extends Controller
             'server_time' => now()->toIso8601String(),
             'server_date' => now()->toDateString(),
             'timezone' => config('app.timezone'),
+            'uses_server_time' => (bool) config('attendance.use_server_time', true),
             'attendance' => $attendance ? [
                 'id' => $attendance->id,
                 'status' => $attendance->status,
@@ -674,6 +697,43 @@ class StudentAttendanceController extends Controller
             'pm_time_in' => 'Time In (PM)',
             'pm_time_out' => 'Time Out (PM)',
         };
+    }
+
+    private function effectiveWorkDays(Student $student): array
+    {
+        $workDays = $student->work_days ?: $student->hte?->work_days;
+
+        return array_values($workDays ?: ['mon', 'tue', 'wed', 'thu', 'fri']);
+    }
+
+    private function remainingWorkdaysThisWeek(Student $student, array $workDays): int
+    {
+        $dayNames = [
+            1 => 'mon',
+            2 => 'tue',
+            3 => 'wed',
+            4 => 'thu',
+            5 => 'fri',
+            6 => 'sat',
+            7 => 'sun',
+        ];
+
+        $cursor = now()->startOfDay()->addDay();
+        $weekEnd = now()->endOfWeek(Carbon::SUNDAY)->startOfDay();
+        $remaining = 0;
+
+        while ($cursor->lte($weekEnd)) {
+            $withinOjtPeriod = (! $student->ojt_start_date || $cursor->gte($student->ojt_start_date))
+                && (! $student->ojt_end_date || $cursor->lte($student->ojt_end_date));
+
+            if ($withinOjtPeriod && in_array($dayNames[$cursor->dayOfWeekIso], $workDays, true)) {
+                $remaining++;
+            }
+
+            $cursor->addDay();
+        }
+
+        return $remaining;
     }
 
     private function calculateDistance($lat1, $lon1, $lat2, $lon2)

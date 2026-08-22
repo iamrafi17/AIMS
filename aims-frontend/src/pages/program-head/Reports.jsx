@@ -24,7 +24,7 @@ const emptyReport = {
   requirements: { total: 0, submitted: 0, approved: 0, pending: 0, rejected: 0, missing: 0, completion_rate: 0 },
   travel: { active: 0, total_this_month: 0, completed_this_month: 0, cancelled_this_month: 0, completion_rate: 0 },
   pending_reviews: { registrations: 0, requirements: 0, attendance: 0, journals: 0, total: 0 },
-  analytics: { average_progress: 0, internship_status: [], program_performance: [] },
+  analytics: { average_progress: 0, internship_status: [], program_performance: [], section_performance: [] },
 };
 
 const tabs = [
@@ -107,13 +107,13 @@ function xmlCell(value) {
 function ProgramHeadReports() {
   const [report, setReport] = useState(emptyReport);
   const [activeTab, setActiveTab] = useState('compliance');
-  const [programFilter, setProgramFilter] = useState('all');
+  const [sectionId, setSectionId] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    api.get('/program-head/dashboard')
+    api.get('/program-head/dashboard', { params: { academic_section_id: sectionId || undefined } })
       .then((response) => {
         if (mounted) setReport({ ...emptyReport, ...response.data });
       })
@@ -124,12 +124,12 @@ function ProgramHeadReports() {
         if (mounted) setLoading(false);
       });
     return () => { mounted = false; };
-  }, []);
+  }, [sectionId]);
 
   const refreshReport = async () => {
     setRefreshing(true);
     try {
-      const response = await api.get('/program-head/dashboard');
+      const response = await api.get('/program-head/dashboard', { params: { academic_section_id: sectionId || undefined } });
       setReport({ ...emptyReport, ...response.data });
       toast.success('Analytics refreshed.');
     } catch (error) {
@@ -145,8 +145,12 @@ function ProgramHeadReports() {
   const travel = report.travel || emptyReport.travel;
   const reviews = report.pending_reviews || emptyReport.pending_reviews;
   const analytics = report.analytics || emptyReport.analytics;
-  const programOptions = analytics.program_performance?.map((item) => item.program) || [];
-  const filteredPrograms = (analytics.program_performance || []).filter((item) => programFilter === 'all' || item.program === programFilter);
+  const filteredPrograms = (analytics.section_performance || []).map((item) => ({ ...item, program: item.section }));
+  const assignedProgram = report.scope?.program;
+  const sections = report.scope?.sections || [];
+  const sectionLabel = report.scope?.selected_section
+    ? `${report.scope.selected_section.name} · Year ${report.scope.selected_section.year_level} · AY ${report.scope.selected_section.academic_year}`
+    : 'All sections';
   const complianceScore = Math.round(((Number(attendance.rate) || 0) + (Number(requirements.completion_rate) || 0) + (Number(travel.completion_rate) || 0)) / 3);
   const verificationRate = attendance.total ? Math.round((attendance.verified / attendance.total) * 100) : 0;
   const deploymentRate = overview.total_students ? Math.round((overview.deployed / overview.total_students) * 100) : 0;
@@ -161,7 +165,7 @@ function ProgramHeadReports() {
     { Category: 'Review Queue', Metric: 'Total pending reviews', Value: reviews.total || 0, Target: '0', Status: reviews.total ? 'Action required' : 'Clear' },
   ];
   const performanceRows = filteredPrograms.map((item) => ({
-    Program: item.program,
+    Section: item.program,
     'Total Students': item.students,
     'Active Interns': item.active,
     'Average OJT Progress': `${item.progress}%`,
@@ -229,7 +233,7 @@ function ProgramHeadReports() {
       <div className="hidden border-b-2 border-[#7D001D] pb-4 print:block">
         <div className="flex items-end justify-between gap-4">
           <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7D001D]">Marinduque State University · AIMS</p><h1 className="mt-1 text-2xl font-black text-black">{activeTab === 'compliance' ? 'Compliance Analytics' : 'Internship Performance Analytics'}</h1><p className="mt-1 text-xs text-slate-500">Program Head analytical report</p></div>
-          <div className="text-right text-xs"><p className="font-bold text-black">{reportPeriod}</p><p className="mt-1 text-slate-500">{programFilter === 'all' ? 'All academic programs' : programFilter}</p></div>
+          <div className="text-right text-xs"><p className="font-bold text-black">{reportPeriod}</p><p className="mt-1 text-slate-500">{assignedProgram ? `${assignedProgram.code} · ${assignedProgram.name}` : 'Assigned program'}</p><p className="mt-1 text-slate-500">{sectionLabel}</p></div>
         </div>
       </div>
 
@@ -256,7 +260,7 @@ function ProgramHeadReports() {
         <nav className="flex flex-1 gap-1 overflow-x-auto" aria-label="Program Head analytics reports">
           {tabs.map((tab) => <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition ${activeTab === tab.id ? 'bg-[#7D001D] text-white shadow-md shadow-[#7D001D]/15' : 'text-slate-500 hover:bg-slate-50 hover:text-[#7D001D] dark:text-gray-300 dark:hover:bg-gray-700'}`}><tab.icon className="text-base" /> {tab.label}</button>)}
         </nav>
-        {activeTab === 'performance' && <select value={programFilter} onChange={(event) => setProgramFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-xs font-black text-slate-600 outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"><option value="all">All programs</option>{programOptions.map((program) => <option key={program} value={program}>{program}</option>)}</select>}
+        <select aria-label="Report section" value={sectionId} onChange={(event) => setSectionId(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-xs font-black text-slate-600 outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"><option value="">All sections</option>{sections.map((section) => <option key={section.id} value={section.id}>{section.name} · Year {section.year_level} · AY {section.academic_year}</option>)}</select>
       </div>
 
       {activeTab === 'compliance' && (
@@ -324,8 +328,8 @@ function ProgramHeadReports() {
               <div className="mt-6 space-y-3">{(analytics.internship_status || []).map((item) => <div key={item.label} className="flex items-center gap-3"><span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} /><span className="flex-1 text-xs font-bold text-slate-500">{item.label}</span><span className="text-xs font-black text-slate-700 dark:text-gray-200">{item.value}</span></div>)}</div>
             </Panel>
 
-            <Panel title="Program Performance Comparison" subtitle="OJT progress and attendance across academic programs" icon={FiBarChart2}>
-              {filteredPrograms.length ? <div className="space-y-6">{filteredPrograms.map((program) => <div key={program.program}><div className="mb-2 flex flex-wrap items-end justify-between gap-2"><div><p className="text-sm font-black text-slate-700 dark:text-white print:text-black">{program.program}</p><p className="mt-1 text-[10px] text-slate-400">{program.active} active of {program.students} students</p></div><div className="flex gap-4 text-right"><div><p className="text-xs font-black text-[#7D001D] dark:text-rose-300">{program.progress}%</p><p className="text-[8px] uppercase text-slate-400">Progress</p></div><div><p className="text-xs font-black text-emerald-600">{program.attendance_rate}%</p><p className="text-[8px] uppercase text-slate-400">Attendance</p></div></div></div><div className="grid grid-cols-2 gap-2"><ProgressBar value={program.progress} /><ProgressBar value={program.attendance_rate} color="bg-emerald-500" /></div></div>)}</div> : <div className="py-16 text-center text-sm font-bold text-slate-400">No program performance records are available.</div>}
+            <Panel title="Section Performance Comparison" subtitle={`OJT progress and attendance across ${sectionLabel.toLowerCase()}`} icon={FiBarChart2}>
+              {filteredPrograms.length ? <div className="space-y-6">{filteredPrograms.map((program) => <div key={program.program}><div className="mb-2 flex flex-wrap items-end justify-between gap-2"><div><p className="text-sm font-black text-slate-700 dark:text-white print:text-black">{program.program}</p><p className="mt-1 text-[10px] text-slate-400">{program.active} active of {program.students} students</p></div><div className="flex gap-4 text-right"><div><p className="text-xs font-black text-[#7D001D] dark:text-rose-300">{program.progress}%</p><p className="text-[8px] uppercase text-slate-400">Progress</p></div><div><p className="text-xs font-black text-emerald-600">{program.attendance_rate}%</p><p className="text-[8px] uppercase text-slate-400">Attendance</p></div></div></div><div className="grid grid-cols-2 gap-2"><ProgressBar value={program.progress} /><ProgressBar value={program.attendance_rate} color="bg-emerald-500" /></div></div>)}</div> : <div className="py-16 text-center text-sm font-bold text-slate-400">No section performance records are available.</div>}
             </Panel>
           </div>
 
@@ -341,10 +345,10 @@ function ProgramHeadReports() {
             </Panel>
           </div>
 
-          <Panel title="Program Performance Detail" subtitle={`${filteredPrograms.length} academic programs shown`} icon={FiUsers}>
+          <Panel title="Section Performance Detail" subtitle={`${filteredPrograms.length} academic sections shown`} icon={FiUsers}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-left">
-                <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Program</th><th className="pb-3 font-black">Students</th><th className="pb-3 font-black">Active Interns</th><th className="pb-3 font-black">OJT Progress</th><th className="pb-3 font-black">Attendance Rate</th><th className="pb-3 font-black">Performance Standing</th></tr></thead>
+                <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Section</th><th className="pb-3 font-black">Students</th><th className="pb-3 font-black">Active Interns</th><th className="pb-3 font-black">OJT Progress</th><th className="pb-3 font-black">Attendance Rate</th><th className="pb-3 font-black">Performance Standing</th></tr></thead>
                 <tbody>{filteredPrograms.map((program) => { const score = Math.round((Number(program.progress) + Number(program.attendance_rate)) / 2); return <tr key={program.program} className="border-b border-slate-100 last:border-0 dark:border-gray-700 print:border-slate-200"><td className="py-4 text-sm font-black text-slate-800 dark:text-white print:text-black">{program.program}</td><td className="py-4 text-xs font-black text-slate-600 dark:text-gray-300">{program.students}</td><td className="py-4 text-xs font-black text-emerald-600">{program.active}</td><td className="w-40 py-4"><div className="mb-1 text-right text-[9px] font-black text-[#7D001D] dark:text-rose-300">{program.progress}%</div><ProgressBar value={program.progress} /></td><td className="w-40 py-4"><div className="mb-1 text-right text-[9px] font-black text-emerald-600">{program.attendance_rate}%</div><ProgressBar value={program.attendance_rate} color="bg-emerald-500" /></td><td className="py-4"><span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${score >= 85 ? 'bg-emerald-100 text-emerald-700' : score >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{score >= 85 ? 'High performing' : score >= 70 ? 'Developing' : 'Needs support'}</span></td></tr>; })}</tbody>
               </table>
             </div>

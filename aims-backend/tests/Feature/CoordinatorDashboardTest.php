@@ -117,5 +117,13 @@ class CoordinatorDashboardTest extends TestCase
             ->assertJsonPath('travel.active', 1)
             ->assertJsonPath('active_interns.0.student_id', '2026-0001')
             ->assertJsonPath('active_interns.0.progress_percent', 1.6);
+
+        $this->getJson('/api/coordinator/reports?date_from='.now()->toDateString().'&date_to='.now()->toDateString())
+            ->assertOk()
+            ->assertJsonPath('attendance.0.studentId', '2026-0001')
+            ->assertJsonPath('students.0.studentId', '2026-0001')
+            ->assertJsonPath('journals.0.submitted', 2)
+            ->assertJsonPath('deployments.0.hte', 'Partner Company')
+            ->assertJsonPath('travel.0.id', 'TRAVEL-001');
     }
 }

@@ -106,7 +106,7 @@ function LoginPage() {
                   value={identifier}
                   onChange={(event) => setIdentifier(event.target.value)}
                   required
-                  className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8"
+                  className="login-input w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8"
                   placeholder="Email, Staff ID, or Student ID"
                 />
               </div>
@@ -124,7 +124,7 @@ function LoginPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   required
-                  className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8"
+                  className="login-input w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8"
                   placeholder="Enter your password"
                 />
                 <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-[#7D001D]" aria-label={showPassword ? 'Hide password' : 'Show password'}>

@@ -8,6 +8,7 @@ use App\Models\Evaluation;
 use App\Models\InternshipTask;
 use App\Models\Student;
 use App\Models\SystemNotification;
+use App\Support\AttendanceHours;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -164,10 +165,7 @@ class SupervisorManagementController extends Controller
     private function studentPayload(Student $student): array
     {
         $hours = $student->attendance->sum(function (Attendance $record) {
-            $regular = collect([[$record->am_time_in, $record->am_time_out], [$record->pm_time_in, $record->pm_time_out]])
-                ->sum(fn ($slot) => $slot[0] && $slot[1] ? $slot[0]->diffInSeconds($slot[1]) / 3600 : 0);
-
-            return $regular + (float) $record->overtime_hours;
+            return AttendanceHours::total($record);
         });
         $required = max((float) $student->required_ojt_hours, 1);
 

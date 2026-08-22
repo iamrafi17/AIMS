@@ -3,18 +3,22 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicSection;
 use App\Models\ApprovalRecord;
 use App\Models\College;
 use App\Models\Holiday;
 use App\Models\HTE;
+use App\Models\HteBatchSchedule;
 use App\Models\MOA;
 use App\Models\Student;
 use App\Models\SystemNotification;
 use App\Models\User;
 use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class CoordinatorHTEController extends Controller
 {
@@ -29,6 +33,7 @@ class CoordinatorHTEController extends Controller
                 'moas' => fn ($query) => $query->where('program_id', $programId),
                 'moas.college',
                 'moas.approver',
+                'batchSchedules.academicSection.program',
             ])
             ->withCount(['students' => fn ($query) => $query->where('program_id', $programId)])
             ->orderBy('name')
@@ -49,6 +54,23 @@ class CoordinatorHTEController extends Controller
             'holidays' => Holiday::where('program_id', $programId)->orderByDesc('date')->get(),
             'moas' => $moas->map(fn (MOA $moa) => $this->moaPayload($moa)),
             'colleges' => College::whereKey($request->user()->college_id)->where('is_active', true)->get(['id', 'name', 'code']),
+            'batches' => AcademicSection::with('program:id,code')
+                ->where('program_id', $programId)
+                ->where('is_active', true)
+                ->orderByDesc('academic_year')
+                ->orderBy('year_level')
+                ->orderBy('name')
+                ->get()
+                ->map(fn (AcademicSection $batch) => [
+                    'id' => $batch->id,
+                    'label' => sprintf(
+                        '%s · Year %s-%s · AY %s',
+                        $batch->program?->code ?? 'Program',
+                        $batch->year_level,
+                        $batch->name,
+                        $batch->academic_year,
+                    ),
+                ]),
             'supervisors' => User::where('role', 'supervisor')->where('is_active', true)->orderBy('name')->get(['id', 'name', 'email']),
             'summary' => [
                 'total_htes' => $htes->count(),
@@ -78,15 +100,44 @@ class CoordinatorHTEController extends Controller
     public function store(Request $request)
     {
         $programId = ProgramAccess::programId($request->user());
-        $hte = HTE::create([
-            ...$request->validate($this->hteRules($request)),
-            'college_id' => $request->user()->college_id,
-            'program_id' => $programId,
-        ]);
+        $hteData = $request->validate($this->hteRules($request));
+        $batchSchedule = null;
+
+        if ($request->has('batch_schedule')) {
+            $batchSchedule = $request->validate([
+                'batch_schedule' => ['required', 'array'],
+                'batch_schedule.academic_section_id' => [
+                    'required',
+                    Rule::exists('academic_sections', 'id')->where(fn ($query) => $query
+                        ->where('program_id', $programId)
+                        ->where('is_active', true)),
+                ],
+                ...$this->batchScheduleRules('batch_schedule.days'),
+            ])['batch_schedule'];
+            $this->ensureWorkingDay($batchSchedule['days'], 'batch_schedule.days');
+        }
+
+        $hte = DB::transaction(function () use ($request, $programId, $hteData, $batchSchedule): HTE {
+            $hte = HTE::create([
+                ...$hteData,
+                'college_id' => $request->user()->college_id,
+                'program_id' => $programId,
+            ]);
+
+            if ($batchSchedule) {
+                $this->persistBatchSchedule(
+                    $hte,
+                    (int) $batchSchedule['academic_section_id'],
+                    $batchSchedule['days'],
+                );
+            }
+
+            return $hte;
+        });
 
         return response()->json([
-            'message' => 'HTE record created successfully.',
-            'hte' => $this->htePayload($hte->load(['students.program', 'students.college', 'moas.college'])),
+            'message' => $batchSchedule ? 'HTE record and batch schedule created successfully.' : 'HTE record created successfully.',
+            'hte' => $this->htePayload($hte->load(['students.program', 'students.college', 'moas.college', 'batchSchedules.academicSection.program'])),
         ], 201);
     }
 
@@ -107,6 +158,57 @@ class CoordinatorHTEController extends Controller
         $hte->update(['is_active' => false]);
 
         return response()->json(['message' => 'HTE deactivated. Deployments and MOA history were preserved.']);
+    }
+
+    public function batchSchedules(Request $request, HTE $hte)
+    {
+        $programId = ProgramAccess::programId($request->user());
+        ProgramAccess::authorizeHte($request->user(), $hte);
+
+        $schedules = $hte->batchSchedules()->get()->groupBy('academic_section_id');
+        $batches = AcademicSection::with('program:id,code')
+            ->where('program_id', $programId)
+            ->where('is_active', true)
+            ->orderByDesc('academic_year')
+            ->orderBy('year_level')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (AcademicSection $batch) => $this->batchSchedulePayload(
+                $hte,
+                $batch,
+                $schedules->get($batch->id, collect()),
+            ));
+
+        return response()->json([
+            'hte' => $hte->only(['id', 'name']),
+            'batches' => $batches,
+        ]);
+    }
+
+    public function saveBatchSchedule(Request $request, HTE $hte, AcademicSection $academicSection)
+    {
+        $programId = ProgramAccess::programId($request->user());
+        ProgramAccess::authorizeHte($request->user(), $hte);
+        abort_unless(
+            (int) $academicSection->program_id === $programId && $academicSection->is_active,
+            404,
+        );
+
+        $validated = $request->validate($this->batchScheduleRules());
+        $this->ensureWorkingDay($validated['days']);
+
+        DB::transaction(function () use ($hte, $academicSection, $validated): void {
+            $this->persistBatchSchedule($hte, $academicSection->id, $validated['days']);
+        });
+
+        return response()->json([
+            'message' => 'Batch schedule saved successfully.',
+            'batch' => $this->batchSchedulePayload(
+                $hte,
+                $academicSection->loadMissing('program:id,code'),
+                $hte->batchSchedules()->where('academic_section_id', $academicSection->id)->get(),
+            ),
+        ]);
     }
 
     public function deploy(Request $request, Student $student)
@@ -196,7 +298,6 @@ class CoordinatorHTEController extends Controller
         $programId = ProgramAccess::programId($request->user());
         $validated = $request->validate([
             'hte_id' => ['required', Rule::exists('htes', 'id')->where('program_id', $programId)],
-            'college_id' => ['nullable', Rule::in([(int) $request->user()->college_id])],
             'effective_date' => ['required', 'date'],
             'expiration_date' => ['required', 'date', 'after:effective_date'],
             'file' => ['required', 'file', 'mimes:pdf', 'max:10240'],
@@ -204,7 +305,7 @@ class CoordinatorHTEController extends Controller
         $path = $request->file('file')->store('moas', 'local');
 
         $moa = MOA::create([
-            ...collect($validated)->except(['file', 'college_id'])->all(),
+            ...collect($validated)->except('file')->all(),
             'college_id' => $request->user()->college_id,
             'program_id' => $programId,
             'file_path' => $path,
@@ -285,6 +386,48 @@ class CoordinatorHTEController extends Controller
         ];
     }
 
+    private function batchScheduleRules(string $daysPrefix = 'days'): array
+    {
+        $rules = [
+            $daysPrefix => ['required', 'array', 'required_array_keys:'.implode(',', $this->weekdays())],
+        ];
+
+        foreach ($this->weekdays() as $day) {
+            $prefix = "{$daysPrefix}.{$day}";
+            $rules[$prefix] = ['required', 'array'];
+            $rules["{$prefix}.is_working"] = ['required', 'boolean'];
+            $rules["{$prefix}.am_start"] = ['required', 'date_format:H:i'];
+            $rules["{$prefix}.am_end"] = ['required', 'date_format:H:i', "after:{$prefix}.am_start"];
+            $rules["{$prefix}.pm_start"] = ['required', 'date_format:H:i'];
+            $rules["{$prefix}.pm_end"] = ['required', 'date_format:H:i', "after:{$prefix}.pm_start"];
+        }
+
+        return $rules;
+    }
+
+    private function ensureWorkingDay(array $days, string $field = 'days'): void
+    {
+        if (! collect($days)->contains(fn (array $schedule) => (bool) $schedule['is_working'])) {
+            throw ValidationException::withMessages([
+                $field => 'Select at least one working day.',
+            ]);
+        }
+    }
+
+    private function persistBatchSchedule(HTE $hte, int $academicSectionId, array $days): void
+    {
+        foreach ($this->weekdays() as $day) {
+            HteBatchSchedule::updateOrCreate(
+                [
+                    'hte_id' => $hte->id,
+                    'academic_section_id' => $academicSectionId,
+                    'day_of_week' => $day,
+                ],
+                $days[$day],
+            );
+        }
+    }
+
     private function weekdays(): array
     {
         return ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -300,7 +443,100 @@ class CoordinatorHTEController extends Controller
             'students_count' => $hte->students_count ?? $students->count(),
             'active_students_count' => $students->where('internship_status', 'active')->count(),
             'valid_moa_count' => $moas->filter(fn (MOA $moa) => $moa->status === 'approved' && $moa->expiration_date->gte(now()->startOfDay()))->count(),
+            'batch_schedule_summary' => $this->batchScheduleSummary($hte),
         ];
+    }
+
+    private function batchScheduleSummary(HTE $hte): ?array
+    {
+        if (! $hte->relationLoaded('batchSchedules') || $hte->batchSchedules->isEmpty()) {
+            return null;
+        }
+
+        $schedules = $hte->batchSchedules;
+        $latestBatchId = $schedules->sortByDesc('updated_at')->first()?->academic_section_id;
+        $batchRows = $schedules->where('academic_section_id', $latestBatchId)->keyBy('day_of_week');
+        $batch = $batchRows->first()?->academicSection;
+        $groups = [];
+
+        foreach ($this->weekdays() as $day) {
+            $row = $batchRows->get($day);
+            if (! $row || ! $row->is_working) {
+                continue;
+            }
+
+            $times = [
+                'am_start' => $this->shortTime($row->am_start, ''),
+                'am_end' => $this->shortTime($row->am_end, ''),
+                'pm_start' => $this->shortTime($row->pm_start, ''),
+                'pm_end' => $this->shortTime($row->pm_end, ''),
+            ];
+            $key = implode('|', $times);
+
+            if (! isset($groups[$key])) {
+                $groups[$key] = [...$times, 'days' => []];
+            }
+
+            $groups[$key]['days'][] = $day;
+        }
+
+        return [
+            'batch_id' => $batch?->id,
+            'batch_label' => $batch ? sprintf(
+                '%s · Year %s-%s · AY %s',
+                $batch->program?->code ?? 'Program',
+                $batch->year_level,
+                $batch->name,
+                $batch->academic_year,
+            ) : 'Saved batch schedule',
+            'configured_batches' => $schedules->pluck('academic_section_id')->unique()->count(),
+            'groups' => array_values($groups),
+        ];
+    }
+
+    private function batchSchedulePayload(HTE $hte, AcademicSection $batch, $scheduleRows): array
+    {
+        $rows = collect($scheduleRows)->keyBy('day_of_week');
+        $defaults = [
+            'am_start' => $this->shortTime($hte->default_am_start, '08:00'),
+            'am_end' => $this->shortTime($hte->default_am_end, '12:00'),
+            'pm_start' => $this->shortTime($hte->default_pm_start, '13:00'),
+            'pm_end' => $this->shortTime($hte->default_pm_end, '17:00'),
+        ];
+
+        return [
+            'id' => $batch->id,
+            'name' => $batch->name,
+            'year_level' => $batch->year_level,
+            'academic_year' => $batch->academic_year,
+            'label' => sprintf(
+                '%s · Year %s-%s · AY %s',
+                $batch->program?->code ?? 'Program',
+                $batch->year_level,
+                $batch->name,
+                $batch->academic_year,
+            ),
+            'has_saved_schedule' => $rows->isNotEmpty(),
+            'days' => collect($this->weekdays())->mapWithKeys(function (string $day) use ($rows, $defaults): array {
+                $row = $rows->get($day);
+
+                return [$day => $row ? [
+                    'is_working' => $row->is_working,
+                    'am_start' => $this->shortTime($row->am_start, $defaults['am_start']),
+                    'am_end' => $this->shortTime($row->am_end, $defaults['am_end']),
+                    'pm_start' => $this->shortTime($row->pm_start, $defaults['pm_start']),
+                    'pm_end' => $this->shortTime($row->pm_end, $defaults['pm_end']),
+                ] : [
+                    'is_working' => in_array($day, $hte->work_days ?? $this->weekdays(), true),
+                    ...$defaults,
+                ]];
+            })->all(),
+        ];
+    }
+
+    private function shortTime($value, string $fallback): string
+    {
+        return $value ? substr((string) $value, 0, 5) : $fallback;
     }
 
     private function moaPayload(MOA $moa): array

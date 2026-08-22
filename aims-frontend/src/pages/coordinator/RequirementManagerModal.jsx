@@ -134,7 +134,7 @@ function RequirementManagerModal({ onClose, onChanged }) {
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/65 p-2 backdrop-blur-sm sm:p-5">
-      <section role="dialog" aria-modal="true" aria-label="Manage program requirements" className="flex max-h-[calc(100dvh-1rem)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-[#f7f3ee] shadow-2xl dark:border-slate-700 dark:bg-slate-950 sm:max-h-[calc(100dvh-2.5rem)]">
+      <section role="dialog" aria-modal="true" aria-label="Manage program requirements" className="flex max-h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-[#f7f3ee] shadow-2xl dark:border-slate-700 dark:bg-slate-950 sm:max-h-[calc(100dvh-2.5rem)]">
         <header className="flex shrink-0 items-start justify-between border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900 sm:px-7">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8750b]">Program upload settings</p>

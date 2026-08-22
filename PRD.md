@@ -5,17 +5,29 @@
 | Product | Academic Internship Monitoring System (AIMS) |
 | Institution | Marinduque State University - Santa Cruz Campus |
 | Document status | Draft for stakeholder review |
-| Version | 2.0 |
-| Date | August 10, 2026 |
+| Version | 2.6 |
+| Date | August 16, 2026 |
 | Basis | Direct inspection of the AIMS Laravel backend (routes, models, migrations, controllers) and React frontend (pages, routes, services, components) |
-| Stack | Laravel 11 + Sanctum API backend; React (Vite) + React Router + Tailwind + Recharts + Leaflet frontend; MySQL/MariaDB-compatible schema |
+| Stack | Laravel 12 + Sanctum API backend; React (Vite) + React Router + Tailwind + Recharts + Leaflet frontend; MySQL/MariaDB-compatible schema |
 | Product owner | To be assigned by the University |
+
+### Revision history
+
+| Version | Date | Summary |
+|---|---|---|
+| 2.0 | August 10, 2026 | Repository-derived baseline covering the six-role internship lifecycle. |
+| 2.1 | August 15, 2026 | Documented the revised student-controlled travel and multi-stage report-validation workflow, workday-aware attendance behavior, student academic assignments in Admin User Management, configurable server-side page sizing, login readability/branding fixes, and related dashboard, notification, audit, schema, and automated-test updates. Corrected the backend framework version to Laravel 12. |
+| 2.2 | August 15, 2026 | Added HTE batch schedule configuration by Academic Section, reusable common schedule tools for selected days, and a final editable Monday-to-Sunday schedule with program-scoped persistence and validation. |
+| 2.3 | August 15, 2026 | Replaced Coordinator Daily Journal approval/rejection with a non-approval review acknowledgment (`pending`/`reviewed`) and optional review notes, while preserving separate attendance verification and HTE Supervisor review workflows. |
+| 2.4 | August 16, 2026 | Updated the HTE list to display the latest saved batch/per-day schedule instead of stale HTE default hours, grouping days that share the same AM/PM pattern and refreshing the list immediately after a schedule save. |
+| 2.5 | August 16, 2026 | Embedded Batch Schedule Configuration and the final editable Per-Day Configuration in Add HTE. A new HTE and its selected Academic Section schedule are validated and created atomically, while the separate schedule editor remains available for later batch-specific changes. |
+| 2.6 | August 16, 2026 | Removed the redundant Default Working Hours controls from HTE forms and made each Per-Day Configuration checkbox the authoritative working-day state. Apply changes only checked days; unchecked days are disabled and persisted as non-working while legacy HTE defaults are maintained internally for compatibility. |
 
 ## 1. Executive Summary
 
 AIMS is a role-based web application that manages the complete academic internship (On-the-Job Training / OJT) lifecycle at Marinduque State University - Santa Cruz Campus. It is implemented as a Laravel + Sanctum REST API (`aims-backend`) consumed by a React single-page application (`aims-frontend`), and already covers six distinct roles: **Student**, **Internship Coordinator**, **Program Head**, **HTE Supervisor**, **VPAA**, and **Administrator**.
 
-The system is a single source of truth for: official OJT enrollment and student self-registration, host training establishment (HTE) records and geofencing, MOA agreements, student-to-HTE deployment, daily attendance via a "smart clock," documentary requirement submission and review, supervisor tasks and evaluations, GPS-tracked travel sessions with checkpoints, multi-stage approvals, announcements, in-app notifications, and per-user activity/audit history.
+The system is a single source of truth for: official OJT enrollment and student self-registration, host training establishment (HTE) records and geofencing, MOA agreements, student-to-HTE deployment, daily attendance via a "smart clock," documentary requirement submission and review, supervisor tasks and evaluations, student-controlled GPS travel sessions with checkpoints, Coordinator-generated travel reports with Program Head and VPAA validation, multi-stage approvals, announcements, in-app notifications, and per-user activity/audit history.
 
 It replaces fragmented spreadsheets, paper forms, chat messages, and manually consolidated reports with a traceable workflow shared by all six roles.
 
@@ -69,8 +81,8 @@ Targets below must be confirmed by University stakeholders before production lau
 
 - Public landing portal, authentication, self-registration against an official enrollment list, and password recovery via security questions.
 - Student workspace: dashboard, attendance/smart clock, requirement uploads, travel participation, announcements, notifications, profile.
-- Coordinator operations: enrollment import, student CRUD and registration approval, HTE/MOA/holiday management, requirement checklist definition, attendance and journal review, coordinator-led travel sessions, dashboard.
-- Program Head review: program-scoped dashboard, student monitoring, requirement/MOA document review and endorsement, travel checkpoint verification.
+- Coordinator operations: enrollment import, student CRUD and registration approval, HTE/MOA/holiday management, requirement checklist definition, attendance and journal review, monitoring completed student travel evidence, preparation/submission/revision of official travel reports, dashboard.
+- Program Head review: program-scoped dashboard, student monitoring, requirement/MOA document review and endorsement, travel-report validation/return, and forwarding to the VPAA.
 - HTE Supervisor workspace: assigned-intern progress, task assignment, attendance review, midterm/final evaluations.
 - VPAA approvals: final approval queues for documents, deployments, and MOAs; university-wide dashboard, travel oversight, and announcement authoring.
 - Administrator console: user management, academic structure (colleges/programs/sections), system settings, system-wide reports.
@@ -107,6 +119,7 @@ AIMS defines exactly six roles via `users.role`: `student`, `coordinator`, `prog
 - Backend `role:` middleware is the enforcement point; a hidden frontend menu item is not sufficient authorization.
 - Coordinator, Program Head, and Supervisor accounts carry a `college_id`/`program_id` (staff) or explicit assignment (`supervisor_id` on `students`) that scopes which student records they may read or modify.
 - A student may only access records linked to their own `student_id`.
+- A student travel session shall resolve its responsible Coordinator from the Student's linked official OJT enrollment when valid, with a fallback to the first active Coordinator assigned to the same college/program; absence of an eligible Coordinator blocks session creation.
 - `users.is_active` gates authentication; deactivating a user must not delete their historical attendance, requirements, approvals, evaluations, or activity records.
 - Staff accounts (coordinator, program_head, supervisor, admin, vpaa) receive an auto-generated, unique `staff_id`; students authenticate with their `student_id`/School ID.
 
@@ -119,8 +132,9 @@ AIMS defines exactly six roles via `users.role`: `student`, `coordinator`, `prog
 5. The Coordinator uploads/maintains the HTE's MOA; the Program Head endorses it and the VPAA gives final approval before it is considered valid.
 6. The student records daily attendance through the smart clock (AM/PM, full-day/half-day, WFO/WFH/field) and logs AM/PM journal activities, and uploads the program's required documents.
 7. Coordinators review attendance/journals; the assigned HTE Supervisor separately reviews attendance and records evaluations and tasks; Program Head and VPAA review/approve documents and deployments within their authority.
-8. When applicable, the Coordinator or student initiates GPS-tracked travel sessions with ordered checkpoints (departure/intermediate/arrival), and Program Head/VPAA verify checkpoint evidence.
-9. Dashboards and reports (per role) consolidate progress until the internship becomes `completed`, `dropped`, or otherwise closed.
+8. When applicable, the eligible student initiates a GPS-tracked travel session, records starting location, departure, optional route checkpoints, and final arrival, uploads required arrival-photo evidence, and ends the session to lock the evidence.
+9. The assigned Coordinator reviews the completed evidence, generates and submits a versioned travel report; the Program Head validates or returns it and explicitly forwards validated reports to the VPAA; the VPAA issues final validation or returns the report through the revision chain.
+10. Dashboards and reports (per role) consolidate progress until the internship becomes `completed`, `dropped`, or otherwise closed.
 
 ## 8. Functional Requirements
 
@@ -151,7 +165,7 @@ Backend: `StudentDashboardController`, `StudentAttendanceController`, `StudentRe
 | ID | Priority | Requirement |
 |---|---|---|
 | STU-01 | P0 | `GET /student/dashboard` shall return internship status, HTE assignment, rendered vs. required OJT hours, attendance summary, requirement completion, and recent announcements/notifications for the KPI cards and progress ring shown on `Dashboard.jsx`. |
-| STU-02 | P0 | `GET /student/attendance` and `/student/attendance/workspace` shall provide a monthly calendar and per-date detail used by the attendance calendar UI. |
+| STU-02 | P0 | `GET /student/attendance` and `/student/attendance/workspace` shall provide a monthly calendar and per-date detail used by the attendance calendar UI. The workspace shall expose the student's effective workdays, calculate remaining workdays for the current week within the active OJT period, and identify non-working dates as unavailable unless an attendance record already exists. |
 | STU-03 | P0 | Students shall create `present`, `absent`, or `holiday` entries (`POST /student/attendance/entry`) subject to `allow_past_attendance` and configured date windows. |
 | STU-04 | P0 | Present entries shall support `work_mode` of `wfo`, `wfh`, or `field`, and `session_type` of `full_day`, `am_half`, or `pm_half`. |
 | STU-05 | P0 | Smart clock (`GET/POST /student/attendance/quick-clock`, `POST /student/attendance/clock-in`, `/clock-out`) shall use server timestamps and enforce a valid AM/PM time-in/time-out sequence per session. |
@@ -159,7 +173,7 @@ Backend: `StudentDashboardController`, `StudentAttendanceController`, `StudentRe
 | STU-07 | P0 | Students shall record AM/PM journal activities (`am_activity`, `pm_activity`) alongside attendance for later Coordinator journal review. |
 | STU-08 | P0 | `GET /student/requirements` shall list the student's program requirement checklist with status (`pending`/`approved`/`rejected`) and reviewer feedback. |
 | STU-09 | P0 | Students shall upload (`POST /student/requirements/{id}/upload`) and download (`GET /student/requirements/{id}/download`) requirement files; re-uploading shall return the item to `pending`. |
-| STU-10 | P0 | `GET /student/travel` shall list assigned travel sessions; students shall start (`POST /student/travel/{travel}/start`), submit checkpoint evidence (`POST /student/travel/checkpoints/{checkpoint}`), and end (`POST /student/travel/{travel}/end`) sessions with location and photo evidence where required. |
+| STU-10 | P0 | `GET /student/travel` shall return the student's eligibility, assigned Coordinator, current session, and travel history. An eligible student shall start a session (`POST /student/travel/start`), record departure (`POST /student/travel/{travel}/departure`), add zero or more route checkpoints (`POST /student/travel/{travel}/checkpoints`), mark final arrival (`POST /student/travel/{travel}/arrival`), upload required arrival evidence (`POST /student/travel/{travel}/arrival-photo`), and end (`POST /student/travel/{travel}/end`) the session. Every route action shall capture server time, latitude, longitude, GPS accuracy when available, and a readable location. |
 | STU-11 | P0 | Students shall view announcements targeted to `all` or `students`, and receive/mark-read in-app notifications that deep-link to the relevant screen. |
 | STU-12 | P0 | Students shall maintain personal, guardian, and contact profile fields and change their password from `Profile.jsx`. |
 
@@ -169,19 +183,21 @@ Backend: `CoordinatorDashboardController`, `CoordinatorStudentController`, `Coor
 
 | ID | Priority | Requirement |
 |---|---|---|
-| COR-01 | P0 | Coordinators shall manage `ojt_enrollments` individually and via CSV (`POST /coordinator/students/import` preview, `/import/confirm` commit). |
-| COR-02 | P0 | Coordinators shall list/search/filter (`GET /coordinator/students`), view, create, update, and delete student records (`CoordinatorStudentController` apiResource) within their college/program. |
+| COR-01 | P0 | Coordinators shall manage `ojt_enrollments` individually and via CSV (`POST /coordinator/students/import` preview, `/import/confirm` commit). The OJT Enrollment List shall use server-side pagination with selectable page sizes of 10, 25, 50, or 100 entries. |
+| COR-02 | P0 | Coordinators shall list/search/filter (`GET /coordinator/students`), view, create, update, and delete student records (`CoordinatorStudentController` apiResource) within their college/program. The student list shall use server-side pagination with selectable page sizes of 10, 25, 50, or 100 entries. |
 | COR-03 | P0 | Coordinators shall approve (`POST /coordinator/students/{student}/approve`) or reject (`.../reject`, reason required) registrations, and deactivate (`PUT .../deactivate`) student accounts. |
 | COR-04 | P0 | Coordinators shall define, edit, reorder (`PUT /coordinator/requirements/order`), and deactivate the program's official requirement checklist (`program_requirements`) without deleting historical `internship_requirements` submissions. |
 | COR-05 | P0 | Coordinators shall review submitted requirements (`POST /coordinator/students/{student}/requirements/{requirement}/review`), download evidence, and approve/reject with feedback. |
-| COR-06 | P0 | Coordinators shall list/inspect (`GET /coordinator/attendance`, `/{attendance}`), edit (`PUT`), delete (`DELETE`), verify (`PUT .../verify`), and review journals (`POST .../journal-review`) for attendance within their program. |
+| COR-06 | P0 | Coordinators shall list/inspect (`GET /coordinator/attendance`, `/{attendance}`), edit (`PUT`), verify (`PUT .../verify`), and acknowledge Daily Journals as reviewed (`POST .../journal-review`) with optional review notes for attendance within their program. Daily Journals shall not use approve/reject decisions. Attendance Logs and Daily Journals shall share server-side pagination with selectable page sizes of 10, 25, 50, or 100 entries. |
 | COR-07 | P0 | Coordinators shall create/update/delete HTEs (`CoordinatorHTEController`), including geofence center/radius/enabled flag and default AM/PM schedule and workdays. |
 | COR-08 | P0 | Coordinators shall deploy a student to an HTE and supervisor (`PUT /coordinator/htes/deployments/{student}`) with internship dates, required hours, schedule, and workdays. |
 | COR-09 | P0 | Coordinators shall manage holidays (`POST/PUT/DELETE /coordinator/htes/holidays*`) scoped to college/program, including recurring holidays. |
-| COR-10 | P0 | Coordinators shall upload and maintain MOAs (`POST/PUT/DELETE /coordinator/htes/moas*`) with effective/expiration dates, and download the MOA file. |
-| COR-11 | P0 | Coordinators shall create and run travel sessions (`CoordinatorTravelController`: `store`, `startTravel`, `departure`, `checkpoint`, `arrival`, `uploadArrivalPhoto`, `endTravel`, `cancel`) with travelers, companions, route notes, and at least two ordered checkpoints. |
+| COR-10 | P0 | Coordinators shall upload and maintain MOAs (`POST/PUT/DELETE /coordinator/htes/moas*`) with an HTE, effective/expiration dates, and a PDF, and download the MOA file. The upload form shall not ask for a college; the API shall always assign the logged-in Coordinator's authoritative college and program scope. |
+| COR-11 | P0 | Coordinators shall monitor travel sessions assigned to them, review completed Student-submitted GPS/timestamp/checkpoint/arrival-photo evidence, generate one official travel report per completed session (`POST /coordinator/travel/{travel}/reports`), edit report remarks while the report is editable, and submit or resubmit the report to the Program Head. Coordinators shall not alter the Student's preserved route evidence. |
 | COR-12 | P0 | The Coordinator dashboard (`GET /coordinator/dashboard`) shall summarize total/active/completed/pending/for-approval student counts, attendance and requirement summaries, and recent activity. |
 | COR-13 | P1 | Coordinators shall export filtered attendance, journal, student, HTE-deployment, and travel reports (`Reports.jsx` modules); backend export/print endpoints remain to be finalized. |
+| COR-14 | P0 | Coordinator travel monitoring shall categorize sessions as active (`active`, `traveling`, or `arrived`), completed without a submitted report, pending validation, returned for revision, or final validated, and shall display the complete report-validation history and version. |
+| COR-15 | P0 | Add HTE shall preserve HTE identity/contact/geofence fields and embed responsive Batch Schedule Configuration plus the final editable Per-Day Configuration, without a duplicate Default Working Hours section. The Coordinator shall select an active Academic Section, set common AM/PM tools, check the actual working days within the Monday-to-Sunday cards, apply common hours only to checked days, and edit each checked day's values independently. Unchecked days shall be disabled and persisted as non-working. The HTE and initial seven-day batch schedule shall be created atomically, with legacy HTE default schedule fields populated internally for compatibility. The separate batch-schedule editor (`GET/PUT /coordinator/htes/{hte}/batch-schedules*`) shall remain available for later batch-specific changes. After saving, the HTE list shall refresh and display only working days from the latest saved batch schedule, grouping days with identical AM/PM hours. |
 
 ### 8.4 Program Head review and monitoring
 
@@ -193,7 +209,7 @@ Backend: `ProgramHeadDashboardController`, `ProgramHeadDocumentController`, `Pro
 | PH-02 | P0 | `GET /program-head/students` shall list the program's students with progress, attendance %, and requirement completion for `StudentMonitoring.jsx`. |
 | PH-03 | P0 | Program Heads shall review requirements (`POST /program-head/documents/requirements/{requirement}/review`) and download evidence (`GET .../download`). |
 | PH-04 | P0 | Program Heads shall review/endorse MOAs (`POST /program-head/documents/moas/{moa}/review`, `moas.program_status`/`program_reviewed_by`) before VPAA final approval. |
-| PH-05 | P0 | Program Heads shall monitor travel (`GET /program-head/travel`) and verify/unverify checkpoint evidence (`PUT /program-head/travel/checkpoints/{checkpoint}/verify`) and view checkpoint photos. |
+| PH-05 | P0 | Program Heads shall monitor program-scoped travel (`GET /program-head/travel`), review a Coordinator-submitted travel report against the immutable Student GPS route and arrival evidence, validate or return it with a required reason for returns (`PUT /program-head/travel/reports/{report}/review`), and explicitly forward a validated report to the VPAA (`POST /program-head/travel/reports/{report}/forward`). |
 | PH-06 | P1 | Program Heads shall export program-level compliance and progress reports. |
 
 ### 8.5 HTE Supervisor workspace
@@ -220,7 +236,8 @@ Backend: `VPAADashboardController`, `VPAAApprovalController`, `VPAAMOAController
 | VPAA-04 | P0 | `PUT /vpaa/approvals/{approval}` and `PUT /vpaa/moas/{approval}` shall accept exactly one final decision (`approved`/`rejected`); a second decision on an already-decided record shall be rejected by the API. |
 | VPAA-05 | P0 | Rejection shall require `remarks`; approval remarks shall be optional. A decision shall stamp `decided_by`/`decided_at` and notify the submitter. |
 | VPAA-06 | P0 | The VPAA shall create, update, publish, archive, restore, and delete announcements (`AnnouncementController@manage/store/update/archive/restore/destroy`) with optional file attachments and a `target_audience`. |
-| VPAA-07 | P0 | The VPAA shall have a university-wide dashboard (`GET /vpaa/dashboard`, `UniversityInternshipDashboard` component), reports, and travel-monitoring/checkpoint-verification views (shared with Program Head). |
+| VPAA-07 | P0 | The VPAA shall have a university-wide dashboard (`GET /vpaa/dashboard`, `UniversityInternshipDashboard` component), reports, and a final travel-report validation view shared with the Program Head module. |
+| VPAA-08 | P0 | The VPAA travel view shall list only reports that reached the final-validation stage, allow final validation or return with a required reason (`PUT /vpaa/travel/reports/{report}/review`), preserve the validation decision/history, notify affected users, and make final-validated reports read-only. |
 
 ### 8.7 Administration
 
@@ -228,13 +245,14 @@ Backend: `AdminDashboardController`, `AdminUserController`, `AdminSystemControll
 
 | ID | Priority | Requirement |
 |---|---|---|
-| ADM-01 | P0 | Administrators shall search/filter/create/update/delete users (`AdminUserController` apiResource) across all six roles. |
+| ADM-01 | P0 | Administrators shall search/filter/create/update/delete users (`AdminUserController` apiResource) across all six roles. The user list shall expose selectable server-side page sizes of 10, 15, 25, or 50 entries. |
 | ADM-02 | P0 | Administrators shall change a user's role (`PUT /admin/users/{user}/role`) and toggle active status (`PUT .../status`); role changes to staff roles must carry a valid college/program assignment. |
 | ADM-03 | P0 | Administrators shall reset a user's password directly (`POST /admin/users/{user}/reset-password`). |
 | ADM-04 | P0 | Administrators shall manage colleges, programs, and academic sections (`AdminSystemController@academic` + `store/update/destroy*`) with referential-integrity protection (e.g., cannot delete a college with active programs/students). |
 | ADM-05 | P0 | Administrators shall manage typed `system_settings` (group/key/value/type) via `GET/PUT /admin/settings`. |
 | ADM-06 | P0 | `GET /admin/dashboard` shall summarize total users by role, active interns, pending registrations, completed internships, monthly attendance, and recent login activity. |
 | ADM-07 | P1 | `GET /admin/reports` shall provide system-wide analytics/exports by academic year, semester, college, program, and status. |
+| ADM-08 | P0 | Admin User Management shall display each student's college and program from the linked `students` profile when those assignments are not stored directly on the `users` row. College filtering shall match both staff assignments on `users.college_id` and student assignments on `students.college_id`. |
 
 ### 8.8 Shared communication and audit features
 
@@ -269,7 +287,7 @@ Backend: `AnnouncementController`, `NotificationController`, `ActivityLogControl
 - Smart clock timestamps (`am_time_in`, `am_time_out`, `pm_time_in`, `pm_time_out`, `ot_start`, `ot_end`) are server-generated; client-submitted times are informational only.
 - Past-date entry is blocked unless `students.allow_past_attendance` is enabled by a Coordinator.
 - WFO geofence enforcement (using `latitude_in`/`longitude_in` vs. HTE `latitude`/`longitude`/`geofence_radius`) applies only when the assigned HTE has `geofence_enabled = true` and valid coordinates/radius.
-- Three independently tracked review dimensions exist on the same record: `is_verified`/`verified_by` (Coordinator verification), `journal_status`/`journal_feedback`/`journal_reviewed_by` (Coordinator journal review), and `supervisor_review_status`/`supervisor_feedback`/`supervisor_reviewed_by` (Supervisor review). These must remain distinguishable in UI and reports.
+- Three independently tracked review dimensions exist on the same record: `is_verified`/`verified_by` (Coordinator attendance verification), `journal_status` (`pending`/`reviewed`)/`journal_feedback`/`journal_reviewed_by` (Coordinator Daily Journal review acknowledgment, not approval), and `supervisor_review_status`/`supervisor_feedback`/`supervisor_reviewed_by` (Supervisor attendance review). These must remain distinguishable in UI and reports.
 - `overtime_hours` and location snapshots (`am_time_in_location`, etc.) are stored per session for audit purposes.
 
 ### 9.3 Requirements and approvals
@@ -286,13 +304,17 @@ Backend: `AnnouncementController`, `NotificationController`, `ActivityLogControl
 - A student deployment (`students.hte_id`, `supervisor_id`, schedule, `required_ojt_hours`, `work_days`) must reference an HTE within the same college/program as the Coordinator and student.
 - The system must be able to identify expired and soon-to-expire (e.g., within 60 days) approved MOAs without altering their historical decision.
 
-### 9.5 Travel (`travel_logs`, `travel_checkpoints`, `travel_companions`)
+### 9.5 Travel (`travel_logs`, `travel_checkpoints`)
 
-- `travel_logs.status`: `active`, `completed`, `cancelled`.
-- A travel session may be coordinator-led (`created_by`, nullable `student_id`, `travel_participants` pivot for multiple travelers) or student/self-initiated.
-- `travel_checkpoints.point_type`: `departure`, `intermediate`, `arrival`; each session requires at least a departure and arrival checkpoint (at least two ordered checkpoints).
-- Each checkpoint captures `captured_at` (server time), `latitude`/`longitude`, `photo_path`, and `notes`; verification (`is_verified`, `verified_by`, `verified_at`) is restricted to Program Head and VPAA.
-- Arrival requires an `arrival_photo_path` and `arrived_at` timestamp before the session can be marked `completed`.
+- New sessions are student-controlled and solo. The initiating Student user is stored in `travel_logs.created_by`, the responsible Internship Coordinator in `coordinator_id`, and the Student record is linked through `travel_participants`. Companion records are not collected or stored.
+- A Student may start only when the account is active, registration is approved, internship is active and within its configured period, an active HTE is assigned, an active matching Coordinator can be resolved, and the Student has no session in `active`, `traveling`, or `arrived` state.
+- The session state sequence is `active` (starting location captured) -> `traveling` (departure captured) -> `arrived` (final arrival captured) -> `completed` (arrival photo present and session ended). Invalid, repeated, out-of-order, and cross-account transitions must return an authorization or validation error.
+- `travel_checkpoints.point_type` supports `start`, `departure`, `checkpoint`, and `final_arrival`. Points are append-only and ordered by `sequence`; each captures `captured_at` (server time), latitude, longitude, optional `gps_accuracy`, readable location, and optional remarks.
+- Final arrival requires a protected `arrival_photo_path` before completion. Student, assigned Coordinator, authorized Program Head, and eligible VPAA reviewers may retrieve it only through authorization-checked endpoints.
+- A completed session may have exactly one `travel_reports` record. Reports begin as `draft`; Coordinator remarks are editable only in `draft`, `for_revision`, or `returned_by_vpaa`.
+- The report sequence is `draft` -> `pending_program_head` -> `program_head_validated` -> `pending_vpaa` -> `final_validated`. A Program Head return sets `for_revision`; a VPAA return sets `returned_by_vpaa`. Resubmission increments `version` and repeats the complete Program Head-to-VPAA chain.
+- Every validate, return, forward, and resubmit action shall create a `travel_report_validations` history item with reviewer, role, action, reason/comments, timestamp, and report version. A return requires a reason; final-validated reports and completed route evidence are read-only.
+- Travel status notifications shall be sent to the next responsible reviewer and affected Student/Coordinator, and significant travel/report actions shall be recorded in the personal activity log.
 
 ## 10. Key Data Entities
 
@@ -304,12 +326,15 @@ Derived directly from `app/Models` and `database/migrations`.
 | Student (`students`) | Academic, personal, guardian, HTE/supervisor assignment, schedule, registration/internship status, OJT progress | belongsTo User/College/Program/HTE/Supervisor(User); hasMany Attendance/InternshipRequirement/TravelLog/Evaluation/InternshipTask |
 | OjtEnrollment (`ojt_enrollments`) | Official pre-registration eligibility list, unique `school_id` | belongsTo College/Program; belongsTo User (`added_by`); belongsTo Student (`student_record_id`) |
 | College / Program / AcademicSection | Academic hierarchy and scoping, per-college `required_ojt_hours` | College hasMany Program; Program hasMany AcademicSection |
-| HTE (`htes`) | Host organization contact data, address, geofence center/radius/enabled flag, default schedule | belongsTo College/Program; hasMany Student, MOA |
+| HTE (`htes`) | Host organization contact data, address, geofence center/radius/enabled flag, default schedule | belongsTo College/Program; hasMany Student, MOA, HteBatchSchedule |
+| HteBatchSchedule (`hte_batch_schedules`) | Final AM/PM schedule and `is_working` state for one HTE, Academic Section batch, and weekday; unique per HTE/batch/day | belongsTo HTE and AcademicSection |
 | MOA (`moas`) | HTE agreement file, validity window, Program Head endorsement, VPAA final approval | belongsTo HTE/College/Program; belongsTo User (`program_reviewed_by`, `approved_by`) |
 | Attendance (`attendance`) | Daily time records, work mode/session, journal, three independent review states | belongsTo Student; belongsTo User (verifier/journal reviewer/supervisor reviewer) |
 | ProgramRequirement (`program_requirements`) | Ordered, versionable definition of a program's required document | belongsTo Program; hasMany InternshipRequirement |
 | InternshipRequirement (`internship_requirements`) | Student submission: file, status, feedback, reviewer | belongsTo Student, ProgramRequirement; belongsTo User (`reviewed_by`) |
-| TravelLog / TravelCheckpoint / TravelCompanion | Planned/active travel session, ordered checkpoints, evidence, non-student companions | TravelLog hasMany TravelCheckpoint; belongsToMany Student via `travel_participants` |
+| TravelLog / TravelCheckpoint | Solo student-controlled travel session, responsible Coordinator, ordered GPS route evidence, and final arrival photo | TravelLog belongsTo Creator(User), Coordinator(User), and HTE; hasMany TravelCheckpoint; belongsToMany Student via `travel_participants`; hasOne TravelReport |
+| TravelReport (`travel_reports`) | Versioned Coordinator report generated from one completed travel session and routed through Program Head and VPAA validation | belongsTo TravelLog and Coordinator(User); hasMany TravelReportValidation |
+| TravelReportValidation (`travel_report_validations`) | Append-only validation/return/forward/resubmission history tied to a specific report version | belongsTo TravelReport and Reviewer(User) |
 | InternshipTask (`internship_tasks`) | Supervisor-assigned work item and status | belongsTo Student, User (supervisor) |
 | Evaluation (`evaluations`) | Supervisor assessment (6 rated criteria), recommendations, feedback, draft/submitted/finalized | belongsTo Student, User (supervisor) |
 | ApprovalRecord (`approval_records`) | Generic, polymorphic-by-string decision request for document/deployment/moa | belongsTo User (`submitted_by`, `decided_by`) |
@@ -325,6 +350,7 @@ Derived directly from `app/Models` and `database/migrations`.
 Observed and required patterns from the current React implementation (Tailwind, Recharts, Leaflet, react-hot-toast):
 
 - The interface must be responsive for current desktop and mobile browsers, with a collapsible sidebar and dark-mode support (`ThemeContext`).
+- The application shall use the MarSU logo for browser branding, and login identifier/password fields—including browser-autofilled values—must retain readable foreground/background contrast independently of the selected application theme.
 - Navigation must be role-specific (`Sidebar` filters by `user.role`) and consistent across screens (`Header` + `Sidebar` layout, notification bell with unread badge).
 - Every asynchronous action must show loading, success (toast), validation, and failure feedback.
 - Destructive or irreversible actions (delete, deactivate, final approval/rejection) must require confirmation and clearly name the affected record.
@@ -332,7 +358,8 @@ Observed and required patterns from the current React implementation (Tailwind, 
 - Empty states must explain why no data is present and, when applicable, provide the next action.
 - Forms must preserve valid user input after validation errors; multi-step forms (registration, evaluations) must retain progress across steps.
 - Dates and times must be displayed in the configured campus timezone (Asia/Manila).
-- Tables with operational data must provide search, filters, pagination, and accessible labels.
+- Tables with operational data must provide search, filters, server-side pagination, accessible labels, current-page/total feedback, and an explicit "Entries per page" selector where multiple page sizes are supported.
+- Changing a table's page size or any filter that changes its result set must reset that table to page 1. Page-size selectors must use the options defined by the corresponding API contract and remain usable in light mode, dark mode, and responsive layouts.
 - Upload screens (requirements, MOAs, avatars, checkpoint/arrival photos) must show allowed formats and size limits before upload.
 - Map-based features (`GeofenceMap`, travel route maps) must clearly render geofence circles, checkpoint markers (departure/intermediate/arrival), and route polylines centered on Santa Cruz, Marinduque.
 - Location-permission errors must explain how the user can retry without weakening geofence/authorization enforcement.
@@ -358,7 +385,7 @@ Observed and required patterns from the current React implementation (Tailwind, 
 
 - Production shall use MySQL or MariaDB rather than SQLite.
 - The system shall support at least 1,000 registered accounts and the stakeholder-approved concurrent-user target.
-- List and dashboard queries must be indexed (see the `add_high_volume_query_indexes` migration) and paginated to avoid unbounded dataset loading.
+- List and dashboard queries must be indexed (see the `add_high_volume_query_indexes` migration) and use validated server-side pagination to avoid unbounded dataset loading. Supported `per_page` values must be allow-listed by each endpoint rather than accepted as arbitrary client input.
 - P95 normal API response time should be no more than two seconds under the agreed load profile, excluding large file transfers.
 - Notifications, exports, and heavy file processing should use background queues (`jobs` table already present) rather than blocking requests.
 - Caching and horizontal application scaling must be possible without storing essential state on one application server.
@@ -390,7 +417,7 @@ Dashboards already implemented (per role) and reports that must be finalized as 
 - HTE deployment counts and students without assignments.
 - MOA pending/approved/rejected/expired/expiring-soon counts.
 - Pending and historical approval-record decisions and turnaround time.
-- Active, completed, and cancelled travel sessions and unverified checkpoints.
+- Active (`active`/`traveling`/`arrived`) and completed travel sessions, route evidence completeness, Coordinator reports by validation status/version, returned reports requiring revision, validation history, and final-validated reports.
 - Supervisor task completion, attendance-review, and evaluation completion (midterm/final remaining).
 - Announcement reach and read rates where institutionally permitted.
 
@@ -412,6 +439,11 @@ The release is acceptable when all of the following are true:
 10. Privacy notices, consent language, data retention, account deactivation, and location-data policies receive institutional approval.
 11. No open critical or high-severity security defects remain.
 12. User guides and administrator runbooks are available to the intended users.
+13. Admin User Management displays the linked college/program for student accounts, and its college filter includes students whose assignment is stored on the `students` profile.
+14. The Admin user list and Coordinator OJT enrollment, student, attendance, and journal lists honor their documented `per_page` options, return correct pagination metadata, reset to page 1 after page-size/filter changes, and retain search/filter query parameters while paging.
+15. A complete travel journey succeeds in staging: eligible Student start, departure, optional checkpoints, final arrival, required private arrival-photo upload, Student completion, Coordinator report generation/submission, Program Head validation/forwarding, and VPAA final validation.
+16. Travel workflow tests reject duplicate active sessions, invalid or repeated state transitions, cross-student/cross-Coordinator access, premature report actions, and attempts to edit a report while under review or after final validation; returned reports increment version and repeat the full validation chain.
+17. The Student attendance calendar exposes configured workdays, marks non-working dates unavailable when no record exists, and calculates “Workdays Left” from the remaining configured days in the current week and active OJT period.
 
 ## 15. Delivery Plan
 
@@ -474,13 +506,17 @@ These decisions are required before the PRD can move from Draft to Approved:
 
 This PRD was derived from direct inspection of the repository on the document date, including all API routes, Eloquent models, migrations, controllers, and React pages/components. The codebase already contains substantial, working implementation for all six roles: authentication, official-enrollment registration, program scoping, attendance and smart clock, requirement uploads, HTE/MOA operations, travel with checkpoints, supervisor tasks/evaluations, multi-stage approvals, announcements, notifications, dashboards, settings, and per-user activity history.
 
+As of version 2.1, travel has been revised from a Coordinator-operated checkpoint flow to a Student-controlled evidence flow with explicit session states, GPS accuracy, protected final-arrival evidence, Coordinator report generation, versioned Program Head/VPAA validation, notifications, and activity-log coverage. Dashboard active-travel counts treat `active`, `traveling`, and `arrived` sessions as in progress. The Student attendance workspace is workday-aware and reports only the configured remaining workdays for the current week.
+
+The Admin user-list response resolves student college/program details through the linked student profile while preserving direct staff assignments. Administrator user records and Coordinator OJT enrollment, student, attendance, and journal operational lists expose validated server-side page sizing with UI selectors and pagination metadata. The sign-in screen also preserves credential-field contrast under dark theme and browser autofill, and browser branding uses the MarSU logo.
+
 Areas that require explicit validation or product decisions before describing the product as production-ready:
 
 - The Coordinator and Program Head can both act on the same `internship_requirements` record, while Program Head approval is also expected to create the VPAA endorsement via `approval_records`. The intended sequence and state ownership must be resolved (Open Decision 1).
 - Role-specific report screens (`Reports.jsx` per role) currently render from dashboard-style aggregates rather than dedicated export endpoints; formal CSV/PDF export endpoints remain a P1 item.
 - Several `system_settings` describe desired behavior (e.g., default OJT hours, attendance windows) but each setting must be verified as enforced by the operational code, not merely editable in the Admin UI.
-- Sensitive uploaded files (requirements, MOAs, checkpoint/arrival photos) require a storage and privacy review (public disk vs. private/authorized-download) before production.
-- Existing automated tests (`tests/Feature`) cover authentication, enrollment, program scope, attendance, Coordinator operations, travel, profiles, activity logs, and VPAA approval cases, but the complete release criteria in Section 14 still require end-to-end validation.
+- Student travel arrival photos are stored on the private local disk and served through authorization-checked endpoints. Requirements, MOAs, avatars, any legacy checkpoint photos, and remaining uploaded evidence still require a storage and privacy review before production.
+- Existing automated tests (`tests/Feature`) cover authentication, enrollment, program scope, attendance, configured-workday calculations, Coordinator operations, table page sizing, the full travel-report validation chain and rejected transitions, core travel-report schema, profiles, activity logs, and VPAA approval cases, but the complete release criteria in Section 14 still require end-to-end validation.
 - The supervisor-to-HTE relationship is implicit (via `students.supervisor_id` and `students.hte_id` independently); there is no explicit constraint that a supervisor's assigned students all belong to one HTE (Open Decision 6).
 
 ## 19. Approval Record
@@ -495,4 +531,3 @@ Areas that require explicit validation or product decisions before describing th
 | VPAA representative |  |  |  |
 | Data Protection Officer |  |  |  |
 | IT / System Administrator |  |  |  |
-

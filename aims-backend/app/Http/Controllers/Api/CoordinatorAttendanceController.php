@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Support\AttendanceHours;
 use App\Support\ProgramAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class CoordinatorAttendanceController extends Controller
@@ -17,9 +19,10 @@ class CoordinatorAttendanceController extends Controller
             'search' => ['nullable', 'string', 'max:100'],
             'status' => ['nullable', 'in:present,late,absent,holiday'],
             'verification' => ['nullable', 'in:verified,pending'],
-            'journal' => ['nullable', 'in:submitted,missing,pending,approved,rejected'],
+            'journal' => ['nullable', 'in:submitted,missing,pending,reviewed'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'per_page' => ['nullable', 'integer', Rule::in([10, 25, 50, 100])],
         ]);
 
         // Keep the summary query lean.  Loading relations for every matching
@@ -35,7 +38,8 @@ class CoordinatorAttendanceController extends Controller
             ->with(['student.user', 'student.program', 'student.hte', 'verifier', 'journalReviewer'])
             ->latest('date')
             ->latest('id')
-            ->paginate(12);
+            ->paginate($request->integer('per_page', 10))
+            ->withQueryString();
         $records->getCollection()->transform(fn (Attendance $attendance) => $this->recordPayload($attendance));
 
         return response()->json([
@@ -132,19 +136,19 @@ class CoordinatorAttendanceController extends Controller
         }
 
         $validated = $request->validate([
-            'decision' => ['required', 'in:approved,rejected'],
-            'feedback' => ['nullable', 'required_if:decision,rejected', 'string', 'max:2000'],
+            'decision' => ['prohibited'],
+            'feedback' => ['nullable', 'string', 'max:2000'],
         ]);
 
         $attendance->update([
-            'journal_status' => $validated['decision'],
+            'journal_status' => 'reviewed',
             'journal_feedback' => $validated['feedback'] ?? null,
             'journal_reviewed_by' => $request->user()->id,
             'journal_reviewed_at' => now(),
         ]);
 
         return response()->json([
-            'message' => 'Daily journal '.$validated['decision'].'.',
+            'message' => 'Daily journal marked as reviewed.',
             'attendance' => $this->recordPayload($attendance->fresh()->load(['student.user', 'student.program', 'student.hte', 'verifier', 'journalReviewer'])),
         ]);
     }
@@ -164,7 +168,7 @@ class CoordinatorAttendanceController extends Controller
             ->when($request->date_from, fn (Builder $builder, string $date) => $builder->whereDate('date', '>=', $date))
             ->when($request->date_to, fn (Builder $builder, string $date) => $builder->whereDate('date', '<=', $date))
             ->when($request->journal, function (Builder $builder, string $journal) {
-                if (in_array($journal, ['pending', 'approved', 'rejected'], true)) {
+                if (in_array($journal, ['pending', 'reviewed'], true)) {
                     $builder->where('journal_status', $journal)
                         ->where(fn (Builder $nested) => $nested->whereNotNull('am_activity')->orWhereNotNull('pm_activity'));
                 } elseif ($journal === 'submitted') {
@@ -275,20 +279,11 @@ class CoordinatorAttendanceController extends Controller
 
     private function regularHours(Attendance $attendance): float
     {
-        $regular = collect([
-            [$attendance->am_time_in, $attendance->am_time_out],
-            [$attendance->pm_time_in, $attendance->pm_time_out],
-        ])->sum(fn (array $slot) => $slot[0] && $slot[1] ? $slot[0]->diffInSeconds($slot[1]) / 3600 : 0);
-
-        if ($regular <= 0 && ! $attendance->am_time_in && ! $attendance->pm_time_in && $attendance->time_in && $attendance->time_out) {
-            return $attendance->time_in->diffInSeconds($attendance->time_out) / 3600;
-        }
-
-        return $regular;
+        return AttendanceHours::regular($attendance);
     }
 
     private function renderedHours(Attendance $attendance): float
     {
-        return $this->regularHours($attendance) + (float) $attendance->overtime_hours;
+        return AttendanceHours::total($attendance);
     }
 }
