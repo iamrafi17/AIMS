@@ -3,6 +3,7 @@ import {
   CheckCircleIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ClipboardDocumentIcon,
   EyeIcon,
   EyeSlashIcon,
   KeyIcon,
@@ -11,6 +12,7 @@ import {
   PlusIcon,
   PowerIcon,
   ShieldCheckIcon,
+  TrashIcon,
   UserGroupIcon,
   UsersIcon,
   XCircleIcon,
@@ -23,7 +25,7 @@ import UserAvatar from '../../components/UserAvatar';
 import { EmptyPanel, LoadingPanel, MetricCard, PageIntro } from '../../components/common/PortalUI';
 
 const roles = ['student', 'coordinator', 'program_head', 'vpaa', 'admin', 'supervisor'];
-const staffRoles = ['coordinator', 'program_head', 'vpaa', 'supervisor'];
+const staffRoles = ['admin', 'coordinator', 'program_head', 'vpaa', 'supervisor'];
 const programScopedRoles = ['coordinator', 'program_head'];
 const pageSizeOptions = [10, 15, 25, 50];
 
@@ -44,24 +46,38 @@ function UserModal({ item, onClose, onSaved }) {
   const [form, setForm] = useState(item
     ? {
         name: item.name,
-        email: item.email,
+        email: item.email || '',
         role: item.role,
         college_id: item.college_id || '',
         program_id: item.program_id || '',
+        supervisor_record_id: item.supervisor_profile?.id || '',
+        is_active: item.is_active,
       }
     : {
         name: '',
-        email: '',
         role: 'coordinator',
-        password: '',
         college_id: '',
         program_id: '',
+        supervisor_record_id: '',
+        is_active: true,
       });
   const [colleges, setColleges] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [showTemporaryPassword, setShowTemporaryPassword] = useState(false);
+  const [supervisorSearch, setSupervisorSearch] = useState('');
+  const [supervisorResults, setSupervisorResults] = useState([]);
+  const [supervisorSearchBusy, setSupervisorSearchBusy] = useState(false);
+  const [supervisorSearchComplete, setSupervisorSearchComplete] = useState(false);
+  const [selectedSupervisor, setSelectedSupervisor] = useState(item?.supervisor_profile ? {
+    id: item.supervisor_profile.id,
+    full_name: item.supervisor_profile.full_name,
+    department: item.supervisor_profile.department,
+    hte: item.supervisor_profile.department?.hte,
+    has_account: true,
+    account: item,
+  } : null);
   const programScoped = programScopedRoles.includes(form.role);
-  const hasStaffId = staffRoles.includes(form.role);
+  const supervisorRole = form.role === 'supervisor';
+  const hasUserId = staffRoles.includes(form.role);
   const programs = colleges.find((college) => String(college.id) === String(form.college_id))?.programs || [];
 
   useEffect(() => {
@@ -84,7 +100,31 @@ function UserModal({ item, onClose, onSaved }) {
       role,
       college_id: programScopedRoles.includes(role) ? current.college_id : '',
       program_id: programScopedRoles.includes(role) ? current.program_id : '',
+      supervisor_record_id: role === 'supervisor' ? current.supervisor_record_id : '',
     }));
+    if (role !== 'supervisor') setSelectedSupervisor(null);
+  };
+
+  const searchSupervisors = async () => {
+    if (supervisorSearch.trim().length < 2) return toast.error('Enter at least two characters to search.');
+    setSupervisorSearchBusy(true);
+    try {
+      const response = await api.get('/admin/supervisor-assignments', { params: { search: supervisorSearch.trim() } });
+      setSupervisorResults(response.data.supervisors || []);
+      setSupervisorSearchComplete(true);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Unable to search supervisor assignments.');
+    } finally {
+      setSupervisorSearchBusy(false);
+    }
+  };
+
+  const chooseSupervisor = (supervisor) => {
+    if (supervisor.has_account && supervisor.account?.id !== item?.id) {
+      return toast.error('Supervisor already has an account.');
+    }
+    setSelectedSupervisor(supervisor);
+    setForm((current) => ({ ...current, name: supervisor.full_name, supervisor_record_id: supervisor.id }));
   };
 
   const submit = async (event) => {
@@ -98,6 +138,13 @@ function UserModal({ item, onClose, onSaved }) {
       } else {
         const response = await api.post('/admin/users', form);
         toast.success(response.data.message);
+        onSaved({
+          idLabel: 'User ID',
+          userId: response.data.user?.user_id || response.data.user?.email || String(response.data.user?.id),
+          temporaryPassword: response.data.temporary_password,
+          name: response.data.user?.name || form.name,
+        });
+        return;
       }
       onSaved();
     } catch (error) {
@@ -140,26 +187,31 @@ function UserModal({ item, onClose, onSaved }) {
         </div>
 
         <div className="space-y-5 p-4 sm:p-6">
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className={`grid gap-5 ${item ? 'sm:grid-cols-2' : ''}`}>
             <label className="block">
               <span className="mb-2 block text-sm font-bold">Full name</span>
               <input
                 required
+                readOnly={supervisorRole}
                 value={form.name}
                 onChange={(event) => setForm({ ...form, name: event.target.value })}
-                className={inputClass}
+                className={`${inputClass} ${supervisorRole ? 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300' : ''}`}
+                placeholder={supervisorRole ? 'Select an existing supervisor below' : ''}
               />
             </label>
-            <label className="block">
-              <span className="mb-2 block text-sm font-bold">Email address</span>
-              <input
-                required
-                type="email"
-                value={form.email}
-                onChange={(event) => setForm({ ...form, email: event.target.value })}
-                className={inputClass}
-              />
-            </label>
+            {item && (
+              <label className="block">
+                <span className="mb-2 block text-sm font-bold">Email address</span>
+                <input
+                  readOnly
+                  type="email"
+                  value={form.email}
+                  className={`${inputClass} bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300`}
+                  placeholder="Pending staff profile"
+                />
+                <span className="mt-1 block text-xs text-slate-500">The staff member provides this during first-login profile setup.</span>
+              </label>
+            )}
           </div>
 
           <label className="block">
@@ -173,15 +225,24 @@ function UserModal({ item, onClose, onSaved }) {
             </select>
           </label>
 
-          {hasStaffId && (
+          {supervisorRole && (
+            <section className="rounded-2xl border border-[#7D001D]/20 bg-[#7D001D]/5 p-4">
+              <div><h3 className="font-black text-[#690016] dark:text-rose-200">Supervisor Assignment Search</h3><p className="mt-1 text-xs leading-5 text-slate-500">Search by HTE name, Department / Unit, or Supervisor name, then select the existing record.</p></div>
+              {!item && <div className="mt-4 flex flex-col gap-2 sm:flex-row"><div className="relative flex-1"><MagnifyingGlassIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" /><input value={supervisorSearch} onChange={(event) => { setSupervisorSearch(event.target.value); setSupervisorSearchComplete(false); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); searchSupervisors(); } }} className={`${inputClass} pl-12`} placeholder="Search HTE, department, or supervisor" /></div><button type="button" disabled={supervisorSearchBusy} onClick={searchSupervisors} className="rounded-2xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-50">{supervisorSearchBusy ? 'Searching...' : 'Search'}</button></div>}
+              {!item && supervisorSearchComplete && <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">{supervisorResults.length ? supervisorResults.map((supervisor) => <button key={supervisor.id} type="button" disabled={supervisor.has_account} onClick={() => chooseSupervisor(supervisor)} className={`w-full rounded-xl border p-3 text-left transition ${String(selectedSupervisor?.id) === String(supervisor.id) ? 'border-[#7D001D] bg-white shadow-sm dark:bg-slate-900' : 'border-slate-200 bg-white/70 hover:border-[#7D001D]/40 dark:border-slate-700 dark:bg-slate-900/70'} disabled:cursor-not-allowed disabled:opacity-60`}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-black text-slate-800 dark:text-white">{supervisor.full_name}</p><p className="mt-1 text-xs text-slate-500">{supervisor.hte?.name}</p><p className="mt-0.5 text-xs font-bold text-[#7D001D] dark:text-rose-300">{supervisor.department?.department_name}</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${supervisor.has_account ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{supervisor.has_account ? 'Account already created' : 'Available'}</span></div></button>) : <p className="rounded-xl border border-dashed border-slate-300 py-6 text-center text-sm text-slate-500 dark:border-slate-700">No matching supervisor record found.</p>}</div>}
+              {selectedSupervisor && <div className="mt-4 grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30 sm:grid-cols-2"><ReadOnlyAssignment label="Full Name" value={selectedSupervisor.full_name} /><ReadOnlyAssignment label="Role" value="Supervisor" /><ReadOnlyAssignment label="HTE Name" value={selectedSupervisor.hte?.name || ''} /><ReadOnlyAssignment label="Department / Unit" value={selectedSupervisor.department?.department_name || ''} /></div>}
+            </section>
+          )}
+
+          {hasUserId && (
             <label className="block">
-              <span className="mb-2 block text-sm font-bold">Staff ID</span>
+              <span className="mb-2 block text-sm font-bold">User ID</span>
               <input
                 readOnly
-                value={item?.role === form.role && item?.staff_id ? item.staff_id : 'Generated automatically after saving'}
+                value={item?.role === form.role && item?.user_id ? item.user_id : 'Generated automatically after saving'}
                 className={`${inputClass} bg-slate-50 font-mono text-slate-600 dark:bg-slate-800 dark:text-slate-300`}
               />
-              <span className="mt-1 block text-xs text-slate-500">The Staff ID can be used instead of email when signing in.</span>
+              <span className="mt-1 block text-xs text-slate-500">The User ID can be used instead of email when signing in.</span>
             </label>
           )}
 
@@ -223,41 +284,19 @@ function UserModal({ item, onClose, onSaved }) {
           )}
 
           {!item && (
-            <label className="block">
-              <span className="mb-2 block text-sm font-bold">Temporary password</span>
-              <div className="relative">
-                <input
-                  required
-                  minLength="8"
-                  type={showTemporaryPassword ? 'text' : 'password'}
-                  value={form.password}
-                  onChange={(event) => setForm({ ...form, password: event.target.value })}
-                  className={`${inputClass} pr-12`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowTemporaryPassword((visible) => !visible)}
-                  className="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-[#7D001D] focus:outline-none focus:ring-2 focus:ring-[#7D001D]/30 dark:hover:bg-slate-800"
-                  aria-label={showTemporaryPassword ? 'Hide temporary password' : 'Show temporary password'}
-                  title={showTemporaryPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showTemporaryPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
-                </button>
-              </div>
-              <span className="mt-1 block text-xs text-slate-500">Use at least 8 characters. The user can change it from Profile.</span>
-            </label>
+            <div className="rounded-2xl bg-blue-50 p-4 text-sm leading-6 text-blue-700 dark:bg-blue-950/30 dark:text-blue-200">
+              The system will generate a secure temporary password after saving. Staff accounts start as <strong>Pending Profile</strong> and must change that password, set three security questions, and provide their email, contact number, and address on first login.
+            </div>
           )}
 
-          <div className="rounded-2xl bg-blue-50 p-4 text-sm text-blue-700 dark:bg-blue-950/30 dark:text-blue-200">
-            Student credentials should normally be created during student registration. Use Student Management for official OJT enrollment records.
-          </div>
+          {!item && <label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-bold dark:border-slate-700"><input type="checkbox" checked={form.is_active} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} /> Account is active</label>}
         </div>
 
         <div className="flex justify-end gap-3 border-t border-slate-200 p-6 dark:border-slate-700">
           <button type="button" onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold dark:border-slate-700">
             Cancel
           </button>
-          <button disabled={saving} className="rounded-2xl bg-[#7D001D] px-6 py-3 font-bold text-white disabled:opacity-50">
+          <button disabled={saving || (supervisorRole && !form.supervisor_record_id)} className="rounded-2xl bg-[#7D001D] px-6 py-3 font-bold text-white disabled:opacity-50">
             {saving ? 'Saving...' : item ? 'Update account' : 'Create account'}
           </button>
         </div>
@@ -266,16 +305,82 @@ function UserModal({ item, onClose, onSaved }) {
   );
 }
 
-function AccountActionModal({ user, onClose, onCompleted }) {
+function ReadOnlyAssignment({ label, value }) {
+  return <div><p className="text-[10px] font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300">{label}</p><p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{value || 'Not available'}</p></div>;
+}
+
+function CreatedCredentialsModal({ credentials, onClose }) {
+  const copy = async (value, label) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied.`);
+    } catch {
+      toast.error(`Unable to copy the ${label.toLowerCase()}.`);
+    }
+  };
+
+  const copyAll = () => copy(
+    `${credentials.idLabel}: ${credentials.userId}\nTemporary password: ${credentials.temporaryPassword}`,
+    'Credentials',
+  );
+
+  const credentialRow = (label, value) => (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950">
+      <p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p>
+      <div className="mt-2 flex items-center gap-3">
+        <p className="min-w-0 flex-1 break-all font-mono text-lg font-black text-[#690016] dark:text-red-300">{value}</p>
+        <button type="button" onClick={() => copy(value, label)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-[#7D001D]/30 hover:text-[#7D001D] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300" aria-label={`Copy ${label}`} title={`Copy ${label}`}>
+          <ClipboardDocumentIcon className="h-5 w-5" />
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <section role="dialog" aria-modal="true" aria-labelledby="created-credentials-title" className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900">
+        <div className="bg-emerald-50 p-6 dark:bg-emerald-950/30">
+          <div className="flex items-start gap-4">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+              <CheckCircleIcon className="h-7 w-7" />
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Account created successfully</p>
+              <h2 id="created-credentials-title" className="mt-1 text-2xl font-black">Save sign-in credentials</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">Give these credentials to {credentials.name}. The temporary password is shown only in this popup. On first login, staff must replace it, set security questions, and complete their personal information.</p>
+            </div>
+          </div>
+        </div>
+        <div className="space-y-4 p-6">
+          {credentialRow(credentials.idLabel, credentials.userId)}
+          {credentialRow('Temporary password', credentials.temporaryPassword)}
+          <p className="rounded-2xl bg-amber-50 p-4 text-xs leading-5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">Copy the credentials before closing this popup.</p>
+        </div>
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 p-6 dark:border-slate-700 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold dark:border-slate-700">Done</button>
+          <button type="button" onClick={copyAll} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#7D001D] px-5 py-3 font-black text-white">
+            <ClipboardDocumentIcon className="h-5 w-5" />
+            Copy all credentials
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AccountActionModal({ user, action, onClose, onCompleted }) {
   const [busy, setBusy] = useState(false);
-  const deactivating = user.is_active;
-  const actionLabel = deactivating ? 'Deactivate account' : 'Activate account';
+  const deleting = action === 'delete';
+  const deactivating = !deleting && user.is_active;
+  const actionLabel = deleting ? 'Delete account' : deactivating ? 'Deactivate account' : 'Activate account';
 
   const confirm = async () => {
     setBusy(true);
 
     try {
-      const response = await api.put(`/admin/users/${user.id}/status`);
+      const response = deleting
+        ? await api.delete(`/admin/users/${user.id}/permanent`)
+        : await api.put(`/admin/users/${user.id}/status`);
       toast.success(response.data.message);
       onCompleted();
     } catch (error) {
@@ -294,16 +399,18 @@ function AccountActionModal({ user, onClose, onCompleted }) {
         onMouseDown={(event) => event.stopPropagation()}
         className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900"
       >
-        <div className={`p-6 ${deactivating ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-emerald-50 dark:bg-emerald-950/30'}`}>
+        <div className={`p-6 ${deleting ? 'bg-rose-50 dark:bg-rose-950/30' : deactivating ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-emerald-50 dark:bg-emerald-950/30'}`}>
           <div className="flex items-start gap-4">
-            <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${deactivating ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'}`}>
-              <PowerIcon className="h-6 w-6" />
+            <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${deleting ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300' : deactivating ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'}`}>
+              {deleting ? <TrashIcon className="h-6 w-6" /> : <PowerIcon className="h-6 w-6" />}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-black uppercase tracking-widest text-slate-500">Account access confirmation</p>
+              <p className="text-xs font-black uppercase tracking-widest text-slate-500">{deleting ? 'Permanent delete confirmation' : 'Account access confirmation'}</p>
               <h2 id="account-action-title" className="mt-1 text-2xl font-black">{actionLabel}</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                {deactivating
+                {deleting
+                  ? 'This permanently deletes the account and cannot be undone. Accounts with connected historical records cannot be deleted.'
+                  : deactivating
                   ? 'The user will no longer be able to sign in. Their account and related records will remain available.'
                   : 'The user will regain access and can sign in using their existing credentials.'}
               </p>
@@ -334,11 +441,135 @@ function AccountActionModal({ user, onClose, onCompleted }) {
             type="button"
             disabled={busy}
             onClick={confirm}
-            className={`rounded-2xl px-5 py-3 font-black text-white disabled:cursor-not-allowed disabled:opacity-40 ${deactivating ? 'bg-amber-600' : 'bg-emerald-600'}`}
+            className={`rounded-2xl px-5 py-3 font-black text-white disabled:cursor-not-allowed disabled:opacity-40 ${deleting ? 'bg-rose-700' : deactivating ? 'bg-amber-600' : 'bg-emerald-600'}`}
           >
             {busy ? 'Processing...' : actionLabel}
           </button>
         </div>
+      </section>
+    </div>
+  );
+}
+
+function ResetPasswordModal({ user, onClose, onCompleted }) {
+  const [password, setPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event) => {
+    event.preventDefault();
+
+    if (password.length < 8) {
+      toast.error('Password must contain at least 8 characters.');
+      return;
+    }
+
+    if (password !== passwordConfirmation) {
+      toast.error('Password confirmation does not match.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const response = await api.post(`/admin/users/${user.id}/reset-password`, { password });
+      toast.success(response.data.message);
+      onCompleted();
+    } catch (error) {
+      const errors = error.response?.data?.errors;
+      toast.error(errors ? Object.values(errors).flat()[0] : error.response?.data?.message || 'Unable to reset password.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={busy ? undefined : onClose}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reset-password-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900"
+      >
+        <div className="border-b border-slate-200 bg-amber-50 p-6 dark:border-slate-700 dark:bg-amber-950/30">
+          <div className="flex items-start gap-4">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+              <KeyIcon className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Account security</p>
+              <h2 id="reset-password-title" className="mt-1 text-2xl font-black">Reset Password</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">Create a new temporary password for this account.</p>
+            </div>
+            <button type="button" onClick={onClose} disabled={busy} className="rounded-xl p-2 text-slate-500 transition hover:bg-white/70 disabled:opacity-40 dark:hover:bg-slate-800" aria-label="Close reset password popup">
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={submit}>
+          <div className="space-y-5 p-6">
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+              <UserAvatar user={user} className="h-11 w-11" />
+              <div className="min-w-0">
+                <p className="truncate font-black">{user.name}</p>
+                <p className="truncate text-sm text-slate-500">{user.user_id || user.email}</p>
+                <p className="mt-0.5 text-xs font-bold text-[#7D001D] dark:text-red-300">{roleLabel(user.role)}</p>
+              </div>
+            </div>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-black text-slate-700 dark:text-slate-200">New temporary password</span>
+              <div className="relative">
+                <KeyIcon className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-amber-600" />
+                <input
+                  autoFocus
+                  required
+                  minLength="8"
+                  maxLength="255"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-12 pr-12 outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700 dark:bg-slate-950"
+                  placeholder="Minimum 8 characters"
+                />
+                <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-[#7D001D]" aria-label={showPassword ? 'Hide passwords' : 'Show passwords'}>
+                  {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                </button>
+              </div>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-black text-slate-700 dark:text-slate-200">Confirm temporary password</span>
+              <div className="relative">
+                <KeyIcon className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-amber-600" />
+                <input
+                  required
+                  minLength="8"
+                  maxLength="255"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={passwordConfirmation}
+                  onChange={(event) => setPasswordConfirmation(event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-12 pr-4 outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700 dark:bg-slate-950"
+                  placeholder="Re-enter the password"
+                />
+              </div>
+            </label>
+
+            <p className="rounded-2xl bg-slate-50 p-4 text-xs leading-5 text-slate-500 dark:bg-slate-950 dark:text-slate-400">The user’s existing login sessions will be signed out after the reset.</p>
+          </div>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-slate-200 p-6 dark:border-slate-700 sm:flex-row sm:justify-end">
+            <button type="button" onClick={onClose} disabled={busy} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold disabled:opacity-40 dark:border-slate-700">Cancel</button>
+            <button type="submit" disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#7D001D] px-5 py-3 font-black text-white transition hover:bg-[#690016] disabled:cursor-not-allowed disabled:opacity-40">
+              <KeyIcon className="h-5 w-5" />
+              {busy ? 'Resetting...' : 'Reset Password'}
+            </button>
+          </div>
+        </form>
       </section>
     </div>
   );
@@ -357,6 +588,8 @@ export default function AdminUsers() {
   const [pagination, setPagination] = useState({ currentPage: 1, lastPage: 1, total: 0, from: 0, to: 0 });
   const [editor, setEditor] = useState(null);
   const [accountAction, setAccountAction] = useState(null);
+  const [createdCredentials, setCreatedCredentials] = useState(null);
+  const [passwordResetUser, setPasswordResetUser] = useState(null);
 
   useEffect(() => {
     api.get('/admin/academic')
@@ -396,23 +629,10 @@ export default function AdminUsers() {
     return () => clearTimeout(timer);
   }, [load]);
 
-  const resetPassword = async (user) => {
-    const password = window.prompt(`Enter a new temporary password for ${user.name} (minimum 8 characters):`) || '';
-    if (!password) return;
-    if (password.length < 8) {
-      toast.error('Password must contain at least 8 characters.');
-      return;
-    }
-
-    try {
-      const response = await api.post(`/admin/users/${user.id}/reset-password`, { password });
-      toast.success(response.data.message);
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Unable to reset password.');
-    }
-  };
-
-  const active = users.filter((user) => user.is_active).length;
+  const isPendingProfile = (user) => Boolean(
+    user.requires_password_change || user.requires_security_setup || user.requires_profile_setup
+  );
+  const active = users.filter((user) => user.is_active && !isPendingProfile(user)).length;
   const staff = users.filter((user) => user.role !== 'student').length;
 
   return (
@@ -451,7 +671,7 @@ export default function AdminUsers() {
                 setPage(1);
               }}
               className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700 dark:bg-slate-950"
-              placeholder="Search name, email, or Staff ID..."
+              placeholder="Search name, email, or User ID..."
             />
           </label>
           <select
@@ -514,6 +734,7 @@ export default function AdminUsers() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {users.map((user) => {
                   const isCurrentAccount = user.id === authenticatedUser?.id;
+                  const pendingProfile = isPendingProfile(user);
                   const assignedCollege = user.college || user.student?.college;
                   const assignedProgram = user.program || user.student?.program;
 
@@ -528,7 +749,7 @@ export default function AdminUsers() {
                               {isCurrentAccount && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">You</span>}
                             </div>
                             <p className="max-w-60 truncate text-xs text-slate-500">{user.email}</p>
-                            {user.staff_id && <p className="mt-0.5 font-mono text-xs font-bold text-[#7D001D] dark:text-red-300">{user.staff_id}</p>}
+                            {user.user_id && <p className="mt-0.5 font-mono text-xs font-bold text-[#7D001D] dark:text-red-300">{user.user_id}</p>}
                           </div>
                         </div>
                       </td>
@@ -554,9 +775,9 @@ export default function AdminUsers() {
                         ) : <span className="text-sm text-slate-400">Not assigned</span>}
                       </td>
                       <td className="px-5 py-4">
-                        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black ${user.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200'}`}>
-                          {user.is_active ? <CheckCircleIcon className="h-4 w-4" /> : <XCircleIcon className="h-4 w-4" />}
-                          {user.is_active ? 'Active' : 'Inactive'}
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black ${!user.is_active ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200' : pendingProfile ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'}`}>
+                          {!user.is_active ? <XCircleIcon className="h-4 w-4" /> : <CheckCircleIcon className="h-4 w-4" />}
+                          {!user.is_active ? 'Inactive' : pendingProfile ? 'Pending Profile' : 'Active'}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-500">
@@ -575,7 +796,7 @@ export default function AdminUsers() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => resetPassword(user)}
+                            onClick={() => setPasswordResetUser(user)}
                             className="rounded-xl border border-slate-200 p-2 text-amber-700 transition hover:bg-amber-50 dark:border-slate-700 dark:text-amber-300 dark:hover:bg-amber-950/30"
                             title="Reset password"
                             aria-label={`Reset password for ${user.name}`}
@@ -591,6 +812,16 @@ export default function AdminUsers() {
                             aria-label={`${user.is_active ? 'Deactivate' : 'Activate'} ${user.name}`}
                           >
                             <PowerIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isCurrentAccount}
+                            onClick={() => setAccountAction({ user, action: 'delete' })}
+                            className="rounded-xl border border-rose-200 p-2 text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30"
+                            title={isCurrentAccount ? 'You cannot delete your current account' : 'Permanently delete user'}
+                            aria-label={`Permanently delete ${user.name}`}
+                          >
+                            <TrashIcon className="h-4 w-4" />
                           </button>
                         </div>
                       </td>
@@ -633,8 +864,9 @@ export default function AdminUsers() {
         <UserModal
           item={editor.item}
           onClose={() => setEditor(null)}
-          onSaved={() => {
+          onSaved={(credentials) => {
             setEditor(null);
+            if (credentials) setCreatedCredentials(credentials);
             load();
           }}
         />
@@ -647,6 +879,24 @@ export default function AdminUsers() {
           onClose={() => setAccountAction(null)}
           onCompleted={() => {
             setAccountAction(null);
+            load();
+          }}
+        />
+      )}
+
+      {createdCredentials && (
+        <CreatedCredentialsModal
+          credentials={createdCredentials}
+          onClose={() => setCreatedCredentials(null)}
+        />
+      )}
+
+      {passwordResetUser && (
+        <ResetPasswordModal
+          user={passwordResetUser}
+          onClose={() => setPasswordResetUser(null)}
+          onCompleted={() => {
+            setPasswordResetUser(null);
             load();
           }}
         />

@@ -21,6 +21,7 @@ import toast from 'react-hot-toast';
 import UserAvatar from '../../components/UserAvatar';
 import useAuth from '../../context/useAuth';
 import api from '../../services/api';
+import ContactNumberInput from '../../components/forms/ContactNumberInput';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-700 dark:disabled:text-gray-400';
 
@@ -86,17 +87,18 @@ function CoordinatorProfile() {
   }[user?.role] || 'Account';
   const photoInput = useRef(null);
   const [account, setAccount] = useState({ name: '' });
-  const [contact, setContact] = useState({ email: '', phone: '', address: '' });
+  const [contact, setContact] = useState({ email: '', contact_number: '', address: '' });
   const [passwords, setPasswords] = useState({ current_password: '', password: '', password_confirmation: '' });
   const [editingAccount, setEditingAccount] = useState(false);
   const [editingContact, setEditingContact] = useState(false);
   const [showPasswords, setShowPasswords] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [busy, setBusy] = useState(null);
 
   const resetAccount = () => setAccount({ name: user?.name || '' });
   const resetContact = () => setContact({
     email: user?.email || '',
-    phone: user?.phone || '',
+    contact_number: user?.contact_number || '',
     address: user?.address || '',
   });
 
@@ -162,12 +164,19 @@ function CoordinatorProfile() {
       const response = await api.put('/profile/password', passwords);
       setPasswords({ current_password: '', password: '', password_confirmation: '' });
       setShowPasswords(false);
+      setPasswordModalOpen(false);
       toast.success(response.data.message);
     } catch (error) {
       toast.error(errorMessage(error, 'Unable to change password.'));
     } finally {
       setBusy(null);
     }
+  };
+
+  const closePasswordModal = () => {
+    setPasswordModalOpen(false);
+    setShowPasswords(false);
+    setPasswords({ current_password: '', password: '', password_confirmation: '' });
   };
 
   const uploadPhoto = async (event) => {
@@ -219,10 +228,15 @@ function CoordinatorProfile() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">{roleAccountLabel} account</p>
-        <h1 className="mt-1 text-2xl font-black text-[#690016] dark:text-white">My Profile</h1>
-        <p className="mt-1 text-sm text-slate-400">Manage your coordinator identity, contact details, photo, and account security.</p>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">{roleAccountLabel} account</p>
+          <h1 className="mt-1 text-2xl font-black text-[#690016] dark:text-white">My Profile</h1>
+          <p className="mt-1 text-sm text-slate-400">Manage your identity, contact details, photo, and account security.</p>
+        </div>
+        <button type="button" onClick={() => setPasswordModalOpen(true)} className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-[#7D001D]/20 bg-white px-4 py-2.5 text-sm font-black text-[#7D001D] shadow-sm transition hover:bg-[#7D001D]/5 sm:self-auto dark:border-rose-900 dark:bg-gray-800 dark:text-rose-300">
+          <SmallIcon icon={KeyIcon} /> Change Password
+        </button>
       </header>
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
@@ -289,14 +303,14 @@ function CoordinatorProfile() {
           </section>
 
           <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6 dark:border-gray-700 dark:bg-gray-800">
-            <SectionHeader icon={PhoneIcon} title="Contact Information" description="Keep your university email, active phone number, and office address current." editing={editingContact} onToggle={toggleContact} />
+            <SectionHeader icon={PhoneIcon} title="Contact Information" description="Keep your university email, active contact number, and office address current." editing={editingContact} onToggle={toggleContact} />
             <form onSubmit={saveContact}>
               <div className="grid gap-4 md:grid-cols-2">
                 <Field label="Email Address" icon={EnvelopeIcon}>
                   <input type="email" value={contact.email} onChange={(event) => setContact((current) => ({ ...current, email: event.target.value }))} disabled={!editingContact} className={inputClass} required />
                 </Field>
                 <Field label="Contact Number" icon={PhoneIcon}>
-                  <input type="tel" value={contact.phone} onChange={(event) => setContact((current) => ({ ...current, phone: event.target.value }))} disabled={!editingContact} className={inputClass} required />
+                  <ContactNumberInput value={contact.contact_number} onValueChange={(contact_number) => setContact((current) => ({ ...current, contact_number }))} disabled={!editingContact} className={inputClass} required autoComplete="tel" placeholder="09XX XXX XXXX" />
                 </Field>
                 <Field label="Office / Present Address" icon={MapPinIcon} className="md:col-span-2">
                   <textarea rows="3" value={contact.address} onChange={(event) => setContact((current) => ({ ...current, address: event.target.value }))} disabled={!editingContact} className={`${inputClass} resize-none`} required />
@@ -312,43 +326,57 @@ function CoordinatorProfile() {
             </form>
           </section>
 
-          <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6 dark:border-gray-700 dark:bg-gray-800">
-            <SectionHeader icon={ShieldCheckIcon} title="Change Password" description="Verify your current password before setting a new one." />
-            <form onSubmit={changePassword}>
-              <div className="grid gap-4 lg:grid-cols-3">
-                {[
-                  ['current_password', 'Current Password'],
-                  ['password', 'New Password'],
-                  ['password_confirmation', 'Confirm Password'],
-                ].map(([name, label]) => (
-                  <Field key={name} label={label} icon={KeyIcon}>
-                    <div className="relative">
-                      <input
-                        type={showPasswords ? 'text' : 'password'}
-                        value={passwords[name]}
-                        onChange={(event) => setPasswords((current) => ({ ...current, [name]: event.target.value }))}
-                        minLength={name === 'current_password' ? undefined : 8}
-                        autoComplete={name === 'current_password' ? 'current-password' : 'new-password'}
-                        className={`${inputClass} pr-11`}
-                        required
-                      />
-                      <button type="button" onClick={() => setShowPasswords((current) => !current)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:text-[#7D001D]" aria-label={showPasswords ? 'Hide passwords' : 'Show passwords'}>
-                        <SmallIcon icon={showPasswords ? EyeSlashIcon : EyeIcon} />
-                      </button>
-                    </div>
-                  </Field>
-                ))}
+        </main>
+      </div>
+
+      {passwordModalOpen && (
+        <div className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm">
+          <section role="dialog" aria-modal="true" aria-labelledby="staff-change-password-title" className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-800">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-6 dark:border-gray-700">
+              <div className="flex items-start gap-3">
+                <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#7D001D]/8 text-[#7D001D] dark:bg-rose-950 dark:text-rose-300"><SmallIcon icon={ShieldCheckIcon} /></div>
+                <div>
+                  <h2 id="staff-change-password-title" className="text-xl font-black text-[#690016] dark:text-white">Change Password</h2>
+                  <p className="mt-1 text-sm leading-5 text-slate-500 dark:text-gray-400">Verify your current password before setting a new one.</p>
+                </div>
               </div>
-              <div className="mt-5 flex flex-col justify-between gap-4 rounded-xl bg-slate-50 p-4 sm:flex-row sm:items-center dark:bg-gray-900/60">
-                <p className="text-xs leading-5 text-slate-500 dark:text-gray-400">Use at least 8 characters. The new password must differ from your current password.</p>
-                <button disabled={busy === 'password'} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-60">
+              <button type="button" onClick={closePasswordModal} disabled={busy === 'password'} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:hover:bg-gray-700 dark:hover:text-white" aria-label="Close change password popup"><SmallIcon icon={XMarkIcon} className="size-6" /></button>
+            </div>
+            <form onSubmit={changePassword} className="space-y-4 p-6">
+              {[
+                ['current_password', 'Current Password'],
+                ['password', 'New Password'],
+                ['password_confirmation', 'Confirm Password'],
+              ].map(([name, label]) => (
+                <Field key={name} label={label} icon={KeyIcon}>
+                  <div className="relative">
+                    <input
+                      type={showPasswords ? 'text' : 'password'}
+                      value={passwords[name]}
+                      onChange={(event) => setPasswords((current) => ({ ...current, [name]: event.target.value }))}
+                      minLength={name === 'current_password' ? undefined : 8}
+                      autoComplete={name === 'current_password' ? 'current-password' : 'new-password'}
+                      className={`${inputClass} pr-11`}
+                      required
+                      autoFocus={name === 'current_password'}
+                    />
+                    <button type="button" onClick={() => setShowPasswords((current) => !current)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:text-[#7D001D]" aria-label={showPasswords ? 'Hide passwords' : 'Show passwords'}>
+                      <SmallIcon icon={showPasswords ? EyeSlashIcon : EyeIcon} />
+                    </button>
+                  </div>
+                </Field>
+              ))}
+              <p className="rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-500 dark:bg-gray-900/60 dark:text-gray-400">Use at least 8 characters. The new password must differ from your current password.</p>
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 dark:border-gray-700 sm:flex-row sm:justify-end">
+                <button type="button" onClick={closePasswordModal} disabled={busy === 'password'} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">Cancel</button>
+                <button disabled={busy === 'password'} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-60">
                   <SmallIcon icon={KeyIcon} /> {busy === 'password' ? 'Changing...' : 'Change Password'}
                 </button>
               </div>
             </form>
           </section>
-        </main>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

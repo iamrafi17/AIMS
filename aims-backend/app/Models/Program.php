@@ -33,8 +33,20 @@ class Program extends Model
         return $this->hasMany(Student::class);
     }
 
+    public function htes()
+    {
+        return $this->belongsToMany(HTE::class, 'hte_programs', 'program_id', 'hte_id')
+            ->withPivot(['college_id', 'linked_by', 'is_active'])
+            ->withTimestamps();
+    }
+
     public function requirements()
     {
         return $this->hasMany(ProgramRequirement::class);
+    }
+
+    public function reportTemplates()
+    {
+        return $this->hasMany(ReportTemplate::class);
     }
 }

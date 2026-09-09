@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\StudentLiveLocation;
 use App\Support\AttendanceHours;
 use App\Support\ProgramAccess;
 use Illuminate\Database\Eloquent\Builder;
@@ -18,7 +19,6 @@ class CoordinatorAttendanceController extends Controller
         $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
             'status' => ['nullable', 'in:present,late,absent,holiday'],
-            'verification' => ['nullable', 'in:verified,pending'],
             'journal' => ['nullable', 'in:submitted,missing,pending,reviewed'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
@@ -50,8 +50,6 @@ class CoordinatorAttendanceController extends Controller
                 'late' => $summary['statuses']['late'],
                 'absent' => $summary['statuses']['absent'],
                 'holiday' => $summary['statuses']['holiday'],
-                'verified' => $summary['verified'],
-                'pending_verification' => $summary['pending_verification'],
                 'attendance_rate' => $summary['attendance_rate'],
                 'total_hours' => $summary['total_hours'],
                 'journals_submitted' => $summary['journals_submitted'],
@@ -70,61 +68,36 @@ class CoordinatorAttendanceController extends Controller
         ));
     }
 
-    public function update(Request $request, Attendance $attendance)
+    public function liveLocations(Request $request)
     {
-        ProgramAccess::authorizeAttendance($request->user(), $attendance);
-        $validated = $request->validate([
-            'status' => ['required', 'in:present,late,absent,holiday'],
-            'work_mode' => ['required', 'in:wfo,wfh,field'],
-            'session_type' => ['required', 'in:full_day,am_half,pm_half'],
-            'am_time_in' => ['nullable', 'date'],
-            'am_time_out' => ['nullable', 'date', 'after_or_equal:am_time_in'],
-            'pm_time_in' => ['nullable', 'date'],
-            'pm_time_out' => ['nullable', 'date', 'after_or_equal:pm_time_in'],
-            'ot_start' => ['nullable', 'date'],
-            'ot_end' => ['nullable', 'date', 'after_or_equal:ot_start'],
-            'overtime_hours' => ['nullable', 'numeric', 'min:0', 'max:24'],
-            'am_activity' => ['nullable', 'string', 'max:5000'],
-            'pm_activity' => ['nullable', 'string', 'max:5000'],
-        ]);
+        $programId = ProgramAccess::programId($request->user());
 
-        $journalChanged = $attendance->am_activity !== ($validated['am_activity'] ?? null)
-            || $attendance->pm_activity !== ($validated['pm_activity'] ?? null);
+        $locations = StudentLiveLocation::query()
+            ->whereHas('student', fn (Builder $student) => $student->where('program_id', $programId))
+            ->whereHas('student.user', fn (Builder $user) => $user->where('is_active', true))
+            ->whereHas('student.attendance', fn (Builder $attendance) => $attendance
+                ->whereDate('date', now()->toDateString())
+                ->where('status', 'present')
+                ->where(fn (Builder $session) => $session
+                    ->where(fn (Builder $am) => $am->whereNotNull('am_time_in')->whereNull('am_time_out'))
+                    ->orWhere(fn (Builder $pm) => $pm->whereNotNull('pm_time_in')->whereNull('pm_time_out'))))
+            ->with([
+                'student:id,user_id,student_id,first_name,last_name,program_id,hte_id',
+                'student.program:id,name,code',
+                'student.hte:id,name,address,latitude,longitude,geofence_radius,geofence_enabled',
+            ])
+            ->latest('captured_at')
+            ->get();
 
-        $attendance->update([
-            ...$validated,
-            'is_verified' => false,
-            'verified_by' => null,
-            'verified_at' => null,
-            ...($journalChanged ? [
-                'journal_status' => 'pending',
-                'journal_feedback' => null,
-                'journal_reviewed_by' => null,
-                'journal_reviewed_at' => null,
-            ] : []),
-        ]);
+        $totalStudents = ProgramAccess::studentQuery($request->user())
+            ->whereHas('user', fn (Builder $user) => $user->where('is_active', true))
+            ->count();
 
         return response()->json([
-            'message' => 'Attendance log updated. Verification was reset for review.',
-            'attendance' => $this->recordPayload($attendance->fresh()->load(['student.user', 'student.program', 'student.hte', 'verifier', 'journalReviewer'])),
-        ]);
-    }
-
-    public function verify(Request $request, Attendance $attendance)
-    {
-        ProgramAccess::authorizeAttendance($request->user(), $attendance);
-        $validated = $request->validate(['verified' => ['sometimes', 'boolean']]);
-        $verified = $validated['verified'] ?? true;
-
-        $attendance->update([
-            'is_verified' => $verified,
-            'verified_by' => $verified ? $request->user()->id : null,
-            'verified_at' => $verified ? now() : null,
-        ]);
-
-        return response()->json([
-            'message' => $verified ? 'Attendance log verified.' : 'Attendance verification removed.',
-            'attendance' => $this->recordPayload($attendance->fresh()->load(['student.user', 'student.program', 'student.hte', 'verifier', 'journalReviewer'])),
+            'server_time' => now()->toIso8601String(),
+            'sharing' => $locations->count(),
+            'total_students' => $totalStudents,
+            'locations' => $locations->map(fn (StudentLiveLocation $location) => $this->liveLocationPayload($location))->values(),
         ]);
     }
 
@@ -164,7 +137,6 @@ class CoordinatorAttendanceController extends Controller
                 });
             })
             ->when($request->status, fn (Builder $builder, string $status) => $builder->where('status', $status))
-            ->when($request->verification, fn (Builder $builder, string $verification) => $builder->where('is_verified', $verification === 'verified'))
             ->when($request->date_from, fn (Builder $builder, string $date) => $builder->whereDate('date', '>=', $date))
             ->when($request->date_to, fn (Builder $builder, string $date) => $builder->whereDate('date', '<=', $date))
             ->when($request->journal, function (Builder $builder, string $journal) {
@@ -206,14 +178,13 @@ class CoordinatorAttendanceController extends Controller
         $statuses = array_fill_keys(array_keys($statusColors), 0);
         $modes = array_fill_keys(array_keys($modeLabels), 0);
         $daily = [];
-        $total = $verified = $journalsSubmitted = $journalsPending = 0;
+        $total = $journalsSubmitted = $journalsPending = 0;
         $totalHours = 0.0;
 
         foreach ($query->cursor() as $record) {
             $total++;
             $statuses[$record->status] = ($statuses[$record->status] ?? 0) + 1;
             $modes[$record->work_mode] = ($modes[$record->work_mode] ?? 0) + 1;
-            $verified += $record->is_verified ? 1 : 0;
             $totalHours += $this->renderedHours($record);
 
             if ($this->hasJournal($record)) {
@@ -234,8 +205,6 @@ class CoordinatorAttendanceController extends Controller
         return [
             'total' => $total,
             'statuses' => $statuses,
-            'verified' => $verified,
-            'pending_verification' => $total - $verified,
             'attendance_rate' => $workdays > 0 ? round((($statuses['present'] + $statuses['late']) / $workdays) * 100, 1) : 0,
             'total_hours' => round($totalHours, 1),
             'journals_submitted' => $journalsSubmitted,
@@ -285,5 +254,53 @@ class CoordinatorAttendanceController extends Controller
     private function renderedHours(Attendance $attendance): float
     {
         return AttendanceHours::total($attendance);
+    }
+
+    private function liveLocationPayload(StudentLiveLocation $location): array
+    {
+        $hte = $location->student->hte;
+        $distance = null;
+        $radius = null;
+        $outsideGeofence = false;
+
+        if ($hte?->geofence_enabled && $hte->latitude !== null && $hte->longitude !== null && $hte->geofence_radius > 0) {
+            $radius = (int) $hte->geofence_radius;
+            $distance = (int) round($this->calculateDistance(
+                $location->latitude,
+                $location->longitude,
+                (float) $hte->latitude,
+                (float) $hte->longitude,
+            ));
+            $outsideGeofence = $distance > $radius;
+        }
+
+        return [
+            'id' => $location->id,
+            'student_id' => $location->student->id,
+            'school_id' => $location->student->student_id,
+            'name' => trim($location->student->first_name.' '.$location->student->last_name),
+            'program' => $location->student->program?->code,
+            'hte' => $hte?->name,
+            'hte_address' => $hte?->address,
+            'latitude' => $location->latitude,
+            'longitude' => $location->longitude,
+            'accuracy' => $location->accuracy,
+            'captured_at' => $location->captured_at->toIso8601String(),
+            'status' => $outsideGeofence ? 'outside_geofence' : 'timed_in',
+            'outside_geofence' => $outsideGeofence,
+            'distance_from_hte' => $distance,
+            'geofence_radius' => $radius,
+        ];
+    }
+
+    private function calculateDistance(float $lat1, float $lon1, float $lat2, float $lon2): float
+    {
+        $earthRadius = 6371000;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+        $a = sin($dLat / 2) ** 2
+            + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2;
+
+        return $earthRadius * (2 * atan2(sqrt($a), sqrt(1 - $a)));
     }
 }

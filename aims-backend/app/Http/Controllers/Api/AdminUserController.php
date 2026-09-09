@@ -4,9 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Program;
+use App\Models\Supervisor;
 use App\Models\User;
+use App\Support\UserId;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -27,12 +32,13 @@ class AdminUserController extends Controller
             'student:id,user_id,college_id,program_id',
             'student.college:id,name,code',
             'student.program:id,college_id,name,code',
+            'supervisorProfile.department.hte:id,name,address',
         ])
             ->when($filters['search'] ?? null, function ($query) use ($filters) {
                 $query->where(function ($q) use ($filters) {
                     $q->where('name', 'like', '%'.$filters['search'].'%')
                         ->orWhere('email', 'like', '%'.$filters['search'].'%')
-                        ->orWhere('staff_id', 'like', '%'.$filters['search'].'%');
+                        ->orWhere('user_id', 'like', '%'.$filters['search'].'%');
                 });
             })
             ->when($filters['role'] ?? null, function ($query) use ($filters) {
@@ -64,31 +70,93 @@ class AdminUserController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8|max:255',
+            'name' => [$request->input('role') === 'supervisor' ? 'nullable' : 'required', 'string', 'max:255'],
+            'email' => 'nullable|email|unique:users,email',
             'role' => 'required|in:student,coordinator,program_head,vpaa,admin,supervisor',
+            'supervisor_record_id' => [$request->input('role') === 'supervisor' ? 'required' : 'nullable', 'integer', 'exists:supervisors,id'],
+            'is_active' => ['nullable', 'boolean'],
             ...$this->assignmentRules($request),
         ]);
         $this->validateAssignment($data);
+        $temporaryPassword = $this->generateTemporaryPassword();
 
-        $user = User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'password' => Hash::make($data['password']),
-            'role' => $data['role'],
-            ...$this->assignmentAttributes($data),
-        ]);
+        $user = DB::transaction(function () use ($data, $temporaryPassword): User {
+            $supervisor = null;
+            if ($data['role'] === 'supervisor') {
+                $supervisor = Supervisor::with('department.hte')
+                    ->lockForUpdate()
+                    ->findOrFail($data['supervisor_record_id']);
+
+                if ($supervisor->user_id) {
+                    throw ValidationException::withMessages([
+                        'supervisor_record_id' => ['Supervisor already has an account.'],
+                    ]);
+                }
+            }
+
+            $user = User::create([
+                'name' => $supervisor?->full_name ?? $data['name'],
+                'email' => $data['email'] ?? null,
+                'password' => Hash::make($temporaryPassword),
+                'role' => $data['role'],
+                'is_active' => $data['is_active'] ?? true,
+                'requires_password_change' => UserId::isStaffRole($data['role']),
+                'requires_security_setup' => UserId::isStaffRole($data['role']),
+                'requires_profile_setup' => UserId::isStaffRole($data['role']),
+                'profile_completed_at' => UserId::isStaffRole($data['role']) ? null : now(),
+                ...$this->assignmentAttributes($data),
+            ]);
+
+            $supervisor?->update(['user_id' => $user->id]);
+            $supervisor?->students()->update(['supervisor_id' => $user->id]);
+
+            return $user;
+        });
 
         return response()->json([
-            'message' => 'User created successfully',
-            'user' => $user->load(['college:id,name,code', 'program:id,college_id,name,code']),
+            'message' => $data['role'] === 'supervisor'
+                ? 'Supervisor account created and linked to the existing assignment.'
+                : (UserId::isStaffRole($data['role'])
+                    ? 'Staff account created. The profile is pending first-login setup.'
+                    : 'User account created successfully.'),
+            'user' => $user->load(['college:id,name,code', 'program:id,college_id,name,code', 'supervisorProfile.department.hte:id,name,address']),
+            'temporary_password' => $temporaryPassword,
         ], 201);
+    }
+
+    public function supervisorAssignments(Request $request)
+    {
+        $validated = $request->validate([
+            'search' => ['required', 'string', 'min:2', 'max:100'],
+        ]);
+        $term = trim($validated['search']);
+
+        $supervisors = Supervisor::query()
+            ->with(['department.hte:id,name,address', 'user:id,name,email,user_id,is_active'])
+            ->where(function ($query) use ($term) {
+                $query->where('full_name', 'like', '%'.$term.'%')
+                    ->orWhereHas('department', fn ($departmentQuery) => $departmentQuery
+                        ->where('department_name', 'like', '%'.$term.'%')
+                        ->orWhereHas('hte', fn ($hteQuery) => $hteQuery->where('name', 'like', '%'.$term.'%')));
+            })
+            ->orderBy('full_name')
+            ->limit(30)
+            ->get()
+            ->map(fn (Supervisor $supervisor) => [
+                'id' => $supervisor->id,
+                'full_name' => $supervisor->full_name,
+                'department' => $supervisor->department,
+                'hte' => $supervisor->department?->hte,
+                'has_account' => (bool) $supervisor->user_id,
+                'account' => $supervisor->user,
+            ]);
+
+        return response()->json(['supervisors' => $supervisors]);
     }
 
     public function show(User $user)
     {
-        return response()->json($user->load(['college:id,name,code', 'program:id,college_id,name,code']));
+        return response()->json($user->load(['college:id,name,code', 'program:id,college_id,name,code', 'supervisorProfile.department.hte:id,name,address']));
     }
 
     public function update(Request $request, User $user)
@@ -103,19 +171,23 @@ class AdminUserController extends Controller
 
         $data = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email,'.$user->id,
+            'email' => 'sometimes|nullable|email|unique:users,email,'.$user->id,
             'role' => 'sometimes|in:student,coordinator,program_head,vpaa,admin,supervisor',
+            'supervisor_record_id' => ['nullable', 'integer', 'exists:supervisors,id'],
             ...$this->assignmentRules($request, $user),
         ]);
         $data['role'] = $data['role'] ?? $user->role;
         $this->validateAssignment($data);
 
-        $user->update([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'role' => $data['role'],
-            ...$this->assignmentAttributes($data),
-        ]);
+        DB::transaction(function () use ($data, $user): void {
+            $supervisor = $this->syncSupervisorAssignment($user, $data);
+            $user->update([
+                'name' => $supervisor?->full_name ?? $data['name'],
+                'email' => $data['email'] ?? $user->email,
+                'role' => $data['role'],
+                ...$this->assignmentAttributes($data),
+            ]);
+        });
 
         return response()->json([
             'message' => 'User updated successfully',
@@ -132,19 +204,52 @@ class AdminUserController extends Controller
         return response()->json(['message' => 'User account deactivated. Related historical records were preserved.']);
     }
 
+    public function permanentDestroy(Request $request, User $user)
+    {
+        abort_if($request->user()->is($user), 422, 'You cannot delete your current account.');
+
+        $hasHistoricalRecords = $user->student()->exists()
+            || $user->supervisedStudents()->exists()
+            || $user->activityLogs()->exists()
+            || $user->uploadedReportTemplates()->exists()
+            || $user->generatedReports()->exists();
+
+        abort_if(
+            $hasHistoricalRecords,
+            422,
+            'This account has connected historical records and cannot be permanently deleted. Deactivate it instead.',
+        );
+
+        try {
+            DB::transaction(function () use ($user): void {
+                $user->tokens()->delete();
+                $user->delete();
+            });
+        } catch (QueryException) {
+            abort(422, 'This account is referenced by another record and cannot be permanently deleted. Deactivate it instead.');
+        }
+
+        return response()->json(['message' => 'User account permanently deleted.']);
+    }
+
     public function updateRole(Request $request, User $user)
     {
         abort_if($request->user()->is($user), 422, 'You cannot change the role of your current account.');
         $data = $request->validate([
             'role' => 'required|in:student,coordinator,program_head,vpaa,admin,supervisor',
+            'supervisor_record_id' => ['nullable', 'integer', 'exists:supervisors,id'],
             ...$this->assignmentRules($request, $user),
         ]);
         $this->validateAssignment($data);
 
-        $user->update([
-            'role' => $data['role'],
-            ...$this->assignmentAttributes($data),
-        ]);
+        DB::transaction(function () use ($data, $user): void {
+            $supervisor = $this->syncSupervisorAssignment($user, $data);
+            $user->update([
+                'name' => $supervisor?->full_name ?? $user->name,
+                'role' => $data['role'],
+                ...$this->assignmentAttributes($data),
+            ]);
+        });
 
         return response()->json([
             'message' => 'User role updated successfully',
@@ -172,7 +277,10 @@ class AdminUserController extends Controller
             'password' => 'required|string|min:8|max:255',
         ]);
 
-        $user->update(['password' => Hash::make($request->password)]);
+        $user->update([
+            'password' => Hash::make($request->password),
+            'requires_password_change' => UserId::isStaffRole($user->role),
+        ]);
         $user->tokens()->delete();
 
         return response()->json(['message' => 'Password reset successfully']);
@@ -187,6 +295,20 @@ class AdminUserController extends Controller
             'college_id' => [$scoped ? 'required' : 'nullable', 'integer', Rule::exists('colleges', 'id')],
             'program_id' => [$scoped ? 'required' : 'nullable', 'integer', Rule::exists('programs', 'id')],
         ];
+    }
+
+    private function generateTemporaryPassword(): string
+    {
+        do {
+            $password = Str::password(12, true, true, true, false);
+        } while (
+            ! preg_match('/[A-Z]/', $password)
+            || ! preg_match('/[a-z]/', $password)
+            || ! preg_match('/\d/', $password)
+            || ! preg_match('/[^A-Za-z0-9]/', $password)
+        );
+
+        return $password;
     }
 
     private function validateAssignment(array $data): void
@@ -217,5 +339,40 @@ class AdminUserController extends Controller
             'college_id' => $data['college_id'],
             'program_id' => $data['program_id'],
         ];
+    }
+
+    private function syncSupervisorAssignment(User $user, array $data): ?Supervisor
+    {
+        $current = $user->supervisorProfile()->lockForUpdate()->first();
+
+        if ($data['role'] !== 'supervisor') {
+            $current?->students()->where('supervisor_id', $user->id)->update(['supervisor_id' => null]);
+            $current?->update(['user_id' => null]);
+
+            return null;
+        }
+
+        $supervisorId = $data['supervisor_record_id'] ?? $current?->id;
+        if (! $supervisorId) {
+            throw ValidationException::withMessages([
+                'supervisor_record_id' => ['Select an existing Supervisor assignment.'],
+            ]);
+        }
+
+        $supervisor = Supervisor::lockForUpdate()->findOrFail($supervisorId);
+        if ($supervisor->user_id && (int) $supervisor->user_id !== (int) $user->id) {
+            throw ValidationException::withMessages([
+                'supervisor_record_id' => ['Supervisor already has an account.'],
+            ]);
+        }
+
+        if ($current && ! $current->is($supervisor)) {
+            $current->students()->where('supervisor_id', $user->id)->update(['supervisor_id' => null]);
+            $current->update(['user_id' => null]);
+        }
+        $supervisor->update(['user_id' => $user->id]);
+        $supervisor->students()->update(['supervisor_id' => $user->id]);
+
+        return $supervisor;
     }
 }

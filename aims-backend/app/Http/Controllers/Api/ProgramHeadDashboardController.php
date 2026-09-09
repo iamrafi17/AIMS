@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcademicSection;
+use App\Models\ApprovalRecord;
 use App\Models\Attendance;
 use App\Models\InternshipRequirement;
 use App\Models\Student;
 use App\Models\TravelLog;
+use App\Models\TravelReport;
 use App\Support\AttendanceHours;
 use App\Support\ProgramAccess;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -19,10 +22,17 @@ class ProgramHeadDashboardController extends Controller
     {
         $programId = ProgramAccess::programId($request->user());
         $filters = $request->validate([
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'academic_section_id' => ['nullable', 'integer', Rule::exists('academic_sections', 'id')->where(fn ($query) => $query
                 ->where('program_id', $programId)
                 ->where('is_active', true))],
+            'academic_year' => ['nullable', 'string', 'max:20'],
+            'semester' => ['nullable', 'string', 'max:30'],
         ]);
+        $from = isset($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : null;
+        $to = isset($filters['date_to']) ? Carbon::parse($filters['date_to'])->endOfDay() : null;
+        $trendTo = $to ?? now()->endOfDay();
         $sectionId = isset($filters['academic_section_id']) ? (int) $filters['academic_section_id'] : null;
         $sections = AcademicSection::where('program_id', $programId)
             ->where('is_active', true)
@@ -30,31 +40,29 @@ class ProgramHeadDashboardController extends Controller
             ->orderBy('year_level')
             ->orderBy('name')
             ->get(['id', 'program_id', 'name', 'year_level', 'academic_year']);
-        $students = Student::with(['program', 'hte', 'attendance', 'requirements'])
+        $students = Student::with(['program', 'academicSection', 'hte', 'supervisor:id,name', 'attendance', 'requirements'])
             ->where('program_id', $programId)
             ->when($sectionId, fn ($query) => $query->where('academic_section_id', $sectionId))
+            ->when($filters['academic_year'] ?? null, fn ($query, $value) => $query->where('internship_year', $value))
+            ->when($filters['semester'] ?? null, fn ($query, $value) => $query->where('internship_semester', $value))
             ->get();
-        $monthAttendance = Attendance::whereMonth('date', now()->month)
-            ->whereYear('date', now()->year)
-            ->whereHas('student', fn ($query) => $query
-                ->where('program_id', $programId)
-                ->when($sectionId, fn ($studentQuery) => $studentQuery->where('academic_section_id', $sectionId)))
+        $studentIds = $students->pluck('id');
+        $monthAttendance = Attendance::query()
+            ->when($from, fn ($query, Carbon $date) => $query->whereDate('date', '>=', $date->toDateString()))
+            ->when($to, fn ($query, Carbon $date) => $query->whereDate('date', '<=', $date->toDateString()))
+            ->whereIn('student_id', $studentIds)
             ->get();
-        $recentAttendance = Attendance::whereDate('date', '>=', now()->subDays(6)->toDateString())
-            ->whereHas('student', fn ($query) => $query
-                ->where('program_id', $programId)
-                ->when($sectionId, fn ($studentQuery) => $studentQuery->where('academic_section_id', $sectionId)))
+        $recentAttendance = Attendance::whereDate('date', '>=', $trendTo->copy()->subDays(6)->toDateString())
+            ->whereDate('date', '<=', $trendTo->toDateString())
+            ->whereIn('student_id', $studentIds)
             ->get();
         $requirements = InternshipRequirement::activeDefinitionOrLegacy()
-            ->whereHas('student', fn ($query) => $query
-                ->where('program_id', $programId)
-                ->when($sectionId, fn ($studentQuery) => $studentQuery->where('academic_section_id', $sectionId)))
+            ->whereIn('student_id', $studentIds)
             ->get();
-        $monthTravel = TravelLog::whereMonth('start_time', now()->month)
-            ->whereYear('start_time', now()->year)
-            ->whereHas('participants', fn ($query) => $query
-                ->where('students.program_id', $programId)
-                ->when($sectionId, fn ($studentQuery) => $studentQuery->where('academic_section_id', $sectionId)))
+        $monthTravel = TravelLog::query()
+            ->when($from, fn ($query, Carbon $date) => $query->where('start_time', '>=', $date))
+            ->when($to, fn ($query, Carbon $date) => $query->where('start_time', '<=', $date))
+            ->whereHas('participants', fn ($query) => $query->whereIn('students.id', $studentIds))
             ->get();
 
         $present = $monthAttendance->where('status', 'present')->count();
@@ -127,8 +135,8 @@ class ProgramHeadDashboardController extends Controller
             ->sortByDesc('students')
             ->values();
 
-        $attendanceTrend = collect(range(6, 0))->map(function (int $daysAgo) use ($recentAttendance) {
-            $date = now()->subDays($daysAgo);
+        $attendanceTrend = collect(range(6, 0))->map(function (int $daysAgo) use ($recentAttendance, $trendTo) {
+            $date = $trendTo->copy()->subDays($daysAgo);
             $records = $recentAttendance->filter(fn (Attendance $record) => $record->date->isSameDay($date));
             $present = $records->whereIn('status', ['present', 'late'])->count();
             $workdays = $present + $records->where('status', 'absent')->count();
@@ -149,12 +157,79 @@ class ProgramHeadDashboardController extends Controller
             return $required > 0 ? min(($rendered / $required) * 100, 100) : 0;
         }) ?? 0;
 
+        $deploymentApprovals = ApprovalRecord::query()
+            ->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)
+            ->whereIn('subject_id', $students->pluck('id'))
+            ->with(['submitter:id,name,role', 'decisionMaker:id,name,role'])
+            ->latest('created_at')
+            ->get()
+            ->groupBy('subject_id');
+        $deploymentReviews = $students->whereNotNull('hte_id')->map(function (Student $student) use ($deploymentApprovals) {
+            $approval = $deploymentApprovals->get($student->id, collect())
+                ->first(fn (ApprovalRecord $record) => $record->submitter?->role === 'coordinator');
+            $approved = $student->requirements->where('status', 'approved')->count();
+
+            return [
+                'approval_id' => $approval?->id,
+                'student_id' => $student->student_id,
+                'student' => trim($student->first_name.' '.$student->last_name),
+                'hte' => $student->hte?->name,
+                'batch' => $student->academicSection?->name ?? $student->section,
+                'proposed_date' => $student->ojt_start_date?->toDateString(),
+                'working_schedule' => $this->studentSchedule($student),
+                'requirements_readiness' => $student->requirements->count() > 0 && $approved === $student->requirements->count() ? 'Ready' : $approved.'/'.$student->requirements->count().' approved',
+                'submitted_by' => $approval?->submitter?->name,
+                'submitted_at' => $approval?->submitted_at?->toIso8601String() ?? $approval?->created_at?->toIso8601String(),
+                'review_status' => $approval?->status ?? 'not_submitted',
+                'coordinator_remarks' => null,
+                'program_head_remarks' => $approval?->decisionMaker?->role === 'program_head' ? $approval->remarks : null,
+            ];
+        })->values();
+
+        $travelReviews = TravelReport::query()
+            ->whereHas('travelLog.participants', fn ($query) => $query->whereIn('students.id', $studentIds))
+            ->whereHas('travelLog', fn ($query) => $query
+                ->when($from, fn ($travelQuery, Carbon $date) => $travelQuery->where('start_time', '>=', $date))
+                ->when($to, fn ($travelQuery, Carbon $date) => $travelQuery->where('start_time', '<=', $date)))
+            ->with(['travelLog.hte:id,name', 'travelLog.participants:id,first_name,last_name', 'travelLog.checkpoints', 'validations'])
+            ->latest('submitted_at')
+            ->get()
+            ->map(function (TravelReport $report) {
+                $travel = $report->travelLog;
+                $review = $report->validations->where('reviewer_role', 'program_head')->sortByDesc('reviewed_at')->first();
+
+                return [
+                    'report_id' => $report->id,
+                    'reference' => $report->report_number,
+                    'students' => $travel->participants->map(fn (Student $student) => trim($student->first_name.' '.$student->last_name))->implode(', '),
+                    'destination' => $travel->hte?->name ?: $travel->destination,
+                    'departure' => $travel->departed_at?->format('M j, Y g:i A') ?? $travel->start_time?->format('M j, Y g:i A'),
+                    'checkpoints' => $travel->checkpoints->sortBy('sequence')->pluck('checkpoint_name')->filter()->implode(', '),
+                    'arrival' => $travel->arrived_at?->format('M j, Y g:i A') ?? $travel->end_time?->format('M j, Y g:i A'),
+                    'route_summary' => $travel->route_notes,
+                    'photo_evidence' => filled($travel->arrival_photo_path) || $travel->checkpoints->contains(fn ($checkpoint) => filled($checkpoint->photo_path)),
+                    'coordinator_remarks' => $report->remarks,
+                    'submitted_at' => $report->submitted_at?->toIso8601String(),
+                    'review_status' => $report->status,
+                    'program_head_remarks' => $review?->comments ?: $review?->reason,
+                ];
+            })->values();
+
         return response()->json([
             'generated_at' => now()->toIso8601String(),
+            'filters' => [
+                'date_from' => $from?->toDateString(),
+                'date_to' => $to?->toDateString(),
+                'academic_section_id' => $sectionId,
+                'academic_year' => $filters['academic_year'] ?? null,
+                'semester' => $filters['semester'] ?? null,
+            ],
             'scope' => [
                 'college' => $request->user()->college,
                 'program' => $request->user()->program,
                 'sections' => $sections,
+                'academic_years' => Student::where('program_id', $programId)->whereNotNull('internship_year')->distinct()->orderByDesc('internship_year')->pluck('internship_year'),
+                'semesters' => Student::where('program_id', $programId)->whereNotNull('internship_semester')->distinct()->orderBy('internship_semester')->pluck('internship_semester'),
                 'selected_section' => $sectionId ? $sections->firstWhere('id', $sectionId) : null,
             ],
             'overview' => [
@@ -187,9 +262,7 @@ class ProgramHeadDashboardController extends Controller
             ],
             'travel' => [
                 'active' => TravelLog::whereIn('status', ['active', 'traveling', 'arrived'])
-                    ->whereHas('participants', fn ($query) => $query
-                        ->where('students.program_id', $programId)
-                        ->when($sectionId, fn ($studentQuery) => $studentQuery->where('academic_section_id', $sectionId)))
+                    ->whereHas('participants', fn ($query) => $query->whereIn('students.id', $studentIds))
                     ->count(),
                 'total_this_month' => $monthTravel->count(),
                 'completed_this_month' => $monthTravel->where('status', 'completed')->count(),
@@ -205,6 +278,8 @@ class ProgramHeadDashboardController extends Controller
                 'journals' => $pendingJournals,
                 'total' => $pendingRegistrations + $pendingRequirements + $pendingAttendance + $pendingJournals,
             ],
+            'deployment_reviews' => $deploymentReviews,
+            'travel_reviews' => $travelReviews,
             'analytics' => [
                 'average_progress' => round($averageProgress, 1),
                 'internship_status' => [
@@ -222,5 +297,16 @@ class ProgramHeadDashboardController extends Controller
     private function renderedHours(Attendance $attendance): float
     {
         return AttendanceHours::total($attendance);
+    }
+
+    private function studentSchedule(Student $student): string
+    {
+        $days = collect($student->work_days ?? [])->map(fn (string $day) => ucfirst(substr($day, 0, 3)))->implode(', ');
+
+        return collect([
+            $days ?: null,
+            $student->official_am_start && $student->official_am_end ? 'AM '.$student->official_am_start.'-'.$student->official_am_end : null,
+            $student->official_pm_start && $student->official_pm_end ? 'PM '.$student->official_pm_start.'-'.$student->official_pm_end : null,
+        ])->filter()->implode(' | ') ?: 'Not configured';
     }
 }

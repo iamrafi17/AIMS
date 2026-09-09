@@ -58,9 +58,7 @@ class ProgramScopedAccessTest extends TestCase
             ->assertJsonPath('summary.total', 1)
             ->assertJsonPath('data.0.id', $ownAttendance->id);
 
-        $this->putJson('/api/coordinator/attendance/'.$otherAttendance->id.'/verify', [
-            'verified' => true,
-        ])->assertNotFound();
+        $this->getJson('/api/coordinator/attendance/'.$otherAttendance->id)->assertNotFound();
     }
 
     public function test_coordinator_cannot_assign_a_student_to_another_programs_hte(): void
@@ -79,7 +77,7 @@ class ProgramScopedAccessTest extends TestCase
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Supervisor',
             'contact_email' => 'supervisor@example.com',
-            'contact_phone' => '09170000001',
+            'contact_number' => '09170000001',
             'is_active' => true,
         ]);
         Sanctum::actingAs($coordinator);
@@ -92,14 +90,14 @@ class ProgramScopedAccessTest extends TestCase
             'gender' => $student->gender,
             'birth_date' => $student->birth_date->toDateString(),
             'address' => $student->address,
-            'phone' => $student->phone,
+            'contact_number' => $student->contact_number,
             'college_id' => $college->id,
             'program_id' => $bsis->id,
             'year_level' => $student->year_level,
             'section' => $student->section,
             'parent_name' => $student->parent_name,
             'parent_address' => $student->parent_address,
-            'parent_phone' => $student->parent_phone,
+            'parent_contact_number' => $student->parent_contact_number,
             'hte_id' => $otherHte->id,
         ])->assertUnprocessable()->assertJsonValidationErrors('hte_id');
 
@@ -305,14 +303,14 @@ class ProgramScopedAccessTest extends TestCase
             'gender' => 'female',
             'birth_date' => '2002-01-01',
             'address' => 'Santa Cruz, Marinduque',
-            'phone' => '09170000000',
+            'contact_number' => '09170000000',
             'college_id' => $college->id,
             'program_id' => $program->id,
             'year_level' => 4,
             'section' => 'A',
             'parent_name' => 'Test Parent',
             'parent_address' => 'Santa Cruz, Marinduque',
-            'parent_phone' => '09171111111',
+            'parent_contact_number' => '09171111111',
             'registration_status' => 'approved',
             'internship_status' => 'active',
         ]);

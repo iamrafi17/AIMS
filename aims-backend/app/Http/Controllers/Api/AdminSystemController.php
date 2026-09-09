@@ -13,7 +13,9 @@ use App\Models\Program;
 use App\Models\Student;
 use App\Models\SystemSetting;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class AdminSystemController extends Controller
@@ -68,6 +70,17 @@ class AdminSystemController extends Controller
         return response()->json(['message' => 'College deactivated. Connected records were preserved.']);
     }
 
+    public function permanentDestroyCollege(College $college)
+    {
+        $this->ensureNoConnectedRecords($college->name, 'college_id', $college->id, [
+            'programs', 'students', 'users', 'ojt_enrollments', 'htes', 'holidays', 'moas',
+        ]);
+
+        $this->permanentlyDelete($college, 'college');
+
+        return response()->json(['message' => 'College permanently deleted.']);
+    }
+
     public function storeProgram(Request $request)
     {
         $data = $request->validate([
@@ -100,6 +113,18 @@ class AdminSystemController extends Controller
         return response()->json(['message' => 'Program deactivated. Connected records were preserved.']);
     }
 
+    public function permanentDestroyProgram(Program $program)
+    {
+        $this->ensureNoConnectedRecords($program->name, 'program_id', $program->id, [
+            'students', 'users', 'ojt_enrollments', 'htes', 'holidays', 'moas',
+            'academic_sections', 'program_requirements', 'report_templates', 'generated_reports',
+        ]);
+
+        $this->permanentlyDelete($program, 'program');
+
+        return response()->json(['message' => 'Program permanently deleted.']);
+    }
+
     public function storeSection(Request $request)
     {
         $data = $this->sectionData($request);
@@ -119,6 +144,17 @@ class AdminSystemController extends Controller
         $section->update(['is_active' => false]);
 
         return response()->json(['message' => 'Section deactivated. Historical enrollment context was preserved.']);
+    }
+
+    public function permanentDestroySection(AcademicSection $section)
+    {
+        $this->ensureNoConnectedRecords($section->name, 'academic_section_id', $section->id, [
+            'students', 'ojt_enrollments', 'hte_batch_schedules',
+        ]);
+
+        $this->permanentlyDelete($section, 'section');
+
+        return response()->json(['message' => 'Section permanently deleted.']);
     }
 
     public function settings()
@@ -192,6 +228,24 @@ class AdminSystemController extends Controller
             'academic_year' => ['required', 'regex:/^\d{4}-\d{4}$/'],
             'is_active' => ['required', 'boolean'],
         ]);
+    }
+
+    private function ensureNoConnectedRecords(string $name, string $foreignKey, int $id, array $tables): void
+    {
+        foreach ($tables as $table) {
+            if (DB::table($table)->where($foreignKey, $id)->exists()) {
+                abort(422, "{$name} has connected records and cannot be permanently deleted. Deactivate it instead.");
+            }
+        }
+    }
+
+    private function permanentlyDelete(College|Program|AcademicSection $record, string $type): void
+    {
+        try {
+            $record->delete();
+        } catch (QueryException) {
+            abort(422, "This {$type} is referenced by another record and cannot be permanently deleted. Deactivate it instead.");
+        }
     }
 
     private function normalizeSetting(string $type, mixed $value): string

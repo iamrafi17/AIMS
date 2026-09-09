@@ -3,6 +3,7 @@ import { FiCheck, FiChevronLeft, FiChevronRight, FiDownload, FiEdit2, FiEye, FiF
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import RequirementManagerModal from './RequirementManagerModal';
+import ContactNumberInput from '../../components/forms/ContactNumberInput';
 
 const emptyForm = {
   student_name: '',
@@ -15,7 +16,7 @@ const emptyForm = {
   gender: 'female',
   birth_date: '',
   address: '',
-  phone: '',
+  contact_number: '',
   college_id: '',
   program_id: '',
   academic_section_id: '',
@@ -24,7 +25,7 @@ const emptyForm = {
   parent_name: '',
   parent_relationship: 'Parent',
   parent_address: '',
-  parent_phone: '',
+  parent_contact_number: '',
   hte_id: '',
   internship_semester: '',
   internship_year: '',
@@ -85,13 +86,20 @@ function Modal({ title, subtitle, onClose, children, size = 'default' }) {
 }
 
 function Input({ label, name, form, setForm, type = 'text', required = false, ...props }) {
+  const inputClassName = 'w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 focus:ring-4 focus:ring-[#7D001D]/5 dark:border-gray-600 dark:bg-gray-900 dark:text-white';
+  const isContactNumber = name === 'contact_number' || name === 'parent_contact_number';
+
   return (
     <label>
       <span className="mb-1.5 block text-[11px] font-extrabold uppercase tracking-wide text-slate-400">
         {label}
         {required && ' *'}
       </span>
-      <input type={type} name={name} value={form[name] ?? ''} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} required={required} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 focus:ring-4 focus:ring-[#7D001D]/5 dark:border-gray-600 dark:bg-gray-900 dark:text-white" {...props} />
+      {isContactNumber ? (
+        <ContactNumberInput value={form[name] ?? ''} onValueChange={(value) => setForm((current) => ({ ...current, [name]: value }))} required={required} className={inputClassName} placeholder="09XX XXX XXXX" {...props} />
+      ) : (
+        <input type={type} name={name} value={form[name] ?? ''} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} required={required} className={inputClassName} {...props} />
+      )}
     </label>
   );
 }
@@ -318,9 +326,9 @@ function StudentManagement() {
 
   const validateEditorStep = (step = editorStep) => {
     const requiredByStep = [
-      ['student_id', 'first_name', 'last_name', 'email', 'gender', 'birth_date', 'phone', 'address'],
+      ['student_id', 'first_name', 'last_name', 'email', 'gender', 'birth_date', 'contact_number', 'address'],
       ['college_id', 'program_id', 'year_level', 'section', 'required_ojt_hours'],
-      ['parent_name', 'parent_phone', 'parent_address'],
+      ['parent_name', 'parent_contact_number', 'parent_address'],
     ];
     const missing = requiredByStep[step].some((field) => String(form[field] ?? '').trim() === '');
     if (missing) {
@@ -831,7 +839,7 @@ function StudentManagement() {
                       <option value="other">Other</option>
                     </Select>
                     <Input label="Birth Date" name="birth_date" type="date" form={form} setForm={setForm} required />
-                    <Input label="Contact Number" name="phone" form={form} setForm={setForm} required />
+                    <Input label="Contact Number" name="contact_number" form={form} setForm={setForm} required />
                     <div className="md:col-span-3">
                       <Input label="Address" name="address" form={form} setForm={setForm} required />
                     </div>
@@ -940,7 +948,7 @@ function StudentManagement() {
                     <div className="hidden md:block" />
                     <Input label="Guardian Name" name="parent_name" form={form} setForm={setForm} required />
                     <Input label="Relationship" name="parent_relationship" form={form} setForm={setForm} />
-                    <Input label="Contact Number" name="parent_phone" form={form} setForm={setForm} required />
+                    <Input label="Contact Number" name="parent_contact_number" form={form} setForm={setForm} required />
                     <div className="md:col-span-3">
                       <Input label="Guardian Address" name="parent_address" form={form} setForm={setForm} required />
                     </div>

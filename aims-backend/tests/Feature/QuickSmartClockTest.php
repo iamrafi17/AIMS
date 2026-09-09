@@ -25,8 +25,15 @@ class QuickSmartClockTest extends TestCase
         config(['attendance.use_server_time' => true]);
     }
 
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
+
     public function test_full_day_smart_clock_enforces_slot_order_and_activity_reports(): void
     {
+        Carbon::setTestNow(Carbon::parse('2026-08-26 7:55 AM', 'Asia/Manila'));
         $user = $this->studentUser();
         Sanctum::actingAs($user);
         Http::fake([
@@ -49,11 +56,13 @@ class QuickSmartClockTest extends TestCase
             ->assertJsonPath('attendance', null)
             ->assertJsonPath('settings_locked', false);
 
+        Carbon::setTestNow(Carbon::parse('2026-08-26 8:00 AM', 'Asia/Manila'));
         $this->postJson('/api/student/attendance/quick-clock', $payload)
             ->assertOk()
             ->assertJsonPath('next_action.key', 'am_time_out')
             ->assertJsonPath('settings_locked', true);
 
+        Carbon::setTestNow(Carbon::parse('2026-08-26 12:00 PM', 'Asia/Manila'));
         $this->postJson('/api/student/attendance/quick-clock', $payload)
             ->assertUnprocessable()
             ->assertJsonPath('activity_required', true);
@@ -63,10 +72,12 @@ class QuickSmartClockTest extends TestCase
             'activity' => 'Prepared the morning deployment report.',
         ])->assertOk()->assertJsonPath('next_action.key', 'pm_time_in');
 
+        Carbon::setTestNow(Carbon::parse('2026-08-26 1:00 PM', 'Asia/Manila'));
         $this->postJson('/api/student/attendance/quick-clock', $payload)
             ->assertOk()
             ->assertJsonPath('next_action.key', 'pm_time_out');
 
+        Carbon::setTestNow(Carbon::parse('2026-08-26 5:00 PM', 'Asia/Manila'));
         $this->postJson('/api/student/attendance/quick-clock', [
             ...$payload,
             'activity' => 'Updated records and joined the afternoon team meeting.',
@@ -82,6 +93,79 @@ class QuickSmartClockTest extends TestCase
             'session_type' => 'full_day',
             'am_activity' => 'Prepared the morning deployment report.',
             'pm_activity' => 'Updated records and joined the afternoon team meeting.',
+        ]);
+    }
+
+    public function test_live_monitoring_starts_after_time_in_and_stops_at_time_out(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-29 7:55 AM', 'Asia/Manila'));
+        $user = $this->studentUser();
+        $hte = HTE::create([
+            'college_id' => $user->student->college_id,
+            'program_id' => $user->student->program_id,
+            'name' => 'Geofenced Partner',
+            'address' => 'Santa Cruz, Marinduque',
+            'contact_person' => 'Supervisor',
+            'contact_email' => 'geofence@example.test',
+            'contact_number' => '09170000002',
+            'latitude' => 13.4753,
+            'longitude' => 122.0275,
+            'geofence_radius' => 100,
+            'geofence_enabled' => true,
+            'is_active' => true,
+        ]);
+        $user->student->update(['hte_id' => $hte->id]);
+        Sanctum::actingAs($user);
+        Http::fake();
+
+        $this->postJson('/api/student/attendance/live-location', [
+            'latitude' => 13.4753,
+            'longitude' => 122.0275,
+            'accuracy' => 12.5,
+        ])->assertUnprocessable()
+            ->assertJsonPath('message', 'Live monitoring starts only after a successful Time In.');
+
+        $this->postJson('/api/student/attendance/quick-clock', [
+            'status' => 'present',
+            'work_mode' => 'wfo',
+            'session_type' => 'full_day',
+            'latitude' => 13.4753,
+            'longitude' => 122.0275,
+            'accuracy' => 8.5,
+        ])->assertOk()->assertJsonPath('next_action.key', 'am_time_out');
+
+        $this->assertDatabaseHas('student_live_locations', [
+            'student_id' => $user->student->id,
+            'latitude' => 13.4753,
+            'longitude' => 122.0275,
+            'accuracy' => 8.5,
+        ]);
+
+        $this->postJson('/api/student/attendance/live-location', [
+            'latitude' => 13.4853,
+            'longitude' => 122.0275,
+            'accuracy' => 12.5,
+        ])->assertOk()
+            ->assertJsonPath('outside_geofence', true)
+            ->assertJsonPath('geofence_radius', 100);
+
+        $this->assertDatabaseHas('student_live_locations', [
+            'student_id' => $user->student->id,
+            'latitude' => 13.4853,
+            'longitude' => 122.0275,
+        ]);
+
+        $this->postJson('/api/student/attendance/quick-clock', [
+            'status' => 'present',
+            'work_mode' => 'wfo',
+            'session_type' => 'full_day',
+            'latitude' => 13.4753,
+            'longitude' => 122.0275,
+            'activity' => 'Completed the morning work session.',
+        ])->assertOk()->assertJsonPath('next_action.key', 'pm_time_in');
+
+        $this->assertDatabaseMissing('student_live_locations', [
+            'student_id' => $user->student->id,
         ]);
     }
 
@@ -301,7 +385,7 @@ class QuickSmartClockTest extends TestCase
                 'address' => 'Santa Cruz, Marinduque',
                 'contact_person' => 'HTE Supervisor',
                 'contact_email' => 'hte@example.test',
-                'contact_phone' => '09170000001',
+                'contact_number' => '09170000001',
                 'work_days' => ['mon', 'tue', 'wed', 'thu', 'fri'],
             ]);
 
@@ -353,7 +437,7 @@ class QuickSmartClockTest extends TestCase
             'gender' => 'female',
             'birth_date' => '2002-01-01',
             'address' => 'Santa Cruz, Marinduque',
-            'phone' => '09170000000',
+            'contact_number' => '09170000000',
             'college_id' => $college->id,
             'program_id' => $program->id,
             'year_level' => 4,
@@ -361,7 +445,7 @@ class QuickSmartClockTest extends TestCase
             'parent_name' => 'Test Guardian',
             'parent_relationship' => 'Parent',
             'parent_address' => 'Santa Cruz, Marinduque',
-            'parent_phone' => '09180000000',
+            'parent_contact_number' => '09180000000',
             'internship_semester' => 'First Semester',
             'internship_year' => '2026-2027',
             'registration_status' => 'approved',

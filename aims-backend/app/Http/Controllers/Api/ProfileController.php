@@ -19,7 +19,7 @@ class ProfileController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'phone' => ['nullable', 'string', 'max:20'],
+            'contact_number' => ['nullable', 'string', 'digits:11'],
             'address' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -27,12 +27,12 @@ class ProfileController extends Controller
             $user->update([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
-                'phone' => $validated['phone'] ?? $user->phone,
+                'contact_number' => $validated['contact_number'] ?? $user->contact_number,
                 'address' => $validated['address'] ?? $user->address,
             ]);
 
             $user->student?->update([
-                'phone' => $validated['phone'] ?? $user->student->phone,
+                'contact_number' => $validated['contact_number'] ?? $user->student->contact_number,
                 'address' => $validated['address'] ?? $user->student->address,
             ]);
         });
@@ -92,14 +92,14 @@ class ProfileController extends Controller
         $user = $request->user();
         $validated = $request->validate([
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'phone' => ['required', 'string', 'max:20'],
+            'contact_number' => ['required', 'string', 'digits:11'],
             'address' => ['required', 'string', 'max:1000'],
         ]);
 
         DB::transaction(function () use ($user, $validated) {
             $user->update($validated);
             $user->student?->update([
-                'phone' => $validated['phone'],
+                'contact_number' => $validated['contact_number'],
                 'address' => $validated['address'],
             ]);
         });
@@ -107,7 +107,7 @@ class ProfileController extends Controller
         return response()->json([
             'message' => 'Contact information updated successfully.',
             'email' => $user->fresh()->email,
-            'phone' => $user->student?->fresh()->phone ?? $user->fresh()->phone,
+            'contact_number' => $user->student?->fresh()->contact_number ?? $user->fresh()->contact_number,
             'address' => $user->student?->fresh()->address ?? $user->fresh()->address,
         ]);
     }
@@ -179,8 +179,8 @@ class ProfileController extends Controller
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
-            'staff_id' => $user->staff_id,
-            'phone' => $user->phone,
+            'user_id' => $user->user_id,
+            'contact_number' => $user->contact_number,
             'address' => $user->address,
             'role' => $user->role,
             'avatar' => $user->avatar,

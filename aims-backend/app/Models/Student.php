@@ -18,7 +18,7 @@ class Student extends Model
         'gender',
         'birth_date',
         'address',
-        'phone',
+        'contact_number',
         'college_id',
         'program_id',
         'academic_section_id',
@@ -27,8 +27,10 @@ class Student extends Model
         'parent_name',
         'parent_relationship',
         'parent_address',
-        'parent_phone',
+        'parent_contact_number',
         'hte_id',
+        'hte_department_id',
+        'supervisor_record_id',
         'supervisor_id',
         'internship_semester',
         'internship_year',
@@ -94,6 +96,16 @@ class Student extends Model
         return $this->belongsTo(User::class, 'supervisor_id');
     }
 
+    public function hteDepartment()
+    {
+        return $this->belongsTo(HteDepartment::class, 'hte_department_id');
+    }
+
+    public function supervisorRecord()
+    {
+        return $this->belongsTo(Supervisor::class, 'supervisor_record_id');
+    }
+
     public function tasks()
     {
         return $this->hasMany(InternshipTask::class);
@@ -102,6 +114,11 @@ class Student extends Model
     public function attendance()
     {
         return $this->hasMany(Attendance::class);
+    }
+
+    public function liveLocation()
+    {
+        return $this->hasOne(StudentLiveLocation::class);
     }
 
     public function requirements()

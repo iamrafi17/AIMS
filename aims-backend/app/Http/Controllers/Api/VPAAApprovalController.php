@@ -19,6 +19,9 @@ class VPAAApprovalController extends Controller
             ->where('status', 'pending')
             ->latest('updated_at')
             ->get();
+        $pendingDeployments = $pending
+            ->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)
+            ->filter(fn (ApprovalRecord $approval) => $approval->submitter?->role === 'program_head');
 
         $requirements = InternshipRequirement::with([
             'student.user',
@@ -29,7 +32,7 @@ class VPAAApprovalController extends Controller
         ])->whereIn('id', $pending->where('subject_type', ApprovalRecord::TYPE_DOCUMENT)->pluck('subject_id'))->get()->keyBy('id');
 
         $students = Student::with(['user', 'program', 'college', 'hte'])
-            ->whereIn('id', $pending->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)->pluck('subject_id'))
+            ->whereIn('id', $pendingDeployments->pluck('subject_id'))
             ->get()
             ->keyBy('id');
 
@@ -41,8 +44,7 @@ class VPAAApprovalController extends Controller
             ->filter()
             ->values();
 
-        $deployments = $pending
-            ->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)
+        $deployments = $pendingDeployments
             ->map(fn (ApprovalRecord $approval) => $students->has($approval->subject_id) && $students[$approval->subject_id]->hte
                 ? $this->deploymentPayload($approval, $students[$approval->subject_id])
                 : null)
@@ -88,6 +90,11 @@ class VPAAApprovalController extends Controller
 
     public function review(Request $request, ApprovalRecord $approval)
     {
+        if ($approval->subject_type === ApprovalRecord::TYPE_DEPLOYMENT) {
+            $approval->loadMissing('submitter');
+            abort_unless($approval->submitter?->role === 'program_head', 403, 'Deployment requests require Program Head review before VPAA validation.');
+        }
+
         if ($approval->status !== 'pending') {
             throw ValidationException::withMessages([
                 'approval' => 'This request has already been decided.',

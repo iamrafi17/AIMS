@@ -4,9 +4,10 @@ namespace App\Support;
 
 use App\Models\User;
 
-final class StaffId
+final class UserId
 {
     private const ROLE_PREFIXES = [
+        'admin' => 'AD',
         'coordinator' => 'CO',
         'program_head' => 'PH',
         'vpaa' => 'VP',
@@ -18,13 +19,13 @@ final class StaffId
         return isset(self::ROLE_PREFIXES[$role]);
     }
 
-    public static function belongsToRole(?string $staffId, ?string $role): bool
+    public static function belongsToRole(?string $userId, ?string $role): bool
     {
-        if (! $staffId || ! self::isStaffRole($role)) {
+        if (! $userId || ! self::isStaffRole($role)) {
             return false;
         }
 
-        return str_starts_with($staffId, self::ROLE_PREFIXES[$role].'-');
+        return str_starts_with($userId, self::ROLE_PREFIXES[$role].'-');
     }
 
     public static function generate(string $role): ?string
@@ -38,18 +39,18 @@ final class StaffId
         $pattern = $prefix.'-'.$year.'-';
 
         $lastSequence = User::query()
-            ->where('staff_id', 'like', $pattern.'%')
-            ->pluck('staff_id')
-            ->map(function (string $staffId) use ($pattern): int {
-                return (int) substr($staffId, strlen($pattern));
+            ->where('user_id', 'like', $pattern.'%')
+            ->pluck('user_id')
+            ->map(function (string $userId) use ($pattern): int {
+                return (int) substr($userId, strlen($pattern));
             })
             ->max() ?? 0;
 
         do {
             $lastSequence++;
-            $staffId = sprintf('%s%03d', $pattern, $lastSequence);
-        } while (User::query()->where('staff_id', $staffId)->exists());
+            $userId = sprintf('%s%03d', $pattern, $lastSequence);
+        } while (User::query()->where('user_id', $userId)->exists());
 
-        return $staffId;
+        return $userId;
     }
 }

@@ -123,6 +123,18 @@ class CoreDatabaseSchemaTest extends TestCase
         $this->assertUniqueIndex('evaluations', ['student_id', 'evaluation_type']);
     }
 
+    public function test_contact_number_columns_use_consistent_names(): void
+    {
+        $this->assertTrue(Schema::hasColumn('users', 'contact_number'));
+        $this->assertTrue(Schema::hasColumns('students', ['contact_number', 'parent_contact_number']));
+        $this->assertTrue(Schema::hasColumn('htes', 'contact_number'));
+
+        $this->assertFalse(Schema::hasColumn('users', 'phone'));
+        $this->assertFalse(Schema::hasColumn('students', 'phone'));
+        $this->assertFalse(Schema::hasColumn('students', 'parent_phone'));
+        $this->assertFalse(Schema::hasColumn('htes', 'contact_phone'));
+    }
+
     private function assertUniqueIndex(string $table, array $columns): void
     {
         $hasIndex = collect(Schema::getIndexes($table))->contains(

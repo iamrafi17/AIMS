@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class HTE extends Model
 {
@@ -15,10 +17,11 @@ class HTE extends Model
         'college_id',
         'program_id',
         'name',
+        'normalized_name',
         'address',
         'contact_person',
         'contact_email',
-        'contact_phone',
+        'contact_number',
         'latitude',
         'longitude',
         'geofence_radius',
@@ -43,6 +46,31 @@ class HTE extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::saving(function (HTE $hte): void {
+            if ($hte->isDirty('name') || blank($hte->normalized_name)) {
+                $hte->normalized_name = Str::lower(preg_replace('/\s+/', ' ', trim((string) $hte->name)));
+            }
+        });
+
+        static::created(function (HTE $hte): void {
+            if (! $hte->program_id) {
+                return;
+            }
+
+            DB::table('hte_programs')->insertOrIgnore([
+                'hte_id' => $hte->id,
+                'program_id' => $hte->program_id,
+                'college_id' => $hte->college_id,
+                'linked_by' => null,
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+    }
+
     public function students()
     {
         return $this->hasMany(Student::class, 'hte_id');
@@ -56,6 +84,18 @@ class HTE extends Model
     public function program()
     {
         return $this->belongsTo(Program::class);
+    }
+
+    public function programs()
+    {
+        return $this->belongsToMany(Program::class, 'hte_programs', 'hte_id', 'program_id')
+            ->withPivot(['college_id', 'linked_by', 'is_active'])
+            ->withTimestamps();
+    }
+
+    public function departments()
+    {
+        return $this->hasMany(HteDepartment::class, 'hte_id');
     }
 
     public function colleges()

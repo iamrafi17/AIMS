@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from '../components/layout/Sidebar';
 import Header from '../components/layout/Header';
+import StudentLiveLocationTracker from '../components/attendance/StudentLiveLocationTracker';
 
 function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
@@ -25,6 +26,7 @@ function DashboardLayout() {
 
   return (
     <div className="dashboard-shell min-h-screen bg-[#F6F7FB] text-[#1F2937] transition-colors duration-300 dark:bg-gray-950 dark:text-gray-100">
+      <StudentLiveLocationTracker />
       <a
         href="#main-content"
         className="sr-only fixed left-4 top-4 z-[100] rounded-xl bg-[#7D001D] px-4 py-3 font-bold text-white shadow-lg focus:not-sr-only"

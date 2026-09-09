@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Support\StaffId;
+use App\Support\UserId;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -17,8 +17,8 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
-        'staff_id',
-        'phone',
+        'user_id',
+        'contact_number',
         'address',
         'password',
         'role',
@@ -26,6 +26,10 @@ class User extends Authenticatable
         'program_id',
         'avatar',
         'is_active',
+        'requires_password_change',
+        'requires_security_setup',
+        'requires_profile_setup',
+        'profile_completed_at',
         'last_login_at',
     ];
 
@@ -41,14 +45,18 @@ class User extends Authenticatable
             'password' => 'hashed',
             'last_login_at' => 'datetime',
             'is_active' => 'boolean',
+            'requires_password_change' => 'boolean',
+            'requires_security_setup' => 'boolean',
+            'requires_profile_setup' => 'boolean',
+            'profile_completed_at' => 'datetime',
         ];
     }
 
     protected static function booted(): void
     {
         static::creating(function (User $user): void {
-            if (StaffId::isStaffRole($user->role) && ! $user->staff_id) {
-                $user->staff_id = StaffId::generate($user->role);
+            if (UserId::isStaffRole($user->role) && ! $user->user_id) {
+                $user->user_id = UserId::generate($user->role);
             }
         });
 
@@ -57,14 +65,14 @@ class User extends Authenticatable
                 return;
             }
 
-            if (! StaffId::isStaffRole($user->role)) {
-                $user->staff_id = null;
+            if (! UserId::isStaffRole($user->role)) {
+                $user->user_id = null;
 
                 return;
             }
 
-            if (! StaffId::belongsToRole($user->staff_id, $user->role)) {
-                $user->staff_id = StaffId::generate($user->role);
+            if (! UserId::belongsToRole($user->user_id, $user->role)) {
+                $user->user_id = UserId::generate($user->role);
             }
         });
     }
@@ -89,6 +97,11 @@ class User extends Authenticatable
         return $this->hasMany(Student::class, 'supervisor_id');
     }
 
+    public function supervisorProfile()
+    {
+        return $this->hasOne(Supervisor::class, 'user_id');
+    }
+
     public function activityLogs()
     {
         return $this->hasMany(ActivityLog::class);
@@ -97,6 +110,16 @@ class User extends Authenticatable
     public function securityQuestions()
     {
         return $this->hasMany(UserSecurityQuestion::class);
+    }
+
+    public function uploadedReportTemplates()
+    {
+        return $this->hasMany(ReportTemplate::class, 'uploaded_by');
+    }
+
+    public function generatedReports()
+    {
+        return $this->hasMany(GeneratedReport::class, 'generated_by');
     }
 
     public function getAvatarUrlAttribute(): ?string
@@ -140,6 +163,37 @@ class User extends Authenticatable
     public function isSupervisor()
     {
         return $this->role === 'supervisor';
+    }
+
+    public function requiresStaffSecuritySetup(): bool
+    {
+        return UserId::isStaffRole($this->role) && $this->requires_security_setup;
+    }
+
+    public function requiresStaffOnboarding(): bool
+    {
+        return UserId::isStaffRole($this->role) && $this->onboardingStep() !== null;
+    }
+
+    public function onboardingStep(): ?string
+    {
+        if (! UserId::isStaffRole($this->role)) {
+            return null;
+        }
+
+        if ($this->requires_profile_setup) {
+            return 'complete_profile';
+        }
+
+        if ($this->requires_security_setup) {
+            return 'security_setup';
+        }
+
+        if ($this->requires_password_change) {
+            return 'change_password';
+        }
+
+        return null;
     }
 
     public function hasRole($roles)

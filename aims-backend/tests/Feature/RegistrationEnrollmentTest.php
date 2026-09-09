@@ -52,10 +52,11 @@ class RegistrationEnrollmentTest extends TestCase
             'student_id' => '2026-REG-001',
             'first_name' => 'Tampered',
             'last_name' => 'Name',
+            'middle_name' => 'Reyes',
             'gender' => 'female',
             'birth_date' => '2002-01-01',
             'address' => 'Santa Cruz, Marinduque',
-            'phone' => '09171234567',
+            'contact_number' => '09171234567',
             'email' => 'maria.santos@student.marsu.edu.ph',
             'college_id' => $college->id,
             'program_id' => $program->id,
@@ -64,7 +65,7 @@ class RegistrationEnrollmentTest extends TestCase
             'parent_name' => 'Parent Santos',
             'parent_relationship' => 'Mother',
             'parent_address' => 'Santa Cruz, Marinduque',
-            'parent_phone' => '09179876543',
+            'parent_contact_number' => '09179876543',
             'hte_id' => null,
             'internship_semester' => 'First Semester',
             'internship_year' => '2026-2027',
@@ -75,6 +76,13 @@ class RegistrationEnrollmentTest extends TestCase
             'security_questions' => $this->securityQuestionAnswers(),
         ];
 
+        $this->postJson('/api/register', [
+            ...$payload,
+            'contact_number' => '0917123456',
+            'parent_contact_number' => 'not-a-number',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['contact_number', 'parent_contact_number']);
+
         $response = $this->postJson('/api/register', $payload)
             ->assertCreated()
             ->assertJsonPath('user.email', 'maria.santos@student.marsu.edu.ph')
@@ -84,6 +92,7 @@ class RegistrationEnrollmentTest extends TestCase
             'id' => $response->json('student.id'),
             'student_id' => '2026-REG-001',
             'first_name' => 'Maria Dela',
+            'middle_name' => 'Reyes',
             'last_name' => 'Santos',
             'section' => 'BSIT 4A',
             'academic_section_id' => $section->id,
@@ -119,7 +128,7 @@ class RegistrationEnrollmentTest extends TestCase
             'gender' => 'male',
             'birth_date' => '2002-01-01',
             'address' => 'Santa Cruz',
-            'phone' => '09170000000',
+            'contact_number' => '09170000000',
             'email' => 'not.listed@example.com',
             'college_id' => $college->id,
             'program_id' => $program->id,
@@ -128,7 +137,7 @@ class RegistrationEnrollmentTest extends TestCase
             'parent_name' => 'Parent',
             'parent_relationship' => 'Father',
             'parent_address' => 'Santa Cruz',
-            'parent_phone' => '09171111111',
+            'parent_contact_number' => '09171111111',
             'hte_id' => null,
             'internship_semester' => 'First Semester',
             'internship_year' => '2026-2027',

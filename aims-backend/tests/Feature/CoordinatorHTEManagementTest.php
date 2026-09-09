@@ -30,7 +30,7 @@ class CoordinatorHTEManagementTest extends TestCase
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Partner Supervisor',
             'contact_email' => 'partner@example.com',
-            'contact_phone' => '09170000001',
+            'contact_number' => '09170000001',
             'latitude' => 13.475,
             'longitude' => 122.027,
             'geofence_radius' => 150,
@@ -42,6 +42,12 @@ class CoordinatorHTEManagementTest extends TestCase
             'work_days' => ['mon', 'tue', 'wed', 'thu', 'fri'],
             'is_active' => true,
         ];
+
+        $this->postJson('/api/coordinator/htes', [
+            ...$payload,
+            'contact_number' => '0917000000',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('contact_number');
 
         $hteId = $this->postJson('/api/coordinator/htes', $payload)
             ->assertCreated()
@@ -84,7 +90,7 @@ class CoordinatorHTEManagementTest extends TestCase
             'address' => 'Boac, Marinduque',
             'contact_person' => 'Initial Supervisor',
             'contact_email' => 'integrated@example.com',
-            'contact_phone' => '09170000009',
+            'contact_number' => '09170000009',
             'latitude' => null,
             'longitude' => null,
             'geofence_radius' => 100,
@@ -308,8 +314,9 @@ class CoordinatorHTEManagementTest extends TestCase
 
         $this->deleteJson("/api/coordinator/htes/{$hte->id}")
             ->assertOk()
-            ->assertJsonPath('message', 'HTE deactivated. Deployments and MOA history were preserved.');
-        $this->assertDatabaseHas('htes', ['id' => $hte->id, 'is_active' => false]);
+            ->assertJsonPath('message', 'HTE removed from this program. Shared HTE data, deployments, and MOA history were preserved.');
+        $this->assertDatabaseHas('htes', ['id' => $hte->id, 'is_active' => true]);
+        $this->assertDatabaseHas('hte_programs', ['hte_id' => $hte->id, 'program_id' => $coordinator->program_id, 'is_active' => false]);
         $this->assertDatabaseHas('moas', ['id' => $moa->id]);
         $privateDisk->assertExists($moa->file_path);
 
@@ -332,7 +339,7 @@ class CoordinatorHTEManagementTest extends TestCase
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Supervisor',
             'contact_email' => 'supervisor@example.com',
-            'contact_phone' => '09170000000',
+            'contact_number' => '09170000000',
             'latitude' => 13.47,
             'longitude' => 122.02,
             'geofence_radius' => 100,
@@ -359,14 +366,14 @@ class CoordinatorHTEManagementTest extends TestCase
             'gender' => 'female',
             'birth_date' => '2002-01-01',
             'address' => 'Santa Cruz, Marinduque',
-            'phone' => '09171111111',
+            'contact_number' => '09171111111',
             'college_id' => $college->id,
             'program_id' => $program->id,
             'year_level' => 4,
             'section' => 'A',
             'parent_name' => 'Test Parent',
             'parent_address' => 'Santa Cruz, Marinduque',
-            'parent_phone' => '09172222222',
+            'parent_contact_number' => '09172222222',
             'registration_status' => 'approved',
             'internship_status' => 'pending',
         ]);

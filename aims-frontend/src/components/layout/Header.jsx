@@ -211,7 +211,15 @@ function Header({ onMenuClick, sidebarOpen }) {
           </div>
 
           {/* User avatar */}
-          <div className="hidden items-center gap-3 sm:flex"><UserAvatar user={user} /></div>
+          <button
+            type="button"
+            onClick={() => rolePath && navigate(`/${rolePath}/profile`)}
+            className="rounded-full transition hover:ring-4 hover:ring-[#7D001D]/15 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#7D001D]/25"
+            aria-label="Open profile"
+            title="Open profile"
+          >
+            <UserAvatar user={user} />
+          </button>
         </div>
       </div>
     </header>

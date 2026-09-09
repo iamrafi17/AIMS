@@ -10,6 +10,7 @@ import {
   FiFileText,
   FiGlobe,
   FiHome,
+  FiMapPin,
   FiSun,
   FiTrendingUp,
   FiX,
@@ -184,7 +185,12 @@ function StudentDashboard() {
   const [activityModalOpen, setActivityModalOpen] = useState(false);
   const [completionModalOpen, setCompletionModalOpen] = useState(false);
   const [activity, setActivity] = useState('');
+  const [locationSharing, setLocationSharing] = useState('idle');
   const serverOffsetRef = useRef(0);
+  const latestLocationRef = useRef(null);
+  const latestLocationCapturedAtRef = useRef(0);
+  const locationSendingRef = useRef(false);
+  const outsideGeofenceRef = useRef(false);
 
   useEffect(() => {
     fetchDashboard();
@@ -196,6 +202,98 @@ function StudentDashboard() {
 
     return () => window.clearInterval(timer);
   }, []);
+
+  const liveTrackingActive = status === 'present'
+    && !clockLoading
+    && !clockState?.completed
+    && Boolean(clockState?.attendance)
+    && clockState?.next_action?.type === 'out';
+
+  useEffect(() => {
+    if (!liveTrackingActive) {
+      latestLocationRef.current = null;
+      latestLocationCapturedAtRef.current = 0;
+      outsideGeofenceRef.current = false;
+      toast.dismiss('live-geofence');
+      setLocationSharing('idle');
+      return undefined;
+    }
+
+    if (!navigator.geolocation) {
+      setLocationSharing('unsupported');
+      return undefined;
+    }
+
+    if (!window.isSecureContext) {
+      setLocationSharing('insecure');
+      return undefined;
+    }
+
+    let active = true;
+    setLocationSharing('requesting');
+
+    const shareLatestLocation = async () => {
+      if (!active || !latestLocationRef.current || locationSendingRef.current) return;
+      locationSendingRef.current = true;
+
+      try {
+        const response = await api.post('/student/attendance/live-location', latestLocationRef.current);
+        if (!active) return;
+
+        if (response.data.outside_geofence) {
+          setLocationSharing('outside');
+          if (!outsideGeofenceRef.current) {
+            toast.error(response.data.message, { id: 'live-geofence', duration: 8000 });
+          }
+          outsideGeofenceRef.current = true;
+        } else {
+          setLocationSharing('sharing');
+          if (outsideGeofenceRef.current) {
+            toast.success('You are back within the HTE geofence.', { id: 'live-geofence' });
+          }
+          outsideGeofenceRef.current = false;
+        }
+      } catch (error) {
+        if (active) setLocationSharing(error.response?.status === 422 ? 'idle' : 'error');
+      } finally {
+        locationSendingRef.current = false;
+      }
+    };
+
+    const watchId = navigator.geolocation.watchPosition(
+      ({ coords }) => {
+        latestLocationRef.current = {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy,
+        };
+        latestLocationCapturedAtRef.current = Date.now();
+        shareLatestLocation();
+      },
+      (error) => {
+        if (!active) return;
+
+        if (error.code === 1) {
+          setLocationSharing('denied');
+          return;
+        }
+
+        setLocationSharing(outsideGeofenceRef.current ? 'outside' : 'waiting');
+      },
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 30000 },
+    );
+    const heartbeat = window.setInterval(shareLatestLocation, 15000);
+
+    return () => {
+      active = false;
+      navigator.geolocation.clearWatch(watchId);
+      window.clearInterval(heartbeat);
+      latestLocationRef.current = null;
+      latestLocationCapturedAtRef.current = 0;
+      outsideGeofenceRef.current = false;
+      toast.dismiss('live-geofence');
+    };
+  }, [liveTrackingActive]);
 
   const applyClockState = (data) => {
     serverOffsetRef.current = data.uses_server_time
@@ -234,25 +332,49 @@ function StudentDashboard() {
     }
   };
 
-  const requestLocation = () => new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('GPS is not supported by this browser.'));
-      return;
-    }
-
+  const captureLocation = (options) => new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => resolve({ latitude: coords.latitude, longitude: coords.longitude }),
-      (error) => {
-        const messages = {
-          1: 'Location permission was denied. Allow GPS access to record your time.',
-          2: 'Your location is currently unavailable. Please try again.',
-          3: 'Location request timed out. Move to an open area and try again.',
-        };
-        reject(new Error(messages[error.code] || 'Unable to capture your GPS location.'));
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+      ({ coords }) => resolve({ latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy }),
+      reject,
+      options,
     );
   });
+
+  const requestLocation = async () => {
+    if (!navigator.geolocation) {
+      throw new Error('GPS is not supported by this browser.');
+    }
+
+    if (!window.isSecureContext) {
+      throw new Error('Location requires HTTPS or localhost. Open AIMS through a secure address and try again.');
+    }
+
+    const liveLocationAge = Date.now() - latestLocationCapturedAtRef.current;
+    if (latestLocationRef.current && liveLocationAge >= 0 && liveLocationAge <= 30000) {
+      return latestLocationRef.current;
+    }
+
+    try {
+      return await captureLocation({ enableHighAccuracy: true, timeout: 25000, maximumAge: 10000 });
+    } catch (firstError) {
+      if (firstError.code === 1) {
+        throw new Error('Location permission was denied. Allow precise location access to record your time.');
+      }
+
+      toast.loading('GPS is taking longer than usual. Retrying location...', { id: 'gps' });
+
+      try {
+        return await captureLocation({ enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 });
+      } catch (retryError) {
+        const messages = {
+          1: 'Location permission was denied. Allow precise location access to record your time.',
+          2: 'Location is unavailable. Turn on your device Location Services and browser location permission, then try again.',
+          3: 'Location could not be detected. Turn on Location Services and Precise Location, then try again.',
+        };
+        throw new Error(messages[retryError.code] || 'Unable to capture your GPS location.');
+      }
+    }
+  };
 
   const submitSmartLog = async (activityReport = '') => {
     setSubmitting(true);
@@ -262,6 +384,8 @@ function StudentDashboard() {
       if (status === 'present') {
         toast.loading('Capturing your GPS location...', { id: 'gps' });
         location = await requestLocation();
+        latestLocationRef.current = location;
+        latestLocationCapturedAtRef.current = Date.now();
         toast.success('Location captured', { id: 'gps' });
       }
 
@@ -395,6 +519,27 @@ function StudentDashboard() {
           </time>
           <p className="mt-2 text-sm font-bold text-white/70 sm:text-base">{formattedDate}</p>
           <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-white/55">{clockState?.uses_server_time ? 'Server-synchronized time' : 'Device time · test mode'}</p>
+
+          {liveTrackingActive && (
+            <div className={`mt-3 inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${locationSharing === 'outside' ? 'border-amber-300/50 bg-amber-400/20 text-amber-100' : locationSharing === 'sharing' ? 'border-emerald-300/40 bg-emerald-400/15 text-emerald-100' : 'border-white/20 bg-white/10 text-white/70'}`}>
+              <FiMapPin className={locationSharing === 'sharing' || locationSharing === 'outside' ? 'animate-pulse' : ''} />
+              {locationSharing === 'outside'
+                ? 'Warning: move closer to your assigned HTE'
+                : locationSharing === 'sharing'
+                  ? 'Live monitoring active until Time Out'
+                  : locationSharing === 'denied'
+                    ? 'Location permission was blocked'
+                    : locationSharing === 'waiting'
+                      ? 'Last location retained · waiting for GPS update'
+                    : locationSharing === 'unsupported'
+                      ? 'Live location is not supported'
+                      : locationSharing === 'insecure'
+                        ? 'GPS requires HTTPS or localhost'
+                        : locationSharing === 'error'
+                          ? 'Unable to update live location'
+                          : 'Starting live monitoring...'}
+            </div>
+          )}
 
           {status === 'present' && displaySlots.length > 0 && (
             <ol className={'mt-5 grid w-full max-w-xs gap-2 ' + (displaySlots.length === 4 ? 'grid-cols-4' : 'grid-cols-2')} aria-label="Clock progress">

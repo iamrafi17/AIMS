@@ -11,6 +11,7 @@ use App\Models\SecurityQuestion;
 use App\Models\Student;
 use App\Models\User;
 use App\Models\UserSecurityQuestion;
+use App\Support\UserId;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -32,10 +33,10 @@ class AuthController extends Controller
         $identifier = trim($request->login);
 
         $user = User::query()
-            ->with('student')
+            ->with(['student', 'supervisorProfile.department.hte'])
             ->where(function ($query) use ($identifier) {
                 $query->where('email', $identifier)
-                    ->orWhere('staff_id', strtoupper($identifier))
+                    ->orWhere('user_id', strtoupper($identifier))
                     ->orWhereHas('student', function ($studentQuery) use ($identifier) {
                         $studentQuery->where('student_id', $identifier);
                     });
@@ -74,14 +75,20 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'staff_id' => $user->staff_id,
-                'phone' => $user->phone,
+                'user_id' => $user->user_id,
+                'contact_number' => $user->contact_number,
                 'address' => $user->address,
                 'role' => $user->role,
                 'college' => $user->college,
                 'program' => $user->program,
                 'avatar' => $user->avatar,
                 'avatar_url' => $user->avatar_url,
+                'requires_password_change' => (bool) $user->requires_password_change,
+                'requires_security_setup' => $user->requiresStaffSecuritySetup(),
+                'requires_profile_setup' => (bool) $user->requires_profile_setup,
+                'profile_completed_at' => $user->profile_completed_at,
+                'onboarding_step' => $user->onboardingStep(),
+                'supervisor_assignment' => $this->supervisorAssignmentPayload($user),
             ],
             'student' => $student ? [
                 'id' => $student->id,
@@ -109,7 +116,7 @@ class AuthController extends Controller
             'gender' => 'required|in:male,female',
             'birth_date' => 'required|date',
             'address' => 'required|string|max:1000',
-            'phone' => 'required|string|max:20',
+            'contact_number' => ['required', 'string', 'digits:11'],
             'email' => 'required|email|unique:users,email',
             'college_id' => 'nullable|exists:colleges,id',
             'program_id' => 'nullable|exists:programs,id',
@@ -118,7 +125,7 @@ class AuthController extends Controller
             'parent_name' => 'required|string|max:255',
             'parent_relationship' => 'required|string|max:50',
             'parent_address' => 'required|string|max:1000',
-            'parent_phone' => 'required|string|max:20',
+            'parent_contact_number' => ['required', 'string', 'digits:11'],
             'hte_id' => 'nullable|exists:htes,id',
             'internship_semester' => 'required|string|max:30',
             'internship_year' => ['required', 'string', 'max:20', 'regex:/^\d{4}-\d{4}$/'],
@@ -160,7 +167,11 @@ class AuthController extends Controller
                 ]);
             }
 
-            if ($request->hte_id && ! HTE::whereKey($request->hte_id)->where('program_id', $enrollment->program_id)->exists()) {
+            if ($request->hte_id && ! HTE::whereKey($request->hte_id)
+                ->whereHas('programs', fn ($query) => $query
+                    ->whereKey($enrollment->program_id)
+                    ->where('hte_programs.is_active', true))
+                ->exists()) {
                 throw ValidationException::withMessages([
                     'hte_id' => ['The selected HTE is not available for your enrolled program.'],
                 ]);
@@ -184,7 +195,7 @@ class AuthController extends Controller
                 'gender' => $request->gender,
                 'birth_date' => $request->birth_date,
                 'address' => $request->address,
-                'phone' => $request->phone,
+                'contact_number' => $request->contact_number,
                 'college_id' => $enrollment->college_id,
                 'program_id' => $enrollment->program_id,
                 'academic_section_id' => $enrollment->academic_section_id,
@@ -194,7 +205,7 @@ class AuthController extends Controller
                 'parent_name' => $request->parent_name,
                 'parent_relationship' => $request->parent_relationship,
                 'parent_address' => $request->parent_address,
-                'parent_phone' => $request->parent_phone,
+                'parent_contact_number' => $request->parent_contact_number,
                 'hte_id' => $request->hte_id,
                 'internship_semester' => $request->internship_semester,
                 'internship_year' => $request->internship_year,
@@ -303,6 +314,7 @@ class AuthController extends Controller
     public function user(Request $request)
     {
         $user = $request->user();
+        $user->loadMissing('supervisorProfile.department.hte');
         $student = $user->student;
 
         return response()->json([
@@ -310,8 +322,8 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'staff_id' => $user->staff_id,
-                'phone' => $user->phone,
+                'user_id' => $user->user_id,
+                'contact_number' => $user->contact_number,
                 'address' => $user->address,
                 'role' => $user->role,
                 'college' => $user->college,
@@ -320,6 +332,12 @@ class AuthController extends Controller
                 'avatar_url' => $user->avatar_url,
                 'is_active' => $user->is_active,
                 'last_login_at' => $user->last_login_at,
+                'requires_password_change' => (bool) $user->requires_password_change,
+                'requires_security_setup' => $user->requiresStaffSecuritySetup(),
+                'requires_profile_setup' => (bool) $user->requires_profile_setup,
+                'profile_completed_at' => $user->profile_completed_at,
+                'onboarding_step' => $user->onboardingStep(),
+                'supervisor_assignment' => $this->supervisorAssignmentPayload($user),
             ],
             'student' => $student ? [
                 'id' => $student->id,
@@ -330,14 +348,14 @@ class AuthController extends Controller
                 'gender' => $student->gender,
                 'birth_date' => $student->birth_date,
                 'address' => $student->address,
-                'phone' => $student->phone,
+                'contact_number' => $student->contact_number,
                 'college' => $student->college,
                 'program' => $student->program,
                 'year_level' => $student->year_level,
                 'section' => $student->section,
                 'parent_name' => $student->parent_name,
                 'parent_address' => $student->parent_address,
-                'parent_phone' => $student->parent_phone,
+                'parent_contact_number' => $student->parent_contact_number,
                 'hte' => $student->hte,
                 'internship_status' => $student->internship_status,
                 'registration_status' => $student->registration_status,
@@ -352,6 +370,202 @@ class AuthController extends Controller
                 ->where('is_active', true)
                 ->orderBy('id')
                 ->get(['id', 'question']),
+        ]);
+    }
+
+    public function completeStaffPasswordSetup(Request $request)
+    {
+        $user = $request->user();
+
+        abort_unless(
+            $user && UserId::isStaffRole($user->role) && $user->requires_password_change,
+            403,
+            'This account does not require a temporary password change.',
+        );
+
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'max:255', 'confirmed'],
+        ]);
+
+        if (Hash::check($validated['password'], $user->password)) {
+            throw ValidationException::withMessages([
+                'password' => ['Your personal password must be different from the temporary password.'],
+            ]);
+        }
+
+        $user->update([
+            'password' => Hash::make($validated['password']),
+            'requires_password_change' => false,
+        ]);
+
+        $currentTokenId = $user->currentAccessToken()?->id;
+        $user->tokens()
+            ->when($currentTokenId, fn ($query) => $query->whereKeyNot($currentTokenId))
+            ->delete();
+
+        ActivityLog::record($user, 'Authentication', 'Replaced the temporary password during first-login setup.');
+
+        return response()->json([
+            'message' => 'Personal password saved. Continue with your security questions.',
+            'onboarding_step' => $user->fresh()->onboardingStep(),
+        ]);
+    }
+
+    public function completeStaffSecurityQuestions(Request $request)
+    {
+        $user = $request->user();
+
+        abort_if($user?->requires_password_change, 409, 'Change the temporary password first.');
+        abort_unless(
+            $user && UserId::isStaffRole($user->role) && $user->requires_security_setup,
+            403,
+            'This account does not require security-question setup.',
+        );
+
+        $validated = $request->validate([
+            'security_questions' => ['required', 'array', 'size:3'],
+            'security_questions.*.security_question_id' => [
+                'required',
+                'integer',
+                'distinct',
+                Rule::exists('security_questions', 'id')->where(
+                    fn ($query) => $query->where('is_active', true),
+                ),
+            ],
+            'security_questions.*.answer' => ['required', 'string', 'min:2', 'max:255'],
+        ]);
+
+        DB::transaction(function () use ($user, $validated): void {
+            $user->securityQuestions()->delete();
+
+            foreach ($validated['security_questions'] as $index => $securityQuestion) {
+                UserSecurityQuestion::create([
+                    'user_id' => $user->id,
+                    'security_question_id' => $securityQuestion['security_question_id'],
+                    'position' => $index + 1,
+                    'answer_hash' => Hash::make(
+                        UserSecurityQuestion::normalizeAnswer($securityQuestion['answer']),
+                    ),
+                ]);
+            }
+
+            $user->update(['requires_security_setup' => false]);
+        });
+
+        ActivityLog::record($user, 'Authentication', 'Completed first-login security questions.');
+
+        return response()->json([
+            'message' => 'Security questions saved. Complete your personal information.',
+            'onboarding_step' => $user->fresh()->onboardingStep(),
+        ]);
+    }
+
+    public function completeStaffProfile(Request $request)
+    {
+        $user = $request->user();
+
+        abort_unless(
+            $user && UserId::isStaffRole($user->role) && $user->requires_profile_setup,
+            403,
+            'This account does not require first-login profile setup.',
+        );
+
+        $validated = $request->validate([
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'contact_number' => ['required', 'string', 'digits:11'],
+            'address' => ['required', 'string', 'max:1000'],
+        ]);
+
+        $user->update([
+            ...$validated,
+            'requires_profile_setup' => false,
+            'profile_completed_at' => now(),
+        ]);
+
+        ActivityLog::record($user, 'Profile', 'Completed required personal information during first login.');
+
+        $user = $user->fresh();
+
+        return response()->json([
+            'message' => 'Profile saved. Continue with account security setup.',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'user_id' => $user->user_id,
+                'contact_number' => $user->contact_number,
+                'address' => $user->address,
+                'role' => $user->role,
+                'college' => $user->college,
+                'program' => $user->program,
+                'avatar' => $user->avatar,
+                'avatar_url' => $user->avatar_url,
+                'requires_password_change' => (bool) $user->requires_password_change,
+                'requires_security_setup' => (bool) $user->requires_security_setup,
+                'requires_profile_setup' => (bool) $user->requires_profile_setup,
+                'profile_completed_at' => $user->profile_completed_at,
+                'onboarding_step' => $user->onboardingStep(),
+                'supervisor_assignment' => $this->supervisorAssignmentPayload($user),
+            ],
+            'onboarding_step' => $user->onboardingStep(),
+        ]);
+    }
+
+    public function completeStaffSecuritySetup(Request $request)
+    {
+        $user = $request->user();
+
+        abort_unless($user?->requiresStaffSecuritySetup(), 403, 'This account does not require first-login security setup.');
+
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'max:255', 'confirmed'],
+            'security_questions' => ['required', 'array', 'size:3'],
+            'security_questions.*.security_question_id' => [
+                'required',
+                'integer',
+                'distinct',
+                Rule::exists('security_questions', 'id')->where(
+                    fn ($query) => $query->where('is_active', true),
+                ),
+            ],
+            'security_questions.*.answer' => ['required', 'string', 'min:2', 'max:255'],
+        ]);
+
+        if (Hash::check($validated['password'], $user->password)) {
+            throw ValidationException::withMessages([
+                'password' => ['Your personal password must be different from the temporary password.'],
+            ]);
+        }
+
+        DB::transaction(function () use ($user, $validated): void {
+            $user->securityQuestions()->delete();
+
+            foreach ($validated['security_questions'] as $index => $securityQuestion) {
+                UserSecurityQuestion::create([
+                    'user_id' => $user->id,
+                    'security_question_id' => $securityQuestion['security_question_id'],
+                    'position' => $index + 1,
+                    'answer_hash' => Hash::make(
+                        UserSecurityQuestion::normalizeAnswer($securityQuestion['answer']),
+                    ),
+                ]);
+            }
+
+            $user->update([
+                'password' => Hash::make($validated['password']),
+                'requires_password_change' => false,
+                'requires_security_setup' => false,
+            ]);
+
+            DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+        });
+
+        ActivityLog::record($user, 'Authentication', 'Completed first-login security setup.');
+
+        return response()->json([
+            'message' => 'Security questions and personal password saved successfully.',
+            'requires_security_setup' => false,
+            'onboarding_step' => $user->fresh()->onboardingStep(),
         ]);
     }
 
@@ -488,7 +702,7 @@ class AuthController extends Controller
         $identifier = trim($identifier);
 
         return User::query()
-            ->where('staff_id', strtoupper($identifier))
+            ->where('user_id', strtoupper($identifier))
             ->orWhereHas('student', fn ($query) => $query->where('student_id', $identifier))
             ->first();
     }
@@ -511,5 +725,26 @@ class AuthController extends Controller
         }
 
         return Hash::check($plainToken, Str::after($record->token, ':'));
+    }
+
+    private function supervisorAssignmentPayload(User $user): ?array
+    {
+        if (! $user->isSupervisor()) {
+            return null;
+        }
+
+        $user->loadMissing('supervisorProfile.department.hte');
+        $profile = $user->supervisorProfile;
+
+        if (! $profile) {
+            return null;
+        }
+
+        return [
+            'id' => $profile->id,
+            'full_name' => $profile->full_name,
+            'department' => $profile->department?->only(['id', 'department_name']),
+            'hte' => $profile->department?->hte?->only(['id', 'name', 'address']),
+        ];
     }
 }

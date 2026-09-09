@@ -65,10 +65,10 @@ final class ProgramAccess
     public static function authorizeTravel(User $user, TravelLog $travel): void
     {
         $programId = self::programId($user);
-        $travel->loadMissing('hte:id,program_id');
+        $travel->loadMissing('hte:id');
 
         abort_unless(
-            (int) $travel->hte?->program_id === $programId
+            $travel->hte?->programs()->whereKey($programId)->wherePivot('is_active', true)->exists()
             && $travel->participants()->where('program_id', $programId)->exists(),
             404,
         );
@@ -83,7 +83,13 @@ final class ProgramAccess
 
     public static function authorizeHte(User $user, HTE $hte): void
     {
-        abort_unless((int) $hte->program_id === self::programId($user), 404);
+        abort_unless(
+            $hte->programs()
+                ->whereKey(self::programId($user))
+                ->wherePivot('is_active', true)
+                ->exists(),
+            404,
+        );
     }
 
     public static function authorizeHoliday(User $user, Holiday $holiday): void

@@ -1,8 +1,8 @@
 export function PageIntro({ eyebrow, title, description, icon: Icon, actions }) {
   return (
     <section className="border-b border-slate-200 pb-5 dark:border-slate-700">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex max-w-3xl items-start gap-3">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 max-w-3xl flex-1 items-start gap-3">
           {Icon && <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#7D001D]/10 text-[#7D001D] dark:bg-rose-400/10 dark:text-rose-300"><Icon className="h-5 w-5" /></div>}
           <div>
             <p className="text-xs font-bold uppercase text-[#7D001D] dark:text-rose-300">{eyebrow}</p>
@@ -10,7 +10,7 @@ export function PageIntro({ eyebrow, title, description, icon: Icon, actions }) 
             <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
           </div>
         </div>
-        {actions && <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:[&>*]:w-auto lg:w-auto">{actions}</div>}
+        {actions && <div className="flex w-full shrink-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:[&>*]:w-auto sm:[&>*]:shrink-0 lg:w-auto lg:flex-nowrap">{actions}</div>}
       </div>
     </section>
   );

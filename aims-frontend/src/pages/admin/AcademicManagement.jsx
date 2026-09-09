@@ -6,6 +6,7 @@ import {
   PlusIcon,
   PowerIcon,
   RectangleGroupIcon,
+  TrashIcon,
   UsersIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
@@ -94,10 +95,102 @@ function AcademicModal({ type, item, colleges, programs, onClose, onSaved }) {
   );
 }
 
+function AcademicActionModal({ type, item, action, onClose, onCompleted }) {
+  const [busy, setBusy] = useState(false);
+  const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+  const deleting = action === 'delete';
+
+  const confirmAction = async () => {
+    setBusy(true);
+
+    try {
+      const plural = type === 'college' ? 'colleges' : type === 'program' ? 'programs' : 'sections';
+      const endpoint = `/admin/academic/${plural}/${item.id}${deleting ? '/permanent' : ''}`;
+      const response = await api.delete(endpoint);
+      toast.success(response.data.message);
+      onCompleted();
+    } catch (error) {
+      toast.error(error.response?.data?.message || `Unable to ${deleting ? 'delete' : 'deactivate'} this ${type}.`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+      onMouseDown={busy ? undefined : onClose}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="academic-action-title"
+        aria-describedby="academic-action-description"
+        onMouseDown={(event) => event.stopPropagation()}
+        className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900"
+      >
+        <div className={`border-b p-6 ${deleting ? 'border-rose-100 bg-rose-50 dark:border-rose-950 dark:bg-rose-950/30' : 'border-amber-100 bg-amber-50 dark:border-amber-950 dark:bg-amber-950/30'}`}>
+          <div className="flex items-start gap-4">
+            <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${deleting ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'}`}>
+              {deleting ? <TrashIcon className="h-6 w-6" /> : <PowerIcon className="h-6 w-6" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className={`text-xs font-black uppercase tracking-widest ${deleting ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300'}`}>{deleting ? 'Permanent delete confirmation' : 'Deactivate confirmation'}</p>
+              <h2 id="academic-action-title" className="mt-1 text-2xl font-black">{deleting ? 'Delete' : 'Deactivate'} {typeLabel}?</h2>
+              <p id="academic-action-description" className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                {deleting
+                  ? `This permanently deletes the ${type}. This action cannot be undone and is blocked when connected records exist.`
+                  : `This removes the ${type} from active academic workflows while preserving connected and historical records.`}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="rounded-xl p-2 text-slate-500 transition hover:bg-white/70 disabled:opacity-40 dark:hover:bg-slate-800"
+              aria-label="Close delete confirmation"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+            <p className="text-xs font-black uppercase tracking-wider text-slate-500">{typeLabel}</p>
+            <p className="mt-1 break-words text-lg font-black text-slate-900 dark:text-white">{item.name}</p>
+            {item.code && <p className="mt-1 text-sm font-bold text-[#7D001D] dark:text-red-300">{item.code}</p>}
+          </div>
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 p-6 dark:border-slate-700 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-2xl border border-slate-200 px-5 py-3 font-bold disabled:opacity-40 dark:border-slate-700"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={confirmAction}
+            disabled={busy}
+            className={`rounded-2xl px-5 py-3 font-black text-white transition disabled:cursor-not-allowed disabled:opacity-40 ${deleting ? 'bg-rose-700 hover:bg-rose-800' : 'bg-amber-600 hover:bg-amber-700'}`}
+          >
+            {busy ? `${deleting ? 'Deleting' : 'Deactivating'}...` : `${deleting ? 'Delete' : 'Deactivate'} ${typeLabel}`}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function AdminAcademic() {
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('colleges');
   const [modal, setModal] = useState(null);
+  const [actionTarget, setActionTarget] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -107,15 +200,6 @@ export default function AdminAcademic() {
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
-
-  const deactivate = async (type, item) => {
-    if (!window.confirm(`Deactivate ${item.name}? Connected and historical records will be preserved.`)) return;
-    try {
-      const plural = type === 'college' ? 'colleges' : type === 'program' ? 'programs' : 'sections';
-      const response = await api.delete(`/admin/academic/${plural}/${item.id}`);
-      toast.success(response.data.message); load();
-    } catch (error) { toast.error(error.response?.data?.message || 'Unable to deactivate this record.'); }
-  };
 
   if (loading && !data) return <LoadingPanel />;
   const records = data?.[tab] || [];
@@ -150,7 +234,7 @@ export default function AdminAcademic() {
                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.code || (item.program ? `${item.program.code} · Year ${item.year_level} · ${item.academic_year}` : item.college?.code)}</td>
                 <td className="px-6 py-4 text-sm font-bold text-slate-700 dark:text-slate-200">{type === 'college' ? `${item.programs_count} programs · ${item.students_count} students` : type === 'program' ? `${item.students_count} students` : item.program?.code}</td>
                 <td className="px-6 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${item.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>{item.is_active ? 'Active' : 'Inactive'}</span></td>
-                <td className="px-6 py-4"><div className="flex justify-end gap-2"><button onClick={() => setModal({ type, item })} className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:text-[#7D001D] dark:border-slate-700 dark:text-slate-300"><PencilSquareIcon className="h-5 w-5" /></button>{item.is_active && <button onClick={() => deactivate(type, item)} className="rounded-xl border border-slate-200 p-2 text-amber-600 dark:border-slate-700" title={`Deactivate ${item.name}`}><PowerIcon className="h-5 w-5" /></button>}</div></td>
+                <td className="px-6 py-4"><div className="flex justify-end gap-2"><button onClick={() => setModal({ type, item })} className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:text-[#7D001D] dark:border-slate-700 dark:text-slate-300"><PencilSquareIcon className="h-5 w-5" /></button>{item.is_active && <button onClick={() => setActionTarget({ type, item, action: 'deactivate' })} className="rounded-xl border border-slate-200 p-2 text-amber-600 dark:border-slate-700" title={`Deactivate ${item.name}`}><PowerIcon className="h-5 w-5" /></button>}<button onClick={() => setActionTarget({ type, item, action: 'delete' })} className="rounded-xl border border-rose-200 p-2 text-rose-700 transition hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30" title={`Permanently delete ${item.name}`} aria-label={`Permanently delete ${item.name}`}><TrashIcon className="h-5 w-5" /></button></div></td>
               </tr>)}
               {records.length === 0 && <tr><td colSpan="5" className="px-6 py-14 text-center text-slate-500">No {tab} have been configured.</td></tr>}
             </tbody>
@@ -158,6 +242,7 @@ export default function AdminAcademic() {
         </div>
       </section>
       {modal && <AcademicModal type={modal.type} item={modal.item} colleges={data?.colleges || []} programs={data?.programs || []} onClose={() => setModal(null)} onSaved={() => { setModal(null); load(); }} />}
+      {actionTarget && <AcademicActionModal type={actionTarget.type} item={actionTarget.item} action={actionTarget.action} onClose={() => setActionTarget(null)} onCompleted={() => { setActionTarget(null); load(); }} />}
     </div>
   );
 }

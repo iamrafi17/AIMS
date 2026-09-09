@@ -18,6 +18,7 @@ import toast from 'react-hot-toast';
 import api from '../../services/api';
 import useAuth from '../../context/useAuth';
 import marsuLogo from '../../assets/marsu-logo.png';
+import ContactNumberInput from '../../components/forms/ContactNumberInput';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500';
 
@@ -73,13 +74,13 @@ function RegisterPage() {
 
   const [formData, setFormData] = useState({
     student_id: '',
-    full_name: '',
     first_name: '',
+    middle_name: '',
     last_name: '',
     gender: '',
     birth_date: '',
     address: '',
-    phone: '',
+    contact_number: '',
     email: '',
     college_id: '',
     program_id: '',
@@ -88,7 +89,7 @@ function RegisterPage() {
     parent_name: '',
     parent_relationship: '',
     parent_address: '',
-    parent_phone: '',
+    parent_contact_number: '',
     hte_id: '',
     internship_semester: '',
     internship_year: '',
@@ -140,7 +141,7 @@ function RegisterPage() {
     setFormData((current) => ({
       ...current,
       ...(name === 'college_id' ? { program_id: '', hte_id: '' } : {}),
-      ...(name === 'student_id' ? { full_name: '', first_name: '', last_name: '', section: '', college_id: '', program_id: '', hte_id: '' } : {}),
+      ...(name === 'student_id' ? { first_name: '', middle_name: '', last_name: '', section: '', college_id: '', program_id: '', hte_id: '' } : {}),
       [name]: type === 'checkbox' ? checked : value,
     }));
     if (name === 'student_id') setEnrollmentVerified(false);
@@ -166,7 +167,6 @@ function RegisterPage() {
       setFormData((current) => ({
         ...current,
         student_id: response.data.student_id,
-        full_name: response.data.full_name,
         first_name: response.data.first_name,
         last_name: response.data.last_name,
         section: response.data.section,
@@ -177,7 +177,7 @@ function RegisterPage() {
       setEnrollmentVerified(true);
       toast.success('Student found in the official student list.');
     } catch (error) {
-      setFormData((current) => ({ ...current, full_name: '', first_name: '', last_name: '', section: '', college_id: '', program_id: '', hte_id: '' }));
+      setFormData((current) => ({ ...current, first_name: '', middle_name: '', last_name: '', section: '', college_id: '', program_id: '', hte_id: '' }));
       toast.error(error.response?.data?.message || 'Your School No. was not found in the official student list.');
     } finally {
       setEnrollmentLoading(false);
@@ -258,9 +258,17 @@ function RegisterPage() {
               <Field label="Email Address">
                 <input type="email" name="email" value={formData.email} onChange={handleChange} required className={inputClass} placeholder="student@marsu.edu.ph" autoComplete="email" />
               </Field>
-              <Field label="Full Name" hint="Provided by your coordinator" className="sm:col-span-2">
-                <input value={formData.full_name} readOnly required className={inputClass} placeholder="Verify your School ID to load your name" />
-              </Field>
+              <div className="grid gap-5 sm:col-span-2 sm:grid-cols-3">
+                <Field label="Last Name" hint="Verified">
+                  <input value={formData.last_name} readOnly required className={inputClass} placeholder="Verify School No." autoComplete="family-name" />
+                </Field>
+                <Field label="First Name" hint="Verified">
+                  <input value={formData.first_name} readOnly required className={inputClass} placeholder="Verify School No." autoComplete="given-name" />
+                </Field>
+                <Field label="Middle Name" hint="Optional">
+                  <input name="middle_name" value={formData.middle_name} onChange={handleChange} className={inputClass} maxLength={100} placeholder="Type middle name" autoComplete="additional-name" />
+                </Field>
+              </div>
               <Field label="Gender">
                 <select name="gender" value={formData.gender} onChange={handleChange} required className={inputClass}>
                   <option value="">Select gender</option>
@@ -272,7 +280,7 @@ function RegisterPage() {
                 <input type="date" name="birth_date" value={formData.birth_date} onChange={handleChange} required className={inputClass} autoComplete="bday" />
               </Field>
               <Field label="Contact Number">
-                <input type="tel" name="phone" value={formData.phone} onChange={handleChange} required className={inputClass} placeholder="09XX XXX XXXX" autoComplete="tel" />
+                <ContactNumberInput value={formData.contact_number} onValueChange={(contact_number) => setFormData((current) => ({ ...current, contact_number }))} required className={inputClass} placeholder="09XX XXX XXXX" autoComplete="tel" />
               </Field>
               <Field label="Complete Address" className="sm:col-span-2">
                 <textarea name="address" value={formData.address} onChange={handleChange} required rows={3} className={inputClass} placeholder="House number, street, barangay, municipality, province" autoComplete="street-address" />
@@ -328,7 +336,7 @@ function RegisterPage() {
                 </select>
               </Field>
               <Field label="Contact Number">
-                <input type="tel" name="parent_phone" value={formData.parent_phone} onChange={handleChange} required className={inputClass} placeholder="09XX XXX XXXX" />
+                <ContactNumberInput value={formData.parent_contact_number} onValueChange={(parent_contact_number) => setFormData((current) => ({ ...current, parent_contact_number }))} required className={inputClass} placeholder="09XX XXX XXXX" />
               </Field>
               <Field label="Complete Address" className="sm:col-span-2">
                 <textarea name="parent_address" value={formData.parent_address} onChange={handleChange} required rows={3} className={inputClass} placeholder="Parent or guardian’s complete address" />
@@ -464,7 +472,7 @@ function RegisterPage() {
               <h3 className="font-black text-[#690016]">Registration summary</h3>
               <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
                 {[
-                  ['Student', `${formData.first_name} ${formData.last_name}`.trim() || 'Not provided'],
+                  ['Student', [formData.last_name ? `${formData.last_name},` : '', formData.first_name, formData.middle_name].filter(Boolean).join(' ') || 'Not provided'],
                   ['Student ID', formData.student_id || 'Not provided'],
                   ['College', selectedCollege?.name || 'Not selected'],
                   ['Program', selectedProgram?.name || 'Not selected'],

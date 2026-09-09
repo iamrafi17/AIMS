@@ -21,8 +21,12 @@ export function AuthProvider({ children }) {
       const response = await api.get('/user');
       setUser(response.data.user);
       setStudent(response.data.student);
+      return response.data;
     } catch {
       localStorage.removeItem('token');
+      setUser(null);
+      setStudent(null);
+      return null;
     } finally {
       setLoading(false);
     }

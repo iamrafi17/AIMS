@@ -11,6 +11,7 @@ import RoleBasedRoute from './routes/RoleBasedRoute';
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
+const StaffSecuritySetupPage = lazy(() => import('./pages/auth/StaffSecuritySetupPage'));
 const LandingPage = lazy(() => import('./pages/public/LandingPage'));
 
 // Layout
@@ -106,6 +107,8 @@ function App() {
 
             {/* Protected Routes */}
             <Route element={<PrivateRoute />}>
+              <Route path="/staff/onboarding" element={<StaffSecuritySetupPage />} />
+              <Route path="/staff/security-setup" element={<Navigate to="/staff/onboarding" replace />} />
               <Route element={<DashboardLayout />}>
                 <Route path="/my-activity" element={<MyActivity />} />
 

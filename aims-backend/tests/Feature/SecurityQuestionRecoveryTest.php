@@ -90,7 +90,7 @@ class SecurityQuestionRecoveryTest extends TestCase
 
         $legacyUser = User::factory()->create(['role' => 'coordinator']);
 
-        $legacy = $this->postJson('/api/forgot-password', ['user_id' => $legacyUser->staff_id])
+        $legacy = $this->postJson('/api/forgot-password', ['user_id' => $legacyUser->user_id])
             ->assertOk()
             ->assertJsonCount(3, 'questions')
             ->assertJsonStructure(['challenge_token', 'questions'])
@@ -245,7 +245,7 @@ class SecurityQuestionRecoveryTest extends TestCase
             'gender' => 'female',
             'birth_date' => '2002-01-01',
             'address' => 'Santa Cruz, Marinduque',
-            'phone' => '09171234567',
+            'contact_number' => '09171234567',
             'email' => strtolower($studentId).'@student.example.com',
             'college_id' => $college->id,
             'program_id' => $program->id,
@@ -254,7 +254,7 @@ class SecurityQuestionRecoveryTest extends TestCase
             'parent_name' => 'Test Parent',
             'parent_relationship' => 'Mother',
             'parent_address' => 'Santa Cruz, Marinduque',
-            'parent_phone' => '09179876543',
+            'parent_contact_number' => '09179876543',
             'hte_id' => null,
             'internship_semester' => 'First Semester',
             'internship_year' => '2026-2027',

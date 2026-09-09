@@ -48,12 +48,12 @@ class ProfileManagementTest extends TestCase
 
         $this->putJson('/api/profile/contact', [
             'email' => 'maria.reyes@example.com',
-            'phone' => '09171234567',
+            'contact_number' => '09171234567',
             'address' => 'Santa Cruz, Marinduque',
         ])->assertOk()
             ->assertJsonPath('message', 'Contact information updated successfully.')
             ->assertJsonPath('email', 'maria.reyes@example.com')
-            ->assertJsonPath('phone', '09171234567')
+            ->assertJsonPath('contact_number', '09171234567')
             ->assertJsonPath('address', 'Santa Cruz, Marinduque');
 
         $this->assertDatabaseHas('users', [
@@ -62,7 +62,7 @@ class ProfileManagementTest extends TestCase
         ]);
         $this->assertDatabaseHas('students', [
             'id' => $student->id,
-            'phone' => '09171234567',
+            'contact_number' => '09171234567',
             'address' => 'Santa Cruz, Marinduque',
         ]);
     }
@@ -107,18 +107,18 @@ class ProfileManagementTest extends TestCase
 
         $this->putJson('/api/profile/contact', [
             'email' => 'coordinator@marsu.edu.ph',
-            'phone' => '09181234567',
+            'contact_number' => '09181234567',
             'address' => 'MarSU Santa Cruz Campus',
         ])->assertOk()
             ->assertJsonPath('email', 'coordinator@marsu.edu.ph')
-            ->assertJsonPath('phone', '09181234567')
+            ->assertJsonPath('contact_number', '09181234567')
             ->assertJsonPath('address', 'MarSU Santa Cruz Campus');
 
         $this->assertDatabaseHas('users', [
             'id' => $coordinator->id,
             'name' => 'Ralph Joseph Grimaldo',
             'email' => 'coordinator@marsu.edu.ph',
-            'phone' => '09181234567',
+            'contact_number' => '09181234567',
             'address' => 'MarSU Santa Cruz Campus',
         ]);
     }
@@ -139,7 +139,7 @@ class ProfileManagementTest extends TestCase
             'gender' => 'male',
             'birth_date' => '2002-01-15',
             'address' => 'Boac, Marinduque',
-            'phone' => '09170000000',
+            'contact_number' => '09170000000',
             'section' => 'BSIT 4A',
         ]);
 

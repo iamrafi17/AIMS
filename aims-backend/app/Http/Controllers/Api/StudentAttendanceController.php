@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Student;
+use App\Models\StudentLiveLocation;
 use App\Support\AttendanceHours;
 use App\Support\ReverseGeocoder;
 use Carbon\Carbon;
@@ -44,6 +45,68 @@ class StudentAttendanceController extends Controller
             ->first();
 
         return response()->json($this->quickClockPayload($attendance));
+    }
+
+    public function shareLiveLocation(Request $request)
+    {
+        $validated = $request->validate([
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
+            'accuracy' => ['nullable', 'numeric', 'between:0,10000'],
+        ]);
+
+        $student = $request->user()->student;
+        abort_unless($student, 404, 'Student profile not found.');
+
+        $attendance = Attendance::where('student_id', $student->id)
+            ->whereDate('date', now()->toDateString())
+            ->first();
+
+        abort_unless($attendance?->status === 'present', 422, 'Live monitoring starts only after a successful Time In.');
+        $nextSlot = collect($this->slotSequence($attendance->session_type))
+            ->first(fn (string $slot) => $attendance->{$slot} === null);
+        abort_unless($nextSlot && str_ends_with($nextSlot, 'time_out'), 422, 'There is no active timed-in session to monitor.');
+
+        $distance = null;
+        $outsideGeofence = false;
+        $geofenceRadius = null;
+        if (
+            $attendance->work_mode === 'wfo'
+            && $student->hte
+            && $student->hte->geofence_enabled
+            && $student->hte->latitude !== null
+            && $student->hte->longitude !== null
+            && $student->hte->geofence_radius > 0
+        ) {
+            $geofenceRadius = (int) $student->hte->geofence_radius;
+            $distance = (int) round($this->calculateDistance(
+                (float) $validated['latitude'],
+                (float) $validated['longitude'],
+                (float) $student->hte->latitude,
+                (float) $student->hte->longitude,
+            ));
+            $outsideGeofence = $distance > $geofenceRadius;
+        }
+
+        $location = StudentLiveLocation::updateOrCreate(
+            ['student_id' => $student->id],
+            [
+                'latitude' => (float) $validated['latitude'],
+                'longitude' => (float) $validated['longitude'],
+                'accuracy' => isset($validated['accuracy']) ? (float) $validated['accuracy'] : null,
+                'captured_at' => now(),
+            ],
+        );
+
+        return response()->json([
+            'message' => $outsideGeofence
+                ? "Warning: you are {$distance} meters from the HTE and outside the {$geofenceRadius}-meter allowed radius. Return closer to your HTE."
+                : 'Live timed-in location updated.',
+            'captured_at' => $location->captured_at->toIso8601String(),
+            'outside_geofence' => $outsideGeofence,
+            'distance_from_hte' => $distance,
+            'geofence_radius' => $geofenceRadius,
+        ]);
     }
 
     public function workspace(Request $request)
@@ -249,6 +312,7 @@ class StudentAttendanceController extends Controller
             'session_type' => 'required_if:status,present|nullable|in:full_day,am_half,pm_half',
             'latitude' => 'required_if:status,present|nullable|numeric|between:-90,90',
             'longitude' => 'required_if:status,present|nullable|numeric|between:-180,180',
+            'accuracy' => 'nullable|numeric|between:0,10000',
             'activity' => 'nullable|string|max:2000',
             'client_time' => 'nullable|date',
         ]);
@@ -286,6 +350,7 @@ class StudentAttendanceController extends Controller
                 'work_mode' => 'wfo',
                 'session_type' => 'full_day',
             ]);
+            StudentLiveLocation::where('student_id', $student->id)->delete();
 
             return response()->json([
                 'message' => $validated['status'] === 'absent'
@@ -411,6 +476,20 @@ class StudentAttendanceController extends Controller
 
             $attendance->update($updates);
             $attendance->refresh();
+
+            if (str_ends_with($nextSlot, 'time_in')) {
+                StudentLiveLocation::updateOrCreate(
+                    ['student_id' => $student->id],
+                    [
+                        'latitude' => $location['latitude'],
+                        'longitude' => $location['longitude'],
+                        'accuracy' => $validated['accuracy'] ?? null,
+                        'captured_at' => now(),
+                    ],
+                );
+            } else {
+                StudentLiveLocation::where('student_id', $student->id)->delete();
+            }
 
             return [
                 'attendance' => $attendance,

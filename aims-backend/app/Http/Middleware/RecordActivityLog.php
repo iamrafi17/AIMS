@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\CoordinatorTravelController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramHeadDocumentController;
 use App\Http\Controllers\Api\ProgramHeadTravelController;
+use App\Http\Controllers\Api\ReportTemplateController;
 use App\Http\Controllers\Api\StudentAttendanceController;
 use App\Http\Controllers\Api\StudentRequirementController;
 use App\Http\Controllers\Api\StudentTravelController;
@@ -92,6 +93,12 @@ class RecordActivityLog
             CoordinatorTravelController::class.'@generateReport' => ['Travel Report', 'Generated a travel report.'],
             CoordinatorTravelController::class.'@updateReport' => ['Travel Report', 'Revised a travel report.'],
             CoordinatorTravelController::class.'@submitReport' => ['Travel Report', 'Submitted a travel report to the Program Head.'],
+            ReportTemplateController::class.'@store' => ['Report Template', 'Uploaded a report template.'],
+            ReportTemplateController::class.'@validateTemplate' => ['Report Template', 'Validated a report template.'],
+            ReportTemplateController::class.'@activate' => ['Report Template', 'Activated a report template.'],
+            ReportTemplateController::class.'@deactivate' => ['Report Template', 'Deactivated a report template.'],
+            ReportTemplateController::class.'@destroy' => ['Report Template', 'Deleted an inactive report template.'],
+            ReportTemplateController::class.'@generatePdf' => ['Report', 'Generated a report using the active template.'],
 
             ProgramHeadDocumentController::class.'@downloadRequirement',
             ProgramHeadDocumentController::class.'@downloadMoa' => ['Document Access', 'Downloaded a protected document.'],
@@ -125,6 +132,7 @@ class RecordActivityLog
             AdminUserController::class.'@store' => ['User Management', 'Created a user account.'],
             AdminUserController::class.'@update' => ['User Management', 'Updated a user account.'],
             AdminUserController::class.'@destroy' => ['User Management', 'Deactivated a user account.'],
+            AdminUserController::class.'@permanentDestroy' => ['User Management', 'Permanently deleted a user account.'],
             AdminUserController::class.'@updateRole' => ['Roles and Permissions', 'Updated roles or permissions.'],
             AdminUserController::class.'@toggleStatus' => $this->userStatusActivity($request),
             AdminUserController::class.'@resetPassword' => ['User Management', 'Reset a user account password.'],
@@ -138,6 +146,9 @@ class RecordActivityLog
             AdminSystemController::class.'@storeSection',
             AdminSystemController::class.'@updateSection',
             AdminSystemController::class.'@destroySection' => ['Academic Settings', 'Updated academic settings.'],
+            AdminSystemController::class.'@permanentDestroyCollege',
+            AdminSystemController::class.'@permanentDestroyProgram',
+            AdminSystemController::class.'@permanentDestroySection' => ['Academic Settings', 'Permanently deleted an academic record.'],
             AdminSystemController::class.'@reports' => ['Report', 'Generated a report.'],
 
             default => null,

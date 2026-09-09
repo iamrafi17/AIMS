@@ -14,13 +14,17 @@ use App\Http\Controllers\Api\CoordinatorReportController;
 use App\Http\Controllers\Api\CoordinatorRequirementController;
 use App\Http\Controllers\Api\CoordinatorStudentController;
 use App\Http\Controllers\Api\CoordinatorTravelController;
+use App\Http\Controllers\Api\DailyJournalTemplateController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramHeadDashboardController;
+use App\Http\Controllers\Api\ProgramHeadDeploymentController;
 use App\Http\Controllers\Api\ProgramHeadDocumentController;
 use App\Http\Controllers\Api\ProgramHeadStudentController;
 use App\Http\Controllers\Api\ProgramHeadTravelController;
 use App\Http\Controllers\Api\PublicPortalController;
+use App\Http\Controllers\Api\ReportExportController;
+use App\Http\Controllers\Api\ReportTemplateController;
 use App\Http\Controllers\Api\StudentAttendanceController;
 use App\Http\Controllers\Api\StudentDashboardController;
 use App\Http\Controllers\Api\StudentRequirementController;
@@ -52,6 +56,10 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
     // User routes
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
+    Route::post('/staff/password-setup', [AuthController::class, 'completeStaffPasswordSetup']);
+    Route::post('/staff/security-questions', [AuthController::class, 'completeStaffSecurityQuestions']);
+    Route::post('/staff/profile-setup', [AuthController::class, 'completeStaffProfile']);
+    Route::post('/staff/security-setup', [AuthController::class, 'completeStaffSecuritySetup']);
     Route::get('/activity-logs', [ActivityLogController::class, 'index']);
     Route::put('/profile', [ProfileController::class, 'update']);
     Route::put('/profile/account', [ProfileController::class, 'updateAccount']);
@@ -70,6 +78,19 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
     Route::put('/notifications/read-all', [NotificationController::class, 'readAll']);
     Route::put('/notifications/{notification}/read', [NotificationController::class, 'read']);
 
+    // Report Template Management (role-aware access and program scoping are enforced by the controller)
+    Route::get('/report-templates', [ReportTemplateController::class, 'index']);
+    Route::post('/report-templates', [ReportTemplateController::class, 'store']);
+    Route::get('/report-templates/active/preview', [ReportTemplateController::class, 'activePreview']);
+    Route::get('/report-templates/active/pdf', [ReportTemplateController::class, 'generatePdf']);
+    Route::get('/report-templates/{reportTemplate}/preview', [ReportTemplateController::class, 'preview']);
+    Route::get('/report-templates/{reportTemplate}/download', [ReportTemplateController::class, 'download']);
+    Route::post('/report-templates/{reportTemplate}/validate', [ReportTemplateController::class, 'validateTemplate']);
+    Route::post('/report-templates/{reportTemplate}/activate', [ReportTemplateController::class, 'activate']);
+    Route::post('/report-templates/{reportTemplate}/deactivate', [ReportTemplateController::class, 'deactivate']);
+    Route::delete('/report-templates/{reportTemplate}', [ReportTemplateController::class, 'destroy']);
+    Route::get('/generated-reports/{generatedReport}/download', [ReportTemplateController::class, 'downloadGenerated']);
+
     // Student Routes
     Route::middleware('role:student')->prefix('student')->group(function () {
         Route::get('/dashboard', [StudentDashboardController::class, 'index']);
@@ -78,6 +99,7 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::post('/attendance/entry', [StudentAttendanceController::class, 'saveEntry']);
         Route::get('/attendance/quick-clock', [StudentAttendanceController::class, 'quickClock']);
         Route::post('/attendance/quick-clock', [StudentAttendanceController::class, 'smartLog']);
+        Route::post('/attendance/live-location', [StudentAttendanceController::class, 'shareLiveLocation']);
         Route::post('/attendance/clock-in', [StudentAttendanceController::class, 'clockIn']);
         Route::post('/attendance/clock-out', [StudentAttendanceController::class, 'clockOut']);
         Route::get('/requirements', [StudentRequirementController::class, 'index']);
@@ -94,15 +116,18 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
     });
 
     // Coordinator Routes
-    Route::middleware('role:coordinator')->prefix('coordinator')->group(function () {
+    Route::middleware(['role:coordinator', 'staff.setup'])->prefix('coordinator')->group(function () {
         Route::get('/dashboard', [CoordinatorDashboardController::class, 'index']);
         Route::get('/reports', [CoordinatorReportController::class, 'index']);
+        Route::get('/reports/preview', [ReportExportController::class, 'coordinatorPreview']);
+        Route::get('/reports/export/{format}', [ReportExportController::class, 'coordinator'])->whereIn('format', ['csv', 'xlsx', 'pdf']);
         Route::get('/attendance', [CoordinatorAttendanceController::class, 'index']);
+        Route::get('/attendance/live-locations', [CoordinatorAttendanceController::class, 'liveLocations']);
         Route::get('/attendance/{attendance}', [CoordinatorAttendanceController::class, 'show']);
-        Route::put('/attendance/{attendance}', [CoordinatorAttendanceController::class, 'update']);
-        Route::put('/attendance/{attendance}/verify', [CoordinatorAttendanceController::class, 'verify']);
+        Route::get('/attendance/{attendance}/journal-preview', [DailyJournalTemplateController::class, 'preview']);
         Route::post('/attendance/{attendance}/journal-review', [CoordinatorAttendanceController::class, 'reviewJournal']);
         Route::get('/htes', [CoordinatorHTEController::class, 'index']);
+        Route::get('/htes/search', [CoordinatorHTEController::class, 'search']);
         Route::post('/htes', [CoordinatorHTEController::class, 'store']);
         Route::put('/htes/deployments/{student}', [CoordinatorHTEController::class, 'deploy']);
         Route::post('/htes/holidays', [CoordinatorHTEController::class, 'storeHoliday']);
@@ -113,6 +138,8 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::get('/htes/moas/{moa}/download', [CoordinatorHTEController::class, 'downloadMoa']);
         Route::get('/htes/{hte}/batch-schedules', [CoordinatorHTEController::class, 'batchSchedules']);
         Route::put('/htes/{hte}/batch-schedules/{academicSection}', [CoordinatorHTEController::class, 'saveBatchSchedule']);
+        Route::post('/htes/{hte}/link', [CoordinatorHTEController::class, 'link']);
+        Route::post('/htes/{hte}/departments', [CoordinatorHTEController::class, 'storeDepartment']);
         Route::get('/htes/{hte}', [CoordinatorHTEController::class, 'show']);
         Route::put('/htes/{hte}', [CoordinatorHTEController::class, 'update']);
         Route::delete('/htes/{hte}', [CoordinatorHTEController::class, 'destroy']);
@@ -140,8 +167,12 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
     });
 
     // Program Head Routes
-    Route::middleware('role:program_head')->prefix('program-head')->group(function () {
+    Route::middleware(['role:program_head', 'staff.setup'])->prefix('program-head')->group(function () {
         Route::get('/dashboard', [ProgramHeadDashboardController::class, 'index']);
+        Route::get('/reports', [ProgramHeadDashboardController::class, 'index']);
+        Route::get('/reports/preview', [ReportExportController::class, 'programHeadPreview']);
+        Route::get('/reports/export/{format}', [ReportExportController::class, 'programHead'])->whereIn('format', ['csv', 'xlsx', 'pdf']);
+        Route::put('/deployments/{approval}/review', [ProgramHeadDeploymentController::class, 'review']);
         Route::get('/documents', [ProgramHeadDocumentController::class, 'index']);
         Route::post('/documents/requirements/{requirement}/review', [ProgramHeadDocumentController::class, 'reviewRequirement']);
         Route::get('/documents/requirements/{requirement}/download', [ProgramHeadDocumentController::class, 'downloadRequirement']);
@@ -156,7 +187,9 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
     // Admin Routes
     Route::middleware('role:admin')->prefix('admin')->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index']);
+        Route::get('/supervisor-assignments', [AdminUserController::class, 'supervisorAssignments']);
         Route::apiResource('users', AdminUserController::class);
+        Route::delete('/users/{user}/permanent', [AdminUserController::class, 'permanentDestroy']);
         Route::put('/users/{user}/role', [AdminUserController::class, 'updateRole']);
         Route::put('/users/{user}/status', [AdminUserController::class, 'toggleStatus']);
         Route::post('/users/{user}/reset-password', [AdminUserController::class, 'resetPassword']);
@@ -164,19 +197,22 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::post('/academic/colleges', [AdminSystemController::class, 'storeCollege']);
         Route::put('/academic/colleges/{college}', [AdminSystemController::class, 'updateCollege']);
         Route::delete('/academic/colleges/{college}', [AdminSystemController::class, 'destroyCollege']);
+        Route::delete('/academic/colleges/{college}/permanent', [AdminSystemController::class, 'permanentDestroyCollege']);
         Route::post('/academic/programs', [AdminSystemController::class, 'storeProgram']);
         Route::put('/academic/programs/{program}', [AdminSystemController::class, 'updateProgram']);
         Route::delete('/academic/programs/{program}', [AdminSystemController::class, 'destroyProgram']);
+        Route::delete('/academic/programs/{program}/permanent', [AdminSystemController::class, 'permanentDestroyProgram']);
         Route::post('/academic/sections', [AdminSystemController::class, 'storeSection']);
         Route::put('/academic/sections/{section}', [AdminSystemController::class, 'updateSection']);
         Route::delete('/academic/sections/{section}', [AdminSystemController::class, 'destroySection']);
+        Route::delete('/academic/sections/{section}/permanent', [AdminSystemController::class, 'permanentDestroySection']);
         Route::get('/settings', [AdminSystemController::class, 'settings']);
         Route::put('/settings', [AdminSystemController::class, 'updateSettings']);
         Route::get('/reports', [AdminSystemController::class, 'reports']);
     });
 
     // Supervisor Routes
-    Route::middleware('role:supervisor')->prefix('supervisor')->group(function () {
+    Route::middleware(['role:supervisor', 'staff.setup'])->prefix('supervisor')->group(function () {
         Route::get('/dashboard', [SupervisorDashboardController::class, 'index']);
         Route::get('/progress', [SupervisorManagementController::class, 'progress']);
         Route::post('/tasks', [SupervisorManagementController::class, 'storeTask']);
@@ -188,8 +224,11 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
     });
 
     // VPAA Routes
-    Route::middleware('role:vpaa')->prefix('vpaa')->group(function () {
+    Route::middleware(['role:vpaa', 'staff.setup'])->prefix('vpaa')->group(function () {
         Route::get('/dashboard', [VPAADashboardController::class, 'index']);
+        Route::get('/reports', [VPAADashboardController::class, 'index']);
+        Route::get('/reports/preview', [ReportExportController::class, 'vpaaPreview']);
+        Route::get('/reports/export/{format}', [ReportExportController::class, 'vpaa'])->whereIn('format', ['csv', 'xlsx', 'pdf']);
         Route::get('/approvals', [VPAAApprovalController::class, 'index']);
         Route::put('/approvals/{approval}', [VPAAApprovalController::class, 'review']);
         Route::get('/approvals/{approval}/download', [VPAAApprovalController::class, 'download']);

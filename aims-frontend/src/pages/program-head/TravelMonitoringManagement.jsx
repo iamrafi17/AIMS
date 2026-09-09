@@ -3,12 +3,12 @@ import L from "leaflet";
 import {
   MapContainer,
   Marker,
-  Polyline,
   Popup,
   TileLayer,
   useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import TravelRoadRoute from "../../components/maps/TravelRoadRoute";
 import {
   FiCheck,
   FiClock,
@@ -88,7 +88,8 @@ function RouteMap({ points }) {
       </div>
     );
   return (
-    <div className="h-[400px] overflow-hidden rounded-3xl">
+    <div className="relative h-[400px] overflow-hidden rounded-3xl">
+      {positions.length > 1 && <span className="pointer-events-none absolute right-3 top-3 z-[500] rounded-full bg-white/95 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-red-700 shadow-md backdrop-blur dark:bg-slate-900/95 dark:text-red-300">Estimated road route</span>}
       <MapContainer
         center={positions[0]}
         zoom={17}
@@ -101,12 +102,7 @@ function RouteMap({ points }) {
           maxZoom={19}
         />
         <FitRoute positions={positions} />
-        {positions.length > 1 && (
-          <Polyline
-            positions={positions}
-            pathOptions={{ color: "#7D001D", weight: 5 }}
-          />
-        )}
+        <TravelRoadRoute positions={positions} />
         {points.map((point) => (
           <Marker
             key={point.id}

@@ -126,7 +126,7 @@ export default function ForgotPasswordPage() {
     identify: {
       icon: UserCircleIcon,
       title: 'Forgot your password?',
-      description: 'Enter your existing Student ID or Staff ID to continue.',
+      description: 'Enter your existing Student ID or User ID to continue.',
     },
     questions: {
       icon: QuestionMarkCircleIcon,
@@ -194,7 +194,7 @@ export default function ForgotPasswordPage() {
                     value={userId}
                     onChange={(event) => setUserId(event.target.value)}
                     className={`${inputClass} pl-12`}
-                    placeholder="Student ID or Staff ID"
+                    placeholder="Student ID or User ID"
                     autoComplete="username"
                   />
                 </div>

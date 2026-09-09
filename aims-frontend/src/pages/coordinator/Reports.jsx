@@ -6,26 +6,21 @@ import {
   FiCalendar,
   FiCheckCircle,
   FiClock,
-  FiDownload,
   FiFileText,
-  FiFilter,
   FiMapPin,
   FiPieChart,
-  FiPrinter,
-  FiSearch,
   FiTrendingUp,
   FiUserCheck,
   FiUsers,
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
+import ReportTemplateControls from '../../components/reports/ReportTemplateControls';
 import api from '../../services/api';
 
 const reportModules = [
-  { id: 'attendance', label: 'Attendance Reports', shortLabel: 'Attendance', icon: FiClock, description: 'Daily attendance, rendered hours, and work arrangements' },
-  { id: 'journals', label: 'Journal Reports', shortLabel: 'Journals', icon: FiBookOpen, description: 'Submission completion, reviews, and daily accomplishment reports' },
-  { id: 'students', label: 'Student Reports', shortLabel: 'Students', icon: FiUsers, description: 'Intern progress, requirements, and placement status' },
-  { id: 'deployments', label: 'HTE Deployment Reports', shortLabel: 'HTE Deployment', icon: FiBriefcase, description: 'Partner deployment, capacity, and MOA coverage' },
-  { id: 'travel', label: 'Travel Reports', shortLabel: 'Travel', icon: FiMapPin, description: 'Travel sessions, route completion, and safety compliance' },
+  { id: 'student_internship', label: 'Student Internship Report', shortLabel: 'Student Internship', icon: FiUsers, description: 'Student information, HTE assignment, attendance summary, requirements, hours, and internship progress' },
+  { id: 'hte_deployment', label: 'Host Training Establishment Report', shortLabel: 'HTE Report', icon: FiBriefcase, description: 'Host training establishments, departments, student counts, work schedules, and supervisors' },
+  { id: 'travel_monitoring', label: 'Travel Monitoring Report', shortLabel: 'Travel Monitoring', icon: FiMapPin, description: 'Travel participants, route evidence, checkpoints, remarks, and validation status' },
 ];
 
 const statusStyles = {
@@ -40,12 +35,14 @@ const statusStyles = {
   complete: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
   'on-track': 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
   attention: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300',
+  approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  rejected: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300',
+  not_submitted: 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-gray-300',
+  near_completion: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
   Valid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
   Expiring: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
   Pending: 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-gray-300',
 };
-
-const inputClass = 'rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-600 outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/5 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200';
 
 function StatusBadge({ status }) {
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${statusStyles[status] || statusStyles.pending}`}>{String(status).replace('-', ' ')}</span>;
@@ -99,61 +96,27 @@ function Donut({ value, label, color = '#7D001D' }) {
   );
 }
 
-function ReportFilters({ dateFrom, dateTo, assignedProgram, sectionId, sections, search, onDateFrom, onDateTo, onSection, onSearch }) {
-  return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 print:hidden">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-        <div className="flex items-center gap-2 text-xs font-black text-slate-500 dark:text-gray-300"><FiFilter className="text-[#7D001D] dark:text-rose-300" /> Report filters</div>
-        <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <label className="relative"><FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search report records..." className={`${inputClass} w-full pl-9`} /></label>
-          <div aria-label="Assigned program" className={`${inputClass} flex min-w-0 items-center justify-between gap-3 bg-slate-50 dark:bg-gray-900`}>
-            <span className="shrink-0 text-[9px] font-black uppercase tracking-wider text-slate-400">Assigned program</span>
-            <span className="truncate text-right text-slate-700 dark:text-gray-100">{assignedProgram || 'Loading...'}</span>
-          </div>
-          <select aria-label="Report section" value={sectionId} onChange={(event) => onSection(event.target.value)} className={inputClass}><option value="">All sections</option>{sections.map((section) => <option key={section.id} value={section.id}>{section.name} · Year {section.year_level} · AY {section.academic_year}</option>)}</select>
-          <label className="flex items-center gap-2"><span className="shrink-0 text-[10px] font-black uppercase text-slate-400">From</span><input type="date" value={dateFrom} onChange={(event) => onDateFrom(event.target.value)} className={`${inputClass} min-w-0 flex-1`} /></label>
-          <label className="flex items-center gap-2"><span className="shrink-0 text-[10px] font-black uppercase text-slate-400">To</span><input type="date" value={dateTo} onChange={(event) => onDateTo(event.target.value)} className={`${inputClass} min-w-0 flex-1`} /></label>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function CoordinatorReports() {
-  const [activeReport, setActiveReport] = useState('attendance');
-  const [dateFrom, setDateFrom] = useState(() => {
-    const date = new Date();
-    date.setDate(1);
-    return date.toISOString().slice(0, 10);
-  });
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
-  const [search, setSearch] = useState('');
-  const [sectionId, setSectionId] = useState('');
-  const [records, setRecords] = useState({ program: null, sections: [], selected_section: null, attendance: [], journals: [], students: [], deployments: [], travel: [] });
+  const [activeReport, setActiveReport] = useState('student_internship');
+  const [records, setRecords] = useState({ program: null, sections: [], selected_section: null, attendance: [], journals: [], requirements: [], students: [], deployments: [], travel: [] });
 
   useEffect(() => {
     let active = true;
-    api.get('/coordinator/reports', { params: { date_from: dateFrom, date_to: dateTo, academic_section_id: sectionId || undefined } })
+    api.get('/coordinator/reports')
       .then((response) => { if (active) setRecords(response.data); })
       .catch(() => { if (active) toast.error('Unable to load coordinator report data.'); });
     return () => { active = false; };
-  }, [dateFrom, dateTo, sectionId]);
+  }, []);
 
   const activeModule = reportModules.find((module) => module.id === activeReport);
-  const normalizedSearch = search.trim().toLowerCase();
-  const matchesCommon = (record, fields) => {
-    return !normalizedSearch || fields.some((field) => String(record[field] || '').toLowerCase().includes(normalizedSearch));
-  };
-
-  const filteredAttendance = records.attendance.filter((row) => matchesCommon(row, ['student', 'studentId', 'hte', 'status']));
-  const filteredJournals = records.journals.filter((row) => matchesCommon(row, ['student', 'studentId', 'status']));
-  const filteredStudents = records.students.filter((row) => matchesCommon(row, ['name', 'studentId', 'hte', 'status']));
-  const filteredDeployments = records.deployments.filter((row) => matchesCommon(row, ['hte', 'sector', 'location', 'moa']));
-  const filteredTravel = records.travel.filter((row) => matchesCommon(row, ['id', 'student', 'studentId', 'destination', 'status']));
+  const filteredAttendance = records.attendance;
+  const filteredJournals = records.journals;
+  const filteredRequirements = records.requirements || [];
+  const filteredStudents = records.students;
+  const filteredDeployments = records.deployments;
+  const filteredTravel = records.travel;
   const assignedProgram = records.program ? `${records.program.code} · ${records.program.name}` : '';
-  const sectionLabel = records.selected_section
-    ? `${records.selected_section.name} · Year ${records.selected_section.year_level} · AY ${records.selected_section.academic_year}`
-    : 'All sections';
+  const sectionLabel = 'All sections';
 
   const sum = (items, key) => items.reduce((total, item) => total + (Number(item[key]) || 0), 0);
   const percent = (part, total) => total > 0 ? Math.round((part / total) * 100) : 0;
@@ -201,15 +164,7 @@ function CoordinatorReports() {
   const travelCompletionRate = percent(travelCompleted, filteredTravel.length);
   const travelCompliance = average(filteredTravel, 'compliance');
 
-  const reportPeriod = `${new Date(`${dateFrom}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })} – ${new Date(`${dateTo}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`;
-
-  const exportPdf = () => {
-    const originalTitle = document.title;
-    document.title = `AIMS ${activeModule.label} - ${reportPeriod}`;
-    toast.success('Preparing the print-ready PDF report.');
-    window.print();
-    document.title = originalTitle;
-  };
+  const reportPeriod = 'All available records';
 
   return (
     <div className="space-y-6 print:space-y-4">
@@ -229,7 +184,7 @@ function CoordinatorReports() {
             <h1 className="text-2xl font-black sm:text-3xl">Coordinator Reports</h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-white/65">Generate clear, filtered summaries for internship operations, compliance reviews, and institutional decision-making.</p>
           </div>
-          <button type="button" onClick={exportPdf} className="inline-flex items-center gap-2 rounded-xl bg-[#f1c54c] px-5 py-3 text-xs font-black text-[#690016] shadow-lg shadow-black/10 transition hover:bg-[#f7d979]"><FiDownload /> Export PDF</button>
+          <ReportTemplateControls reportType={activeReport} reportLabel={activeModule.label} />
         </div>
       </header>
 
@@ -243,11 +198,8 @@ function CoordinatorReports() {
         </div>
       </nav>
 
-      <ReportFilters dateFrom={dateFrom} dateTo={dateTo} assignedProgram={assignedProgram} sectionId={sectionId} sections={records.sections || []} search={search} onDateFrom={setDateFrom} onDateTo={setDateTo} onSection={setSectionId} onSearch={setSearch} />
-
       <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
         <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8750b]">{activeModule.shortLabel}</p><h2 className="mt-1 text-xl font-black text-[#690016] dark:text-white">{activeModule.label}</h2><p className="mt-1 text-xs text-slate-400">{activeModule.description} · {sectionLabel} · {reportPeriod}</p></div>
-        <button type="button" onClick={exportPdf} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-[#7D001D] shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-rose-300"><FiPrinter /> Print / Save PDF</button>
       </div>
 
       {activeReport === 'attendance' && (
@@ -280,8 +232,8 @@ function CoordinatorReports() {
           <Panel title="Attendance Records" subtitle={`${filteredAttendance.length} records shown`} icon={FiClock}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-left">
-                <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Date</th><th className="pb-3 font-black">Student</th><th className="pb-3 font-black">HTE</th><th className="pb-3 font-black">Mode</th><th className="pb-3 font-black">Time In</th><th className="pb-3 font-black">Time Out</th><th className="pb-3 font-black">Hours</th><th className="pb-3 font-black">Status</th><th className="pb-3 font-black">Verified</th></tr></thead>
-                <tbody>{filteredAttendance.map((row) => <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-gray-700 print:border-slate-200"><td className="py-3 text-xs font-bold text-slate-500">{new Date(`${row.date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</td><td className="py-3"><p className="text-xs font-black text-slate-800 dark:text-white print:text-black">{row.student}</p><p className="mt-1 text-[9px] text-slate-400">{row.studentId} · {row.program}</p></td><td className="py-3 text-xs text-slate-500">{row.hte}</td><td className="py-3 text-xs font-bold text-slate-600 dark:text-gray-300">{row.mode}</td><td className="py-3 text-xs text-slate-500">{row.timeIn}</td><td className="py-3 text-xs text-slate-500">{row.timeOut}</td><td className="py-3 text-xs font-black text-slate-700 dark:text-gray-200 print:text-black">{row.hours}h</td><td className="py-3"><StatusBadge status={row.status} /></td><td className="py-3">{row.verified ? <FiCheckCircle className="text-emerald-500" /> : <FiClock className="text-amber-500" />}</td></tr>)}</tbody>
+                <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Date / Student</th><th className="pb-3 font-black">HTE / Mode</th><th className="pb-3 font-black">AM In / Out</th><th className="pb-3 font-black">PM In / Out</th><th className="pb-3 font-black">Hours / OT</th><th className="pb-3 font-black">GPS / Geofence</th><th className="pb-3 font-black">Status</th><th className="pb-3 font-black">Verified</th></tr></thead>
+                <tbody>{filteredAttendance.length ? filteredAttendance.map((row) => <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-gray-700 print:border-slate-200"><td className="py-3"><p className="text-xs font-black text-slate-800 dark:text-white print:text-black">{row.student}</p><p className="mt-1 text-[9px] text-slate-400">{new Date(`${row.date}T00:00:00`).toLocaleDateString('en-PH')} · {row.studentId}</p></td><td className="py-3"><p className="text-xs text-slate-600 dark:text-gray-300">{row.hte}</p><p className="mt-1 text-[9px] font-black text-slate-400">{row.mode} · {String(row.sessionType || '').replaceAll('_', ' ')}</p></td><td className="py-3 text-xs text-slate-500">{row.amTimeIn || '—'} / {row.amTimeOut || '—'}</td><td className="py-3 text-xs text-slate-500">{row.pmTimeIn || '—'} / {row.pmTimeOut || '—'}</td><td className="py-3"><p className="text-xs font-black text-slate-700 dark:text-gray-200">{row.hours}h</p><p className="mt-1 text-[9px] text-slate-400">{row.overtimeHours || 0}h OT</p></td><td className="py-3"><p className="text-[10px] text-slate-500">{row.gps || 'No GPS'}</p><p className="mt-1 text-[9px] font-black uppercase text-slate-400">{String(row.geofenceStatus || '').replaceAll('_', ' ')}</p></td><td className="py-3"><StatusBadge status={row.status} /></td><td className="py-3">{row.verified ? <FiCheckCircle className="text-emerald-500" /> : <FiClock className="text-amber-500" />}</td></tr>) : <tr><td colSpan="8" className="py-16 text-center text-sm font-bold text-slate-400">No attendance records are available.</td></tr>}</tbody>
               </table>
             </div>
           </Panel>
@@ -310,7 +262,7 @@ function CoordinatorReports() {
             <Panel title="Journal Completion by Student" subtitle="Submitted entries compared with expected entries" icon={FiTrendingUp}>
               <div className="space-y-5">
                 {filteredJournals.map((row) => { const completion = percent(row.submitted, row.expected); return <div key={row.id}><div className="mb-2 flex justify-between text-xs"><span className="font-black text-slate-600 dark:text-gray-300">{row.student}</span><span className="font-bold text-slate-400">{row.submitted}/{row.expected} entries · {completion}%</span></div><ProgressBar value={completion} color={completion >= 90 ? 'bg-emerald-500' : 'bg-amber-500'} /></div>; })}
-                {filteredJournals.length === 0 && <p className="py-10 text-center text-xs font-bold text-slate-400">No journal records for the selected filters.</p>}
+                {filteredJournals.length === 0 && <p className="py-10 text-center text-xs font-bold text-slate-400">No journal records are available.</p>}
               </div>
             </Panel>
           </div>
@@ -326,10 +278,29 @@ function CoordinatorReports() {
         </div>
       )}
 
-      {activeReport === 'students' && (
+      {activeReport === 'requirements' && (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard label="Total interns" value={filteredStudents.length} note="Matching the selected filters" icon={FiUsers} />
+            <MetricCard label="Checklist items" value={filteredRequirements.length} note="For all authorized students" icon={FiFileText} />
+            <MetricCard label="Approved" value={filteredRequirements.filter((row) => row.status === 'approved').length} note="Accepted requirement files" icon={FiCheckCircle} tone="green" />
+            <MetricCard label="Pending review" value={filteredRequirements.filter((row) => row.status === 'pending').length} note="Submitted files awaiting a decision" icon={FiClock} tone="amber" />
+            <MetricCard label="Needs action" value={filteredRequirements.filter((row) => ['not_submitted', 'rejected'].includes(row.status)).length} note="Missing, rejected, or for correction" icon={FiUserCheck} tone="violet" />
+          </div>
+          <Panel title="Student Requirements Status" subtitle={`${filteredRequirements.length} checklist records shown`} icon={FiFileText}>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[940px] text-left">
+                <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Student</th><th className="pb-3 font-black">Requirement</th><th className="pb-3 font-black">Submitted</th><th className="pb-3 font-black">Status</th><th className="pb-3 font-black">Reviewed By</th><th className="pb-3 font-black">Remarks</th></tr></thead>
+                <tbody>{filteredRequirements.length ? filteredRequirements.map((row) => <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-gray-700 print:border-slate-200"><td className="py-4"><p className="text-xs font-black text-slate-800 dark:text-white print:text-black">{row.student}</p><p className="mt-1 text-[9px] text-slate-400">{row.studentId} · {row.program}-{row.section}</p></td><td className="py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{row.requirement}</td><td className="py-4 text-xs text-slate-500">{row.submittedAt ? new Date(row.submittedAt).toLocaleDateString('en-PH') : 'Not submitted'}</td><td className="py-4"><StatusBadge status={row.status} /></td><td className="py-4 text-xs text-slate-500">{row.reviewedBy || '—'}</td><td className="max-w-xs py-4 text-xs text-slate-500">{row.remarks || '—'}</td></tr>) : <tr><td colSpan="6" className="py-16 text-center text-sm font-bold text-slate-400">No requirement records are available.</td></tr>}</tbody>
+              </table>
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {activeReport === 'student_internship' && (
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard label="Total interns" value={filteredStudents.length} note="All authorized records" icon={FiUsers} />
             <MetricCard label="Active" value={studentActive} note="Currently on internship" icon={FiUserCheck} tone="green" />
             <MetricCard label="Completed" value={studentCompleted} note="OJT requirements fulfilled" icon={FiCheckCircle} tone="blue" />
             <MetricCard label="Pending deployment" value={studentPending} note="Awaiting placement" icon={FiClock} tone="amber" />
@@ -344,21 +315,21 @@ function CoordinatorReports() {
             </Panel>
           </div>
 
-          <Panel title="Student Internship Progress" subtitle={`${filteredStudents.length} student records shown`} icon={FiUsers}>
+          <Panel title="Student Internship Report" subtitle={`${filteredStudents.length} student records shown`} icon={FiUsers}>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-left">
-                <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Student</th><th className="pb-3 font-black">HTE Placement</th><th className="pb-3 font-black">OJT Hours</th><th className="pb-3 font-black">Attendance</th><th className="pb-3 font-black">Requirements</th><th className="pb-3 font-black">Journals</th><th className="pb-3 font-black">Status</th></tr></thead>
-                <tbody>{filteredStudents.map((row) => { const progress = Math.round((row.rendered / row.required) * 100); return <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-gray-700 print:border-slate-200"><td className="py-4"><p className="text-xs font-black text-slate-800 dark:text-white print:text-black">{row.name}</p><p className="mt-1 text-[9px] text-slate-400">{row.studentId} · {row.program}-{row.section}</p></td><td className="py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{row.hte}</td><td className="w-40 py-4"><div className="mb-1.5 flex justify-between text-[9px] font-bold"><span className="text-slate-500">{row.rendered}/{row.required}h</span><span className="text-[#7D001D]">{progress}%</span></div><ProgressBar value={progress} /></td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.attendance}%</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.requirements}%</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.journals}%</td><td className="py-4"><StatusBadge status={row.status} /></td></tr>; })}</tbody>
+              <table className="w-full min-w-[1000px] text-left">
+                <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Student Number</th><th className="pb-3 font-black">Student Name</th><th className="pb-3 font-black">Academic Year</th><th className="pb-3 font-black">Semester</th><th className="pb-3 font-black">HTE</th><th className="pb-3 font-black">Working Schedule</th><th className="pb-3 font-black">Supervisor</th></tr></thead>
+                <tbody>{filteredStudents.length ? filteredStudents.map((row) => <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-gray-700 print:border-slate-200"><td className="py-4 text-xs font-black text-slate-800 dark:text-white print:text-black">{row.studentId}</td><td className="py-4 text-xs font-bold text-slate-700 dark:text-gray-200">{row.name}</td><td className="py-4 text-xs text-slate-500">{row.academicYear || 'Not set'}</td><td className="py-4 text-xs text-slate-500">{row.semester || 'Not set'}</td><td className="max-w-48 py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{row.hte}</td><td className="max-w-64 py-4 text-xs leading-5 text-slate-500">{row.workingSchedule}</td><td className="py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{row.supervisor}</td></tr>) : <tr><td colSpan="7" className="py-16 text-center text-sm font-bold text-slate-400">No student internship records are available.</td></tr>}</tbody>
               </table>
             </div>
           </Panel>
         </div>
       )}
 
-      {activeReport === 'deployments' && (
+      {activeReport === 'hte_deployment' && (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard label="Partner HTEs" value={filteredDeployments.length} note="Matching the selected filters" icon={FiBriefcase} />
+            <MetricCard label="Partner HTEs" value={filteredDeployments.length} note="All authorized records" icon={FiBriefcase} />
             <MetricCard label="Deployed interns" value={deployedInterns} note="Across listed partner HTEs" icon={FiUsers} tone="green" />
             <MetricCard label="Active interns" value={activeInterns} note={`${completedInterns} completed internship`} icon={FiTrendingUp} tone="blue" />
             <MetricCard label="MOA attention" value={moaAttention} note="Expiring, pending, expired, or rejected" icon={FiFileText} tone="amber" />
@@ -374,18 +345,18 @@ function CoordinatorReports() {
             </Panel>
           </div>
 
-          <Panel title="HTE Deployment Summary" subtitle={`${filteredDeployments.length} partner establishments shown`} icon={FiBriefcase}>
+          <Panel title="Host Training Establishment Report" subtitle={`${filteredDeployments.length} partner establishments shown`} icon={FiBriefcase}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[940px] text-left">
-                <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Host Training Establishment</th><th className="pb-3 font-black">Programs</th><th className="pb-3 font-black">Deployed</th><th className="pb-3 font-black">Active</th><th className="pb-3 font-black">Completed</th><th className="pb-3 font-black">MOA Status</th><th className="pb-3 font-black">Expiry</th><th className="pb-3 font-black">Completion</th></tr></thead>
-                <tbody>{filteredDeployments.map((row) => <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-gray-700 print:border-slate-200"><td className="py-4"><p className="text-xs font-black text-slate-800 dark:text-white print:text-black">{row.hte}</p><p className="mt-1 text-[9px] text-slate-400">{row.location} · {row.sector}</p></td><td className="py-4"><div className="flex flex-wrap gap-1">{row.programs.map((item) => <span key={item} className="rounded-md bg-slate-100 px-1.5 py-1 text-[8px] font-black text-slate-500 dark:bg-gray-700">{item}</span>)}</div></td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{row.deployed}</td><td className="py-4 text-xs font-black text-emerald-600">{row.active}</td><td className="py-4 text-xs font-black text-blue-600">{row.completed}</td><td className="py-4"><StatusBadge status={row.moa} /></td><td className="py-4 text-xs text-slate-500">{row.moaExpiry}</td><td className="py-4 text-xs font-black text-slate-700 dark:text-gray-200">{percent(row.completed, row.deployed)}%</td></tr>)}</tbody>
+                <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">HTE</th><th className="pb-3 font-black">HTE Address</th><th className="pb-3 font-black">Department</th><th className="pb-3 font-black">Student Count</th><th className="pb-3 font-black">Working Schedule</th><th className="pb-3 font-black">Supervisor</th></tr></thead>
+                <tbody>{filteredDeployments.length ? filteredDeployments.map((row) => <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-gray-700 print:border-slate-200"><td className="py-4 text-xs font-black text-slate-800 dark:text-white print:text-black">{row.hte}</td><td className="max-w-56 py-4 text-xs leading-5 text-slate-500">{row.location || 'Not set'}</td><td className="max-w-48 py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{row.departments?.join(', ') || 'Not assigned'}</td><td className="py-4 text-center text-xs font-black text-slate-700 dark:text-gray-200">{row.deployed}</td><td className="max-w-64 py-4 text-xs leading-5 text-slate-500">{row.workingSchedules?.join(', ') || 'Not configured'}</td><td className="max-w-48 py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{row.supervisors?.join(', ') || 'Not assigned'}</td></tr>) : <tr><td colSpan="6" className="py-16 text-center text-sm font-bold text-slate-400">No host training establishment records are available.</td></tr>}</tbody>
               </table>
             </div>
           </Panel>
         </div>
       )}
 
-      {activeReport === 'travel' && (
+      {activeReport === 'travel_monitoring' && (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Travel sessions" value={filteredTravel.length} note="For the selected period" icon={FiMapPin} />

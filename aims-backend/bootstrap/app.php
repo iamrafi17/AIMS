@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\EnsureUserIsActive;
+use App\Http\Middleware\EnsureStaffSecuritySetupComplete;
 use App\Http\Middleware\RecordActivityLog;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
@@ -22,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => CheckRole::class,
             'active' => EnsureUserIsActive::class,
             'activity' => RecordActivityLog::class,
+            'staff.setup' => EnsureStaffSecuritySetupComplete::class,
         ]);
 
         // AIMS authenticates API requests with Sanctum personal-access Bearer

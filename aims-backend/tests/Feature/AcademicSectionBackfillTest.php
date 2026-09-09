@@ -91,7 +91,7 @@ class AcademicSectionBackfillTest extends TestCase
             'gender' => 'female',
             'birth_date' => '2002-01-01',
             'address' => 'Santa Cruz, Marinduque',
-            'phone' => '09170000000',
+            'contact_number' => '09170000000',
             'college_id' => $college->id,
             'program_id' => $program->id,
             'academic_section_id' => null,
@@ -99,7 +99,7 @@ class AcademicSectionBackfillTest extends TestCase
             'section' => $section,
             'parent_name' => 'Test Parent',
             'parent_address' => 'Santa Cruz, Marinduque',
-            'parent_phone' => '09171111111',
+            'parent_contact_number' => '09171111111',
             'internship_year' => '2026-2027',
         ]);
     }

@@ -30,9 +30,13 @@ class CollegeController extends Controller
 
     public function htes(Request $request, College $college)
     {
+        $programId = $request->integer('program_id');
         $htes = HTE::where('is_active', true)
-            ->where('college_id', $college->id)
-            ->when($request->integer('program_id'), fn ($query, int $programId) => $query->where('program_id', $programId))
+            ->whereHas('programs', fn ($query) => $query
+                ->where('programs.college_id', $college->id)
+                ->when($programId, fn ($programQuery) => $programQuery->whereKey($programId))
+                ->where('hte_programs.is_active', true))
+            ->orderBy('name')
             ->get();
 
         return response()->json($htes);

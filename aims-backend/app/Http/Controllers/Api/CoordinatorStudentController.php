@@ -75,7 +75,9 @@ class CoordinatorStudentController extends Controller
         return response()->json([
             'colleges' => College::with(['programs' => fn ($query) => $query->whereKey($programId)->where('is_active', true)])
                 ->whereKey($collegeId)->where('is_active', true)->get(),
-            'htes' => HTE::where('program_id', $programId)->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'htes' => HTE::where('is_active', true)
+                ->whereHas('programs', fn ($query) => $query->whereKey($programId)->where('hte_programs.is_active', true))
+                ->orderBy('name')->get(['id', 'name']),
             'sections' => AcademicSection::where('program_id', $programId)
                 ->where('is_active', true)
                 ->orderByDesc('academic_year')
@@ -497,10 +499,10 @@ class CoordinatorStudentController extends Controller
             'student_id' => ['required', 'string', 'max:20', Rule::unique('students')->ignore($student?->id)],
             'first_name' => ['required', 'string', 'max:100'], 'last_name' => ['required', 'string', 'max:100'], 'middle_name' => ['nullable', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($student?->user_id)], 'password' => [$student ? 'nullable' : 'nullable', 'string', 'min:8', 'max:255'],
-            'gender' => ['required', 'in:male,female,other'], 'birth_date' => ['required', 'date', 'before:today'], 'address' => ['required', 'string', 'max:1000'], 'phone' => ['required', 'string', 'max:20'],
+            'gender' => ['required', 'in:male,female,other'], 'birth_date' => ['required', 'date', 'before:today'], 'address' => ['required', 'string', 'max:1000'], 'contact_number' => ['required', 'string', 'digits:11'],
             'college_id' => ['nullable', Rule::in([(int) $coordinator->college_id])], 'program_id' => ['nullable', Rule::in([(int) $coordinator->program_id])], 'year_level' => ['required', 'integer', 'between:1,5'], 'section' => ['required', 'string', 'max:50'],
-            'parent_name' => ['required', 'string', 'max:255'], 'parent_relationship' => ['nullable', 'string', 'max:50'], 'parent_address' => ['required', 'string', 'max:1000'], 'parent_phone' => ['required', 'string', 'max:20'],
-            'hte_id' => ['nullable', Rule::exists('htes', 'id')->where('program_id', $coordinator->program_id)], 'internship_semester' => ['nullable', 'string', 'max:30'], 'internship_year' => ['nullable', 'string', 'max:20'],
+            'parent_name' => ['required', 'string', 'max:255'], 'parent_relationship' => ['nullable', 'string', 'max:50'], 'parent_address' => ['required', 'string', 'max:1000'], 'parent_contact_number' => ['required', 'string', 'digits:11'],
+            'hte_id' => ['nullable', Rule::exists('hte_programs', 'hte_id')->where(fn ($query) => $query->where('program_id', $coordinator->program_id)->where('is_active', true))], 'internship_semester' => ['nullable', 'string', 'max:30'], 'internship_year' => ['nullable', 'string', 'max:20'],
             'registration_status' => ['nullable', 'in:pending,approved,rejected'], 'internship_status' => ['nullable', 'in:pending,active,completed,dropped'],
             'consent_status' => ['nullable', 'in:pending,rejected,done'], 'schedule_status' => ['nullable', 'in:pending,rejected,approved'],
             'ojt_start_date' => ['nullable', 'date'], 'ojt_end_date' => ['nullable', 'date', 'after_or_equal:ojt_start_date'], 'required_ojt_hours' => ['nullable', 'numeric', 'between:1,2000'], 'allow_past_attendance' => ['nullable', 'boolean'],
@@ -518,9 +520,9 @@ class CoordinatorStudentController extends Controller
     {
         return [
             'user_id' => $userId, 'student_id' => $data['student_id'], 'first_name' => $data['first_name'], 'last_name' => $data['last_name'], 'middle_name' => $data['middle_name'] ?? null,
-            'gender' => $data['gender'], 'birth_date' => $data['birth_date'], 'address' => $data['address'], 'phone' => $data['phone'], 'college_id' => $coordinator->college_id, 'program_id' => $coordinator->program_id,
+            'gender' => $data['gender'], 'birth_date' => $data['birth_date'], 'address' => $data['address'], 'contact_number' => $data['contact_number'], 'college_id' => $coordinator->college_id, 'program_id' => $coordinator->program_id,
             'year_level' => $data['year_level'], 'section' => $data['section'], 'parent_name' => $data['parent_name'], 'parent_relationship' => $data['parent_relationship'] ?? null,
-            'parent_address' => $data['parent_address'], 'parent_phone' => $data['parent_phone'], 'hte_id' => $data['hte_id'] ?? null,
+            'parent_address' => $data['parent_address'], 'parent_contact_number' => $data['parent_contact_number'], 'hte_id' => $data['hte_id'] ?? null,
             'internship_semester' => $data['internship_semester'] ?? null, 'internship_year' => $data['internship_year'] ?? null,
             'registration_status' => $data['registration_status'] ?? 'pending', 'internship_status' => $data['internship_status'] ?? 'pending',
             'consent_status' => $data['consent_status'] ?? 'pending', 'schedule_status' => $data['schedule_status'] ?? 'pending',

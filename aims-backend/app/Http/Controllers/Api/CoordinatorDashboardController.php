@@ -154,8 +154,8 @@ class CoordinatorDashboardController extends Controller
                 'completion_rate' => $requirementTotal > 0 ? round(($approvedRequirements / $requirementTotal) * 100, 1) : 0,
             ],
             'hte_moa' => [
-                'total_htes' => HTE::where('program_id', $programId)->count(),
-                'active_htes' => HTE::where('program_id', $programId)->where('is_active', true)->count(),
+                'total_htes' => HTE::whereHas('programs', fn ($query) => $query->whereKey($programId)->where('hte_programs.is_active', true))->count(),
+                'active_htes' => HTE::where('is_active', true)->whereHas('programs', fn ($query) => $query->whereKey($programId)->where('hte_programs.is_active', true))->count(),
                 'assigned_htes' => $students->whereNotNull('hte_id')->pluck('hte_id')->unique()->count(),
                 'moa_approved' => $approvedMoas->count(),
                 'moa_pending' => $moas->where('status', 'pending')->count(),

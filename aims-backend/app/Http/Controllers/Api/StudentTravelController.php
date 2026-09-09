@@ -113,6 +113,7 @@ class StudentTravelController extends Controller
             TravelWorkflow::authorizeStudent($request->user(), $session);
             abort_unless($session->status === 'active', 422, 'Departure can only start after the starting location is captured.');
             abort_unless($session->checkpoints()->count() === 1, 422, 'The departure event has already been recorded.');
+            $this->ensurePlausibleMovement($session, $coordinates);
 
             $capturedAt = now();
             $session->checkpoints()->create([
@@ -141,6 +142,7 @@ class StudentTravelController extends Controller
             $session = TravelLog::query()->lockForUpdate()->findOrFail($travel->id);
             TravelWorkflow::authorizeStudent($request->user(), $session);
             abort_unless($session->status === 'traveling', 422, 'Checkpoints can only be added while the session is traveling.');
+            $this->ensurePlausibleMovement($session, $coordinates);
             $sequence = ((int) $session->checkpoints()->max('sequence')) + 1;
 
             $session->checkpoints()->create([
@@ -168,6 +170,7 @@ class StudentTravelController extends Controller
             $session = TravelLog::query()->lockForUpdate()->findOrFail($travel->id);
             TravelWorkflow::authorizeStudent($request->user(), $session);
             abort_unless($session->status === 'traveling', 422, 'Final arrival can only be marked after departure.');
+            $this->ensurePlausibleMovement($session, $coordinates);
             $capturedAt = now();
             $sequence = ((int) $session->checkpoints()->max('sequence')) + 1;
 
@@ -245,20 +248,64 @@ class StudentTravelController extends Controller
         $rules = [
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
-            'accuracy' => ['nullable', 'numeric', 'min:0', 'max:10000'],
+            'accuracy' => ['required', 'numeric', 'min:0', 'max:500'],
+            'position_timestamp' => ['required', 'integer', 'min:0'],
         ];
         if ($withRemarks) {
             $rules['remarks'] = ['nullable', 'string', 'max:1000'];
         }
         $data = $request->validate($rules);
+        $positionAge = now()->getTimestampMs() - (int) $data['position_timestamp'];
+        if ($positionAge > 120000 || $positionAge < -30000) {
+            throw ValidationException::withMessages([
+                'location' => ['The GPS reading is stale. Wait for a fresh location lock and try again.'],
+            ]);
+        }
 
         return [
             'latitude' => (float) $data['latitude'],
             'longitude' => (float) $data['longitude'],
-            'gps_accuracy' => isset($data['accuracy']) ? (float) $data['accuracy'] : null,
+            'gps_accuracy' => (float) $data['accuracy'],
             'notes' => $withRemarks ? ($data['remarks'] ?? null) : null,
             'readable_location' => ReverseGeocoder::describe((float) $data['latitude'], (float) $data['longitude']),
         ];
+    }
+
+    private function ensurePlausibleMovement(TravelLog $session, array $coordinates): void
+    {
+        $lastPoint = $session->checkpoints()->latest('sequence')->first();
+        if (! $lastPoint) {
+            return;
+        }
+
+        $distanceKm = $this->distanceKm(
+            (float) $lastPoint->latitude,
+            (float) $lastPoint->longitude,
+            (float) $coordinates['latitude'],
+            (float) $coordinates['longitude'],
+        );
+        $elapsedHours = max($lastPoint->captured_at?->diffInSeconds(now()) ?? 0, 0) / 3600;
+        $accuracyBufferKm = (((float) ($lastPoint->gps_accuracy ?? 0)) + (float) $coordinates['gps_accuracy']) / 1000;
+        $maximumPlausibleDistanceKm = 3 + ($elapsedHours * 160) + $accuracyBufferKm;
+
+        if ($distanceKm > $maximumPlausibleDistanceKm) {
+            throw ValidationException::withMessages([
+                'location' => ['The GPS location jumped '.round($distanceKm, 1).' km from the previous point. Wait for the GPS to stabilize and try again.'],
+            ]);
+        }
+    }
+
+    private function distanceKm(float $firstLatitude, float $firstLongitude, float $secondLatitude, float $secondLongitude): float
+    {
+        $earthRadiusKm = 6371;
+        $latitudeDelta = deg2rad($secondLatitude - $firstLatitude);
+        $longitudeDelta = deg2rad($secondLongitude - $firstLongitude);
+        $firstLatitudeRadians = deg2rad($firstLatitude);
+        $secondLatitudeRadians = deg2rad($secondLatitude);
+        $value = sin($latitudeDelta / 2) ** 2
+            + cos($firstLatitudeRadians) * cos($secondLatitudeRadians) * sin($longitudeDelta / 2) ** 2;
+
+        return $earthRadiusKm * 2 * atan2(sqrt($value), sqrt(1 - $value));
     }
 
     private function startEligibility(Request $request, $student, ?TravelLog $current): array

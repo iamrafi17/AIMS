@@ -5,17 +5,15 @@ import {
   FiBarChart2,
   FiCheckCircle,
   FiClock,
-  FiDownload,
   FiFileText,
-  FiGrid,
   FiPieChart,
-  FiPrinter,
   FiRefreshCw,
   FiShield,
   FiTrendingUp,
   FiUsers,
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
+import ReportTemplateControls from '../../components/reports/ReportTemplateControls';
 import api from '../../services/api';
 
 const emptyReport = {
@@ -28,9 +26,15 @@ const emptyReport = {
 };
 
 const tabs = [
-  { id: 'compliance', label: 'Compliance Analytics', icon: FiShield },
-  { id: 'performance', label: 'Internship Performance Analytics', icon: FiTrendingUp },
+  { id: 'program_summary', label: 'Program Internship Summary', icon: FiTrendingUp },
+  { id: 'hte_deployment_review', label: 'HTE Deployment Review', icon: FiUsers },
+  { id: 'travel_monitoring_review', label: 'Travel Monitoring Review', icon: FiShield },
 ];
+
+function StatusPill({ value }) {
+  const label = String(value || 'not submitted').replaceAll('_', ' ');
+  return <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase text-slate-600 dark:bg-slate-700 dark:text-slate-200">{label}</span>;
+}
 
 function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   const tones = {
@@ -82,38 +86,16 @@ function Ring({ value, label, color = '#7D001D' }) {
   );
 }
 
-function downloadBlob(content, type, filename) {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-function csvCell(value) {
-  return `"${String(value ?? '').replaceAll('"', '""')}"`;
-}
-
-function xmlCell(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
-}
-
 function ProgramHeadReports() {
   const [report, setReport] = useState(emptyReport);
-  const [activeTab, setActiveTab] = useState('compliance');
-  const [sectionId, setSectionId] = useState('');
+  const [activeTab, setActiveTab] = useState('program_summary');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [reviewingDeployment, setReviewingDeployment] = useState(null);
 
   useEffect(() => {
     let mounted = true;
-    api.get('/program-head/dashboard', { params: { academic_section_id: sectionId || undefined } })
+    api.get('/program-head/reports')
       .then((response) => {
         if (mounted) setReport({ ...emptyReport, ...response.data });
       })
@@ -124,18 +106,37 @@ function ProgramHeadReports() {
         if (mounted) setLoading(false);
       });
     return () => { mounted = false; };
-  }, [sectionId]);
+  }, []);
 
   const refreshReport = async () => {
     setRefreshing(true);
     try {
-      const response = await api.get('/program-head/dashboard', { params: { academic_section_id: sectionId || undefined } });
+      const response = await api.get('/program-head/reports');
       setReport({ ...emptyReport, ...response.data });
       toast.success('Analytics refreshed.');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Unable to refresh analytics.');
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const reviewDeployment = async (row, decision) => {
+    if (!row.approval_id) return toast.error('This deployment has not been submitted for review.');
+    const remarks = decision === 'returned'
+      ? window.prompt('Enter the required revision remarks for the Coordinator:')
+      : 'Requirements and working schedule reviewed by the Program Head.';
+    if (decision === 'returned' && !remarks?.trim()) return;
+    if (decision === 'forwarded' && !window.confirm('Forward this deployment request to the VPAA for final validation?')) return;
+    setReviewingDeployment(row.approval_id);
+    try {
+      const response = await api.put(`/program-head/deployments/${row.approval_id}/review`, { decision, remarks });
+      toast.success(response.data.message);
+      await refreshReport();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Unable to review the deployment request.');
+    } finally {
+      setReviewingDeployment(null);
     }
   };
 
@@ -147,14 +148,11 @@ function ProgramHeadReports() {
   const analytics = report.analytics || emptyReport.analytics;
   const filteredPrograms = (analytics.section_performance || []).map((item) => ({ ...item, program: item.section }));
   const assignedProgram = report.scope?.program;
-  const sections = report.scope?.sections || [];
-  const sectionLabel = report.scope?.selected_section
-    ? `${report.scope.selected_section.name} · Year ${report.scope.selected_section.year_level} · AY ${report.scope.selected_section.academic_year}`
-    : 'All sections';
+  const sectionLabel = 'All sections';
   const complianceScore = Math.round(((Number(attendance.rate) || 0) + (Number(requirements.completion_rate) || 0) + (Number(travel.completion_rate) || 0)) / 3);
   const verificationRate = attendance.total ? Math.round((attendance.verified / attendance.total) * 100) : 0;
   const deploymentRate = overview.total_students ? Math.round((overview.deployed / overview.total_students) * 100) : 0;
-  const reportPeriod = new Date().toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+  const reportPeriod = 'All available records';
 
   const complianceRows = [
     { Category: 'Attendance', Metric: 'Attendance compliance rate', Value: `${attendance.rate || 0}%`, Target: '90%', Status: attendance.rate >= 90 ? 'On target' : 'Below target' },
@@ -164,57 +162,6 @@ function ProgramHeadReports() {
     { Category: 'Travel', Metric: 'Safe travel completion', Value: `${travel.completion_rate || 0}%`, Target: '95%', Status: travel.completion_rate >= 95 ? 'On target' : 'Below target' },
     { Category: 'Review Queue', Metric: 'Total pending reviews', Value: reviews.total || 0, Target: '0', Status: reviews.total ? 'Action required' : 'Clear' },
   ];
-  const performanceRows = filteredPrograms.map((item) => ({
-    Section: item.program,
-    'Total Students': item.students,
-    'Active Interns': item.active,
-    'Average OJT Progress': `${item.progress}%`,
-    'Attendance Rate': `${item.attendance_rate}%`,
-  }));
-  const exportRows = activeTab === 'compliance' ? complianceRows : performanceRows;
-  const reportName = activeTab === 'compliance' ? 'compliance-analytics' : 'internship-performance-analytics';
-
-  const exportCsv = () => {
-    if (!exportRows.length) {
-      toast.error('There is no report data to export.');
-      return;
-    }
-    const headers = Object.keys(exportRows[0]);
-    const content = `\uFEFF${headers.map(csvCell).join(',')}\n${exportRows.map((row) => headers.map((header) => csvCell(row[header])).join(',')).join('\n')}`;
-    downloadBlob(content, 'text/csv;charset=utf-8', `${reportName}-${new Date().toISOString().slice(0, 10)}.csv`);
-    toast.success('CSV report downloaded.');
-  };
-
-  const exportExcel = () => {
-    if (!exportRows.length) {
-      toast.error('There is no report data to export.');
-      return;
-    }
-    const headers = Object.keys(exportRows[0]);
-    const headerCells = headers.map((header) => `<Cell ss:StyleID="Header"><Data ss:Type="String">${xmlCell(header)}</Data></Cell>`).join('');
-    const bodyRows = exportRows.map((row) => `<Row>${headers.map((header) => `<Cell><Data ss:Type="String">${xmlCell(row[header])}</Data></Cell>`).join('')}</Row>`).join('');
-    const workbook = `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-  <Styles>
-    <Style ss:ID="Default"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10"/></Style>
-    <Style ss:ID="Header"><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#7D001D" ss:Pattern="Solid"/></Style>
-  </Styles>
-  <Worksheet ss:Name="${activeTab === 'compliance' ? 'Compliance Analytics' : 'Performance Analytics'}">
-    <Table><Row>${headerCells}</Row>${bodyRows}</Table>
-  </Worksheet>
-</Workbook>`;
-    downloadBlob(workbook, 'application/vnd.ms-excel;charset=utf-8', `${reportName}-${new Date().toISOString().slice(0, 10)}.xls`);
-    toast.success('Excel report downloaded.');
-  };
-
-  const exportPdf = () => {
-    const originalTitle = document.title;
-    document.title = `AIMS ${activeTab === 'compliance' ? 'Compliance Analytics' : 'Internship Performance Analytics'} - ${reportPeriod}`;
-    toast.success('Preparing the print-ready PDF report.');
-    window.print();
-    document.title = originalTitle;
-  };
 
   if (loading) {
     return <div className="grid min-h-[420px] place-items-center"><div className="text-center"><div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-[#7D001D]/15 border-b-[#7D001D]" /><p className="mt-4 text-xs font-black uppercase tracking-widest text-slate-400">Loading analytics</p></div></div>;
@@ -224,7 +171,7 @@ function ProgramHeadReports() {
     { label: 'Attendance compliance', value: attendance.rate || 0, target: 90, note: `${attendance.present || 0} present · ${attendance.late || 0} late`, color: 'bg-emerald-500' },
     { label: 'Attendance verification', value: verificationRate, target: 95, note: `${attendance.verified || 0} of ${attendance.total || 0} logs verified`, color: 'bg-blue-500' },
     { label: 'Requirement completion', value: requirements.completion_rate || 0, target: 90, note: `${requirements.approved || 0} of ${requirements.total || 0} approved`, color: 'bg-[#7D001D]' },
-    { label: 'Safe travel completion', value: travel.completion_rate || 0, target: 95, note: `${travel.completed_this_month || 0} completed this month`, color: 'bg-violet-500' },
+    { label: 'Safe travel completion', value: travel.completion_rate || 0, target: 95, note: `${travel.completed_this_month || 0} completed records`, color: 'bg-violet-500' },
   ];
   const statusTotal = analytics.internship_status?.reduce((sum, item) => sum + Number(item.value || 0), 0) || 0;
 
@@ -232,7 +179,7 @@ function ProgramHeadReports() {
     <div className="space-y-6 print:space-y-4">
       <div className="hidden border-b-2 border-[#7D001D] pb-4 print:block">
         <div className="flex items-end justify-between gap-4">
-          <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7D001D]">Marinduque State University · AIMS</p><h1 className="mt-1 text-2xl font-black text-black">{activeTab === 'compliance' ? 'Compliance Analytics' : 'Internship Performance Analytics'}</h1><p className="mt-1 text-xs text-slate-500">Program Head analytical report</p></div>
+          <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7D001D]">Marinduque State University · AIMS</p><h1 className="mt-1 text-2xl font-black text-black">{tabs.find((tab) => tab.id === activeTab)?.label}</h1><p className="mt-1 text-xs text-slate-500">Program Head summary and review report</p></div>
           <div className="text-right text-xs"><p className="font-bold text-black">{reportPeriod}</p><p className="mt-1 text-slate-500">{assignedProgram ? `${assignedProgram.code} · ${assignedProgram.name}` : 'Assigned program'}</p><p className="mt-1 text-slate-500">{sectionLabel}</p></div>
         </div>
       </div>
@@ -246,24 +193,17 @@ function ProgramHeadReports() {
             <h1 className="text-2xl font-black sm:text-3xl">Program Head Reports</h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-white/65">Evaluate internship compliance and program performance, then export decision-ready institutional reports.</p>
           </div>
-          <button type="button" onClick={refreshReport} disabled={refreshing} className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-xs font-black transition hover:bg-white/15 disabled:opacity-50"><FiRefreshCw className={refreshing ? 'animate-spin' : ''} /> Refresh Analytics</button>
+          <div className="flex flex-wrap gap-2"><ReportTemplateControls reportType={activeTab} reportLabel={tabs.find((tab) => tab.id === activeTab)?.label} /><button type="button" onClick={refreshReport} disabled={refreshing} className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-xs font-black transition hover:bg-white/15 disabled:opacity-50"><FiRefreshCw className={refreshing ? 'animate-spin' : ''} /> Refresh Analytics</button></div>
         </div>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3 print:hidden">
-        <button type="button" onClick={exportPdf} className="inline-flex items-center justify-center gap-3 rounded-2xl border border-rose-100 bg-white p-4 text-sm font-black text-[#7D001D] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-rose-950 dark:bg-gray-800 dark:text-rose-300"><span className="grid h-9 w-9 place-items-center rounded-xl bg-rose-100 dark:bg-rose-950"><FiPrinter /></span> Export PDF</button>
-        <button type="button" onClick={exportExcel} className="inline-flex items-center justify-center gap-3 rounded-2xl border border-emerald-100 bg-white p-4 text-sm font-black text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-emerald-950 dark:bg-gray-800 dark:text-emerald-300"><span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-100 dark:bg-emerald-950"><FiGrid /></span> Export Excel</button>
-        <button type="button" onClick={exportCsv} className="inline-flex items-center justify-center gap-3 rounded-2xl border border-blue-100 bg-white p-4 text-sm font-black text-blue-700 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-blue-950 dark:bg-gray-800 dark:text-blue-300"><span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-100 dark:bg-blue-950"><FiDownload /></span> Export CSV</button>
-      </div>
-
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:flex-row sm:items-center print:hidden">
+      <div className="rounded-2xl border border-slate-100 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-800 print:hidden">
         <nav className="flex flex-1 gap-1 overflow-x-auto" aria-label="Program Head analytics reports">
           {tabs.map((tab) => <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition ${activeTab === tab.id ? 'bg-[#7D001D] text-white shadow-md shadow-[#7D001D]/15' : 'text-slate-500 hover:bg-slate-50 hover:text-[#7D001D] dark:text-gray-300 dark:hover:bg-gray-700'}`}><tab.icon className="text-base" /> {tab.label}</button>)}
         </nav>
-        <select aria-label="Report section" value={sectionId} onChange={(event) => setSectionId(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-xs font-black text-slate-600 outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"><option value="">All sections</option>{sections.map((section) => <option key={section.id} value={section.id}>{section.name} · Year {section.year_level} · AY {section.academic_year}</option>)}</select>
       </div>
 
-      {activeTab === 'compliance' && (
+      {activeTab === 'program_summary' && (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Compliance score" value={`${complianceScore}%`} note="Average of core indicators" icon={FiShield} tone="green" />
@@ -313,7 +253,7 @@ function ProgramHeadReports() {
         </div>
       )}
 
-      {activeTab === 'performance' && (
+      {activeTab === 'program_summary' && (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Total interns" value={overview.total_students || 0} note={`${overview.deployed || 0} deployed to HTEs`} icon={FiUsers} />
@@ -354,6 +294,18 @@ function ProgramHeadReports() {
             </div>
           </Panel>
         </div>
+      )}
+
+      {activeTab === 'hte_deployment_review' && (
+        <Panel title="HTE Deployment Review Report" subtitle={`${report.deployment_reviews?.length || 0} deployment records in the selected program scope`} icon={FiUsers}>
+          <div className="overflow-x-auto"><table className="w-full min-w-[1180px] text-left"><thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700"><th className="pb-3">Student</th><th className="pb-3">HTE / Batch</th><th className="pb-3">Proposed Date</th><th className="pb-3">Working Schedule</th><th className="pb-3">Requirements</th><th className="pb-3">Coordinator Submission</th><th className="pb-3">Review Status</th><th className="pb-3">Actions</th></tr></thead><tbody>{report.deployment_reviews?.length ? report.deployment_reviews.map((row) => <tr key={row.student_id} className="border-b border-slate-100 text-xs last:border-0 dark:border-gray-700"><td className="py-4"><p className="font-black text-slate-800 dark:text-white">{row.student}</p><p className="mt-1 text-[9px] text-slate-400">{row.student_id}</p></td><td className="py-4"><p className="font-bold">{row.hte}</p><p className="mt-1 text-[9px] text-slate-400">{row.batch}</p></td><td className="py-4">{row.proposed_date || 'Not set'}</td><td className="max-w-72 py-4">{row.working_schedule}</td><td className="py-4 font-bold">{row.requirements_readiness}</td><td className="py-4">{row.submitted_at ? new Date(row.submitted_at).toLocaleString('en-PH') : 'Not submitted'}</td><td className="py-4"><StatusPill value={row.review_status} /></td><td className="py-4">{row.review_status === 'pending' && row.approval_id ? <div className="flex gap-2"><button disabled={reviewingDeployment === row.approval_id} onClick={() => reviewDeployment(row, 'forwarded')} className="rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-black uppercase text-white disabled:opacity-50">Forward</button><button disabled={reviewingDeployment === row.approval_id} onClick={() => reviewDeployment(row, 'returned')} className="rounded-lg bg-rose-100 px-3 py-2 text-[9px] font-black uppercase text-rose-700 disabled:opacity-50">Return</button></div> : <span className="text-[9px] font-bold text-slate-400">No action available</span>}</td></tr>) : <tr><td colSpan="8" className="py-14 text-center font-bold text-slate-400">No deployment records are available.</td></tr>}</tbody></table></div>
+        </Panel>
+      )}
+
+      {activeTab === 'travel_monitoring_review' && (
+        <Panel title="Travel Monitoring Review Report" subtitle={`${report.travel_reviews?.length || 0} submitted and generated travel reports`} icon={FiShield}>
+          <div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-left"><thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700"><th className="pb-3">Reference</th><th className="pb-3">Students</th><th className="pb-3">Destination</th><th className="pb-3">Departure / Arrival</th><th className="pb-3">Checkpoints</th><th className="pb-3">Photo</th><th className="pb-3">Status</th></tr></thead><tbody>{report.travel_reviews?.length ? report.travel_reviews.map((row) => <tr key={row.report_id} className="border-b border-slate-100 text-xs last:border-0 dark:border-gray-700"><td className="py-4 font-black text-[#7D001D] dark:text-rose-300">{row.reference}</td><td className="max-w-56 py-4">{row.students}</td><td className="py-4 font-bold">{row.destination}</td><td className="py-4"><p>{row.departure || 'Not recorded'}</p><p className="mt-1 text-slate-400">{row.arrival || 'Not recorded'}</p></td><td className="max-w-64 py-4">{row.checkpoints || 'No checkpoints'}</td><td className="py-4">{row.photo_evidence ? 'Available' : 'None'}</td><td className="py-4"><StatusPill value={row.review_status} /></td></tr>) : <tr><td colSpan="7" className="py-14 text-center font-bold text-slate-400">No travel reports are available.</td></tr>}</tbody></table></div>
+        </Panel>
       )}
 
       <footer className="hidden border-t border-slate-300 pt-3 text-[9px] text-slate-500 print:flex print:items-center print:justify-between"><span>Generated from the AIMS Program Head Analytics Center</span><span>Generated {new Date().toLocaleString('en-PH')}</span></footer>

@@ -127,14 +127,14 @@ class CoordinatorStudentManagementTest extends TestCase
                 'gender' => 'female',
                 'birth_date' => '2002-01-01',
                 'address' => 'Boac, Marinduque',
-                'phone' => '09170000000',
+                'contact_number' => '09170000000',
                 'college_id' => $college->id,
                 'program_id' => $program->id,
                 'year_level' => 4,
                 'section' => 'A',
                 'parent_name' => 'Test Parent',
                 'parent_address' => 'Boac, Marinduque',
-                'parent_phone' => '09171111111',
+                'parent_contact_number' => '09171111111',
             ]);
         }
 
@@ -480,7 +480,7 @@ class CoordinatorStudentManagementTest extends TestCase
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Supervisor',
             'contact_email' => 'supervisor@example.com',
-            'contact_phone' => '09171111111',
+            'contact_number' => '09171111111',
             'is_active' => true,
         ]);
 
@@ -517,7 +517,7 @@ class CoordinatorStudentManagementTest extends TestCase
             'gender' => 'female',
             'birth_date' => '2002-01-01',
             'address' => 'Santa Cruz, Marinduque',
-            'phone' => '09172222222',
+            'contact_number' => '09172222222',
             'college_id' => $college->id,
             'program_id' => $program->id,
             'year_level' => 4,
@@ -525,7 +525,7 @@ class CoordinatorStudentManagementTest extends TestCase
             'parent_name' => 'Test Parent',
             'parent_relationship' => 'Parent',
             'parent_address' => 'Santa Cruz, Marinduque',
-            'parent_phone' => '09173333333',
+            'parent_contact_number' => '09173333333',
             'hte_id' => $hte->id,
             'internship_semester' => 'First Semester',
             'internship_year' => '2026-2027',

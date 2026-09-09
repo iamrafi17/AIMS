@@ -5,10 +5,12 @@ namespace Tests\Feature;
 use App\Models\Attendance;
 use App\Models\College;
 use App\Models\HTE;
+use App\Models\HteDepartment;
 use App\Models\InternshipRequirement;
 use App\Models\MOA;
 use App\Models\Program;
 use App\Models\Student;
+use App\Models\Supervisor;
 use App\Models\TravelLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -33,8 +35,18 @@ class CoordinatorDashboardTest extends TestCase
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Supervisor',
             'contact_email' => 'supervisor@example.com',
-            'contact_phone' => '09170000000',
+            'contact_number' => '09170000000',
             'is_active' => true,
+        ]);
+        $department = HteDepartment::create([
+            'hte_id' => $hte->id,
+            'department_name' => 'Learning Resource Center',
+            'normalized_name' => 'learning resource center',
+        ]);
+        $supervisor = Supervisor::create([
+            'hte_department_id' => $department->id,
+            'full_name' => 'Maria Saint',
+            'normalized_name' => 'maria saint',
         ]);
 
         $student = Student::create([
@@ -45,17 +57,26 @@ class CoordinatorDashboardTest extends TestCase
             'gender' => 'female',
             'birth_date' => '2002-01-01',
             'address' => 'Santa Cruz, Marinduque',
-            'phone' => '09171111111',
+            'contact_number' => '09171111111',
             'college_id' => $college->id,
             'program_id' => $program->id,
             'year_level' => 4,
             'section' => 'A',
             'parent_name' => 'Test Parent',
             'parent_address' => 'Santa Cruz, Marinduque',
-            'parent_phone' => '09172222222',
+            'parent_contact_number' => '09172222222',
             'hte_id' => $hte->id,
+            'hte_department_id' => $department->id,
+            'supervisor_record_id' => $supervisor->id,
+            'internship_year' => '2026-2027',
+            'internship_semester' => 'First Semester',
             'registration_status' => 'approved',
             'internship_status' => 'active',
+            'official_am_start' => '08:00',
+            'official_am_end' => '12:00',
+            'official_pm_start' => '13:00',
+            'official_pm_end' => '17:00',
+            'work_days' => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
         ]);
 
         Attendance::create([
@@ -121,9 +142,34 @@ class CoordinatorDashboardTest extends TestCase
         $this->getJson('/api/coordinator/reports?date_from='.now()->toDateString().'&date_to='.now()->toDateString())
             ->assertOk()
             ->assertJsonPath('attendance.0.studentId', '2026-0001')
+            ->assertJsonPath('attendance.0.amTimeIn', now()->setTime(8, 0)->format('g:i A'))
             ->assertJsonPath('students.0.studentId', '2026-0001')
+            ->assertJsonPath('students.0.department', 'Learning Resource Center')
+            ->assertJsonPath('students.0.supervisor', 'Maria Saint')
+            ->assertJsonPath('students.0.workingSchedule', 'Mon, Tue, Wed, Thu, Fri | AM 8:00 - 12:00 | PM 1:00 - 5:00')
+            ->assertJsonPath('students.0.remaining', 478)
             ->assertJsonPath('journals.0.submitted', 2)
+            ->assertJsonPath('requirements.0.requirement', 'Consent Form')
             ->assertJsonPath('deployments.0.hte', 'Partner Company')
             ->assertJsonPath('travel.0.id', 'TRAVEL-001');
+
+        $export = $this->get('/api/coordinator/reports/export/csv?report=student_internship&date_from='.now()->toDateString().'&date_to='.now()->toDateString())
+            ->assertOk();
+        $exportPath = $export->baseResponse->getFile()->getPathname();
+        $this->assertStringContainsString('Student Internship Report', file_get_contents($exportPath));
+        $this->assertStringContainsString('"Student Number","Student Name","Academic Year",Semester,HTE,"Working Schedule",Supervisor', file_get_contents($exportPath));
+        $this->assertStringContainsString('2026-0001', file_get_contents($exportPath));
+        $this->assertStringContainsString('Maria Saint', file_get_contents($exportPath));
+        @unlink($exportPath);
+
+        $hteExport = $this->get('/api/coordinator/reports/export/csv?report=hte_deployment')
+            ->assertOk();
+        $hteExportPath = $hteExport->baseResponse->getFile()->getPathname();
+        $hteContents = file_get_contents($hteExportPath);
+        $this->assertStringContainsString('Host Training Establishment Report', $hteContents);
+        $this->assertStringContainsString('HTE,"HTE Address",Department,"Student Count","Working Schedule",Supervisor', $hteContents);
+        $this->assertStringContainsString('Learning Resource Center', $hteContents);
+        $this->assertStringContainsString('Maria Saint', $hteContents);
+        @unlink($hteExportPath);
     }
 }

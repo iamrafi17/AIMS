@@ -158,6 +158,8 @@ class CoordinatorTravelMonitoringTest extends TestCase
 
         Sanctum::actingAs($studentUser);
         $this->postJson("/api/student/travel/{$sessionId}/departure", $this->coordinates())->assertOk();
+        $this->postJson("/api/student/travel/{$sessionId}/checkpoints", $this->coordinates(13.0, 121.0))
+            ->assertUnprocessable()->assertJsonValidationErrors('location');
         $this->postJson("/api/student/travel/{$sessionId}/arrival", $this->coordinates())->assertOk();
         $this->post("/api/student/travel/{$sessionId}/arrival-photo", ['photo' => $this->image()], ['Accept' => 'application/json'])->assertOk();
         $this->postJson("/api/student/travel/{$sessionId}/end")->assertOk();
@@ -175,6 +177,28 @@ class CoordinatorTravelMonitoringTest extends TestCase
         Sanctum::actingAs($programHead);
         $this->putJson("/api/program-head/travel/reports/{$reportId}/review", ['decision' => 'return'])
             ->assertUnprocessable()->assertJsonValidationErrors('decision');
+    }
+
+    public function test_travel_accepts_supported_accuracy_and_rejects_inaccurate_and_stale_gps_readings(): void
+    {
+        Http::fake();
+        [$studentUser] = $this->context();
+        Sanctum::actingAs($studentUser);
+
+        $this->postJson('/api/student/travel/start', [
+            ...$this->coordinates(),
+            'accuracy' => 750,
+        ])->assertUnprocessable()->assertJsonValidationErrors('accuracy');
+
+        $this->postJson('/api/student/travel/start', [
+            ...$this->coordinates(),
+            'position_timestamp' => now()->subMinutes(5)->getTimestampMs(),
+        ])->assertUnprocessable()->assertJsonValidationErrors('location');
+
+        $this->postJson('/api/student/travel/start', [
+            ...$this->coordinates(),
+            'accuracy' => 500,
+        ])->assertCreated()->assertJsonPath('session.status', 'active');
     }
 
     private function completeSession(User $studentUser): int
@@ -200,13 +224,13 @@ class CoordinatorTravelMonitoringTest extends TestCase
         $vpaa = User::factory()->create(['role' => 'vpaa']);
         $hte = HTE::create([
             'college_id' => $college->id, 'program_id' => $program->id, 'name' => 'Partner Company', 'address' => 'Santa Cruz, Marinduque',
-            'contact_person' => 'Supervisor', 'contact_email' => 'supervisor@example.com', 'contact_phone' => '09170000000', 'latitude' => 13.47, 'longitude' => 122.02, 'is_active' => true,
+            'contact_person' => 'Supervisor', 'contact_email' => 'supervisor@example.com', 'contact_number' => '09170000000', 'latitude' => 13.47, 'longitude' => 122.02, 'is_active' => true,
         ]);
         $studentUser = User::factory()->create(['role' => 'student']);
         $student = Student::create([
             'user_id' => $studentUser->id, 'student_id' => '2026-4001', 'first_name' => 'Ada', 'last_name' => 'Intern', 'gender' => 'female', 'birth_date' => '2002-01-01',
-            'address' => 'Santa Cruz, Marinduque', 'phone' => '09171111111', 'college_id' => $college->id, 'program_id' => $program->id, 'year_level' => 4, 'section' => 'A',
-            'parent_name' => 'Test Parent', 'parent_address' => 'Santa Cruz, Marinduque', 'parent_phone' => '09172222222', 'hte_id' => $hte->id,
+            'address' => 'Santa Cruz, Marinduque', 'contact_number' => '09171111111', 'college_id' => $college->id, 'program_id' => $program->id, 'year_level' => 4, 'section' => 'A',
+            'parent_name' => 'Test Parent', 'parent_address' => 'Santa Cruz, Marinduque', 'parent_contact_number' => '09172222222', 'hte_id' => $hte->id,
             'registration_status' => 'approved', 'internship_status' => 'active', 'ojt_start_date' => now()->subDay()->toDateString(), 'ojt_end_date' => now()->addMonth()->toDateString(),
         ]);
 
@@ -215,7 +239,7 @@ class CoordinatorTravelMonitoringTest extends TestCase
 
     private function coordinates(float $latitude = 13.475, float $longitude = 122.027): array
     {
-        return ['latitude' => $latitude, 'longitude' => $longitude, 'accuracy' => 8.5];
+        return ['latitude' => $latitude, 'longitude' => $longitude, 'accuracy' => 8.5, 'position_timestamp' => now()->getTimestampMs()];
     }
 
     private function image(): UploadedFile

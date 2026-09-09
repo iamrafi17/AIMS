@@ -82,11 +82,16 @@ class VPAAApprovalManagementTest extends TestCase
             ->assertJsonPath('history.0.decided_by', $vpaa->name);
     }
 
-    public function test_coordinator_deployment_request_can_be_approved_by_vpaa(): void
+    public function test_deployment_request_requires_program_head_review_before_vpaa_validation(): void
     {
         [$student, $hte] = $this->studentContext();
         $coordinator = User::factory()->create([
             'role' => 'coordinator',
+            'college_id' => $student->college_id,
+            'program_id' => $student->program_id,
+        ]);
+        $programHead = User::factory()->create([
+            'role' => 'program_head',
             'college_id' => $student->college_id,
             'program_id' => $student->program_id,
         ]);
@@ -119,10 +124,34 @@ class VPAAApprovalManagementTest extends TestCase
         Sanctum::actingAs($vpaa);
         $this->getJson('/api/vpaa/approvals')
             ->assertOk()
+            ->assertJsonPath('summary.pending_deployments', 0);
+        $this->putJson("/api/vpaa/approvals/{$approval->id}", ['decision' => 'approved'])
+            ->assertForbidden();
+
+        Sanctum::actingAs($programHead);
+        $this->getJson('/api/program-head/reports/preview?report=hte_deployment_review')
+            ->assertOk()
+            ->assertJsonPath('title', 'HTE Deployment Review Report')
+            ->assertJsonPath('rows.0.0', $student->student_id)
+            ->assertJsonPath('rows.0.2', $hte->name);
+        $this->putJson("/api/program-head/deployments/{$approval->id}/review", [
+            'decision' => 'forwarded',
+            'remarks' => 'Requirements and schedule verified.',
+        ])->assertOk();
+
+        $vpaaApproval = ApprovalRecord::where('subject_type', 'deployment')
+            ->where('subject_id', $student->id)
+            ->where('status', 'pending')
+            ->where('submitted_by', $programHead->id)
+            ->firstOrFail();
+
+        Sanctum::actingAs($vpaa);
+        $this->getJson('/api/vpaa/approvals')
+            ->assertOk()
             ->assertJsonPath('summary.pending_deployments', 1)
             ->assertJsonPath('deployments.0.hte.name', $hte->name);
 
-        $this->putJson("/api/vpaa/approvals/{$approval->id}", [
+        $this->putJson("/api/vpaa/approvals/{$vpaaApproval->id}", [
             'decision' => 'approved',
             'remarks' => 'Deployment schedule verified.',
         ])->assertOk()
@@ -133,7 +162,7 @@ class VPAAApprovalManagementTest extends TestCase
             'schedule_status' => 'approved',
         ]);
         $this->assertDatabaseHas('approval_records', [
-            'id' => $approval->id,
+            'id' => $vpaaApproval->id,
             'status' => 'approved',
             'decided_by' => $vpaa->id,
         ]);
@@ -156,7 +185,7 @@ class VPAAApprovalManagementTest extends TestCase
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'HTE Supervisor',
             'contact_email' => 'supervisor@example.com',
-            'contact_phone' => '09170000000',
+            'contact_number' => '09170000000',
             'geofence_radius' => 100,
             'geofence_enabled' => false,
             'default_am_start' => '08:00',
@@ -175,14 +204,14 @@ class VPAAApprovalManagementTest extends TestCase
             'gender' => 'female',
             'birth_date' => '2002-01-01',
             'address' => 'Santa Cruz, Marinduque',
-            'phone' => '09171111111',
+            'contact_number' => '09171111111',
             'college_id' => $college->id,
             'program_id' => $program->id,
             'year_level' => 4,
             'section' => 'A',
             'parent_name' => 'Test Parent',
             'parent_address' => 'Santa Cruz, Marinduque',
-            'parent_phone' => '09172222222',
+            'parent_contact_number' => '09172222222',
             'registration_status' => 'approved',
             'internship_status' => 'pending',
         ]);

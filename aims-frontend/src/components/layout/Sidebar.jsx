@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   AcademicCapIcon,
+  ArrowRightOnRectangleIcon,
   BellIcon,
   BriefcaseIcon,
   ChartBarIcon,
@@ -13,7 +15,6 @@ import {
   HomeIcon,
   MapIcon,
   StarIcon,
-  UserIcon,
   UsersIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
@@ -28,9 +29,7 @@ const menuItems = {
     { name: 'Requirements', path: '/student/requirements', icon: DocumentIcon },
     { name: 'Travel Monitoring', path: '/student/travel', icon: MapIcon },
     { name: 'Announcements', path: '/student/announcements', icon: BellIcon },
-    { name: 'Notifications', path: '/student/notifications', icon: BellIcon },
     { name: 'My Activity', path: '/my-activity', icon: ClipboardDocumentCheckIcon },
-    { name: 'Profile', path: '/student/profile', icon: UserIcon },
   ],
   coordinator: [
     { name: 'Dashboard', path: '/coordinator/dashboard', icon: HomeIcon },
@@ -40,9 +39,7 @@ const menuItems = {
     { name: 'Travel Monitoring', path: '/coordinator/travel', icon: MapIcon },
     { name: 'Reports', path: '/coordinator/reports', icon: ChartBarIcon },
     { name: 'Announcements', path: '/coordinator/announcements', icon: BellIcon },
-    { name: 'Notifications', path: '/coordinator/notifications', icon: BellIcon },
     { name: 'My Activity', path: '/my-activity', icon: ClipboardDocumentCheckIcon },
-    { name: 'Profile', path: '/coordinator/profile', icon: UserIcon },
   ],
   program_head: [
     { name: 'Dashboard', path: '/program-head/dashboard', icon: HomeIcon },
@@ -51,9 +48,7 @@ const menuItems = {
     { name: 'Travel Monitoring', path: '/program-head/travel', icon: MapIcon },
     { name: 'Reports', path: '/program-head/reports', icon: ChartBarIcon },
     { name: 'Announcements', path: '/program-head/announcements', icon: BellIcon },
-    { name: 'Notifications', path: '/program-head/notifications', icon: BellIcon },
     { name: 'My Activity', path: '/my-activity', icon: ClipboardDocumentCheckIcon },
-    { name: 'Profile', path: '/program-head/profile', icon: UserIcon },
   ],
   vpaa: [
     { name: 'Dashboard', path: '/vpaa/dashboard', icon: HomeIcon },
@@ -61,10 +56,8 @@ const menuItems = {
     { name: 'MOAs', path: '/vpaa/moas', icon: DocumentTextIcon },
     { name: 'Travel Monitoring', path: '/vpaa/travel', icon: MapIcon },
     { name: 'Announcements', path: '/vpaa/announcements', icon: BellIcon },
-    { name: 'Notifications', path: '/vpaa/notifications', icon: BellIcon },
     { name: 'Reports', path: '/vpaa/reports', icon: ChartBarIcon },
     { name: 'My Activity', path: '/my-activity', icon: ClipboardDocumentCheckIcon },
-    { name: 'Profile', path: '/vpaa/profile', icon: UserIcon },
   ],
   admin: [
     { name: 'Dashboard', path: '/admin/dashboard', icon: HomeIcon },
@@ -72,10 +65,8 @@ const menuItems = {
     { name: 'Academic', path: '/admin/academic', icon: AcademicCapIcon },
     { name: 'System', path: '/admin/system', icon: CogIcon },
     { name: 'Announcements', path: '/admin/announcements', icon: BellIcon },
-    { name: 'Notifications', path: '/admin/notifications', icon: BellIcon },
     { name: 'Reports', path: '/admin/reports', icon: ChartBarIcon },
     { name: 'My Activity', path: '/my-activity', icon: ClipboardDocumentCheckIcon },
-    { name: 'Profile', path: '/admin/profile', icon: UserIcon },
   ],
   supervisor: [
     { name: 'Dashboard', path: '/supervisor/dashboard', icon: HomeIcon },
@@ -83,9 +74,7 @@ const menuItems = {
     { name: 'Evaluations', path: '/supervisor/evaluations', icon: StarIcon },
     { name: 'Attendance', path: '/supervisor/attendance', icon: ClockIcon },
     { name: 'Announcements', path: '/supervisor/announcements', icon: BellIcon },
-    { name: 'Notifications', path: '/supervisor/notifications', icon: BellIcon },
     { name: 'My Activity', path: '/my-activity', icon: ClipboardDocumentCheckIcon },
-    { name: 'Profile', path: '/supervisor/profile', icon: UserIcon },
   ],
 };
 
@@ -102,12 +91,15 @@ function Sidebar({ isOpen, onClose }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const items = menuItems[user?.role] || [];
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleNavigate = () => {
     if (window.matchMedia('(max-width: 1023px)').matches) onClose();
   };
 
   const handleLogout = async () => {
+    setLoggingOut(true);
     await logout();
     navigate('/login');
   };
@@ -179,11 +171,34 @@ function Sidebar({ isOpen, onClose }) {
               <p className="mt-0.5 truncate text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400">{roleLabels[user?.role] || user?.role}</p>
             </div>
           </div>
-          <button type="button" onClick={handleLogout} className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:border-[#7D001D] hover:text-[#7D001D] dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
+          <button type="button" onClick={() => setLogoutConfirmOpen(true)} className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:border-[#7D001D] hover:text-[#7D001D] dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
             Sign out
           </button>
         </div>
       </aside>
+
+      {logoutConfirmOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={() => !loggingOut && setLogoutConfirmOpen(false)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="sign-out-title" onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900">
+            <div className="relative flex min-h-36 items-center justify-center border-b border-slate-200 px-16 py-6 dark:border-slate-700">
+              <div className="flex flex-col items-center gap-2 text-center">
+                <ArrowRightOnRectangleIcon className="h-11 w-11 text-[#7D001D] dark:text-red-300" aria-hidden="true" />
+                <h2 id="sign-out-title" className="text-3xl font-black text-slate-900 dark:text-white">Sign out</h2>
+              </div>
+              <button type="button" onClick={() => setLogoutConfirmOpen(false)} disabled={loggingOut} className="absolute right-5 top-5 rounded-xl p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800" aria-label="Close sign out dialog">
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">Do you want to sign out of your AIMS account?</p>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-slate-200 p-6 dark:border-slate-700">
+              <button type="button" onClick={() => setLogoutConfirmOpen(false)} disabled={loggingOut} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold disabled:opacity-40 dark:border-slate-700">Cancel</button>
+              <button type="button" onClick={handleLogout} disabled={loggingOut} className="inline-flex items-center gap-2 rounded-2xl bg-[#7D001D] px-5 py-3 font-black text-white disabled:opacity-50"><ArrowRightOnRectangleIcon className="h-5 w-5" />{loggingOut ? 'Signing out...' : 'Sign out'}</button>
+            </div>
+          </section>
+        </div>
+      )}
     </>
   );
 }
