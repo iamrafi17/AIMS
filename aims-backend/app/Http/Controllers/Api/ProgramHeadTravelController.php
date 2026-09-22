@@ -19,7 +19,7 @@ class ProgramHeadTravelController extends Controller
         $query = TravelLog::query()->with(TravelWorkflow::relations());
         if ($request->user()->role === 'program_head') {
             $programId = ProgramAccess::programId($request->user());
-            $query->whereHas('participants', fn ($participant) => $participant->where('program_id', $programId));
+            $query->whereHas('participants', fn ($participant) => $participant->forProgram($programId));
             $photoBase = '/program-head/travel';
         } else {
             $query->whereHas('report', fn ($report) => $report->whereIn('status', ['pending_vpaa', 'final_validated']));

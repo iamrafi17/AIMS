@@ -55,6 +55,7 @@ function UserModal({ item, onClose, onSaved }) {
       }
     : {
         name: '',
+        email: '',
         role: 'coordinator',
         college_id: '',
         program_id: '',
@@ -63,6 +64,7 @@ function UserModal({ item, onClose, onSaved }) {
       });
   const [colleges, setColleges] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [emailError, setEmailError] = useState('');
   const [supervisorSearch, setSupervisorSearch] = useState('');
   const [supervisorResults, setSupervisorResults] = useState([]);
   const [supervisorSearchBusy, setSupervisorSearchBusy] = useState(false);
@@ -129,26 +131,31 @@ function UserModal({ item, onClose, onSaved }) {
 
   const submit = async (event) => {
     event.preventDefault();
+    if (saving) return;
+    setEmailError('');
     setSaving(true);
+    const payload = { ...form, email: form.email.trim() };
 
     try {
       if (item) {
-        const response = await api.put(`/admin/users/${item.id}`, form);
+        const response = await api.put(`/admin/users/${item.id}`, payload);
         toast.success(response.data.message || 'User account updated successfully.');
       } else {
-        const response = await api.post('/admin/users', form);
+        const response = await api.post('/admin/users', payload);
         toast.success(response.data.message);
         onSaved({
           idLabel: 'User ID',
           userId: response.data.user?.user_id || response.data.user?.email || String(response.data.user?.id),
           temporaryPassword: response.data.temporary_password,
           name: response.data.user?.name || form.name,
+          email: response.data.user?.email,
         });
         return;
       }
       onSaved();
     } catch (error) {
       const errors = error.response?.data?.errors;
+      setEmailError(errors?.email?.[0] || '');
       toast.error(
         errors
           ? Object.values(errors).flat()[0]
@@ -169,9 +176,9 @@ function UserModal({ item, onClose, onSaved }) {
         aria-label={item ? 'Update user account' : 'Create staff account'}
         onSubmit={submit}
         onMouseDown={(event) => event.stopPropagation()}
-        className="max-h-[calc(100dvh-1rem)] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl dark:bg-slate-900 sm:max-h-[calc(100dvh-2rem)]"
+        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900 sm:max-h-[calc(100dvh-2rem)]"
       >
-        <div className="flex items-start justify-between border-b border-slate-200 p-4 dark:border-slate-700 sm:p-6">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-200 p-4 dark:border-slate-700 sm:p-6">
           <div>
             <p className="text-xs font-black uppercase tracking-widest text-[#a8750b]">
               {item ? 'Account information and access' : 'Program-scoped access control'}
@@ -186,8 +193,8 @@ function UserModal({ item, onClose, onSaved }) {
           </button>
         </div>
 
-        <div className="space-y-5 p-4 sm:p-6">
-          <div className={`grid gap-5 ${item ? 'sm:grid-cols-2' : ''}`}>
+        <div className="min-h-0 space-y-5 overflow-y-auto p-4 sm:p-6">
+          <div className="grid gap-5 sm:grid-cols-2">
             <label className="block">
               <span className="mb-2 block text-sm font-bold">Full name</span>
               <input
@@ -199,19 +206,28 @@ function UserModal({ item, onClose, onSaved }) {
                 placeholder={supervisorRole ? 'Select an existing supervisor below' : ''}
               />
             </label>
-            {item && (
-              <label className="block">
-                <span className="mb-2 block text-sm font-bold">Email address</span>
-                <input
-                  readOnly
-                  type="email"
-                  value={form.email}
-                  className={`${inputClass} bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300`}
-                  placeholder="Pending staff profile"
-                />
-                <span className="mt-1 block text-xs text-slate-500">The staff member provides this during first-login profile setup.</span>
-              </label>
-            )}
+            <label className="block">
+              <span className="mb-2 block text-sm font-bold">Email address</span>
+              <input
+                required
+                type="email"
+                name="email"
+                autoComplete="email"
+                maxLength={255}
+                value={form.email}
+                onChange={(event) => {
+                  setForm({ ...form, email: event.target.value });
+                  setEmailError('');
+                }}
+                aria-invalid={Boolean(emailError)}
+                aria-describedby="staff-email-help"
+                className={`${inputClass} ${emailError ? 'border-red-500' : ''}`}
+                placeholder="name@example.com"
+              />
+              <span id="staff-email-help" role={emailError ? 'alert' : undefined} className={`mt-1 block text-xs ${emailError ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}`}>
+                {emailError || 'Use a unique email address. This can also be used to sign in.'}
+              </span>
+            </label>
           </div>
 
           <label className="block">
@@ -285,14 +301,14 @@ function UserModal({ item, onClose, onSaved }) {
 
           {!item && (
             <div className="rounded-2xl bg-blue-50 p-4 text-sm leading-6 text-blue-700 dark:bg-blue-950/30 dark:text-blue-200">
-              The system will generate a secure temporary password after saving. Staff accounts start as <strong>Pending Profile</strong> and must change that password, set three security questions, and provide their email, contact number, and address on first login.
+              The system will generate a secure temporary password after saving. Staff accounts start as <strong>Pending Profile</strong> and must confirm their email, provide their contact number and address, change their password, and set three security questions on first login.
             </div>
           )}
 
           {!item && <label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-bold dark:border-slate-700"><input type="checkbox" checked={form.is_active} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} /> Account is active</label>}
         </div>
 
-        <div className="flex justify-end gap-3 border-t border-slate-200 p-6 dark:border-slate-700">
+        <div className="flex shrink-0 justify-end gap-3 border-t border-slate-200 p-4 dark:border-slate-700 sm:p-6">
           <button type="button" onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold dark:border-slate-700">
             Cancel
           </button>
@@ -320,7 +336,7 @@ function CreatedCredentialsModal({ credentials, onClose }) {
   };
 
   const copyAll = () => copy(
-    `${credentials.idLabel}: ${credentials.userId}\nTemporary password: ${credentials.temporaryPassword}`,
+    `${credentials.idLabel}: ${credentials.userId}${credentials.email ? `\nEmail: ${credentials.email}` : ''}\nTemporary password: ${credentials.temporaryPassword}`,
     'Credentials',
   );
 
@@ -338,7 +354,7 @@ function CreatedCredentialsModal({ credentials, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <section role="dialog" aria-modal="true" aria-labelledby="created-credentials-title" className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900">
+      <section role="dialog" aria-modal="true" aria-labelledby="created-credentials-title" className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white shadow-2xl dark:bg-slate-900">
         <div className="bg-emerald-50 p-6 dark:bg-emerald-950/30">
           <div className="flex items-start gap-4">
             <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
@@ -353,6 +369,7 @@ function CreatedCredentialsModal({ credentials, onClose }) {
         </div>
         <div className="space-y-4 p-6">
           {credentialRow(credentials.idLabel, credentials.userId)}
+          {credentials.email && credentialRow('Email address', credentials.email)}
           {credentialRow('Temporary password', credentials.temporaryPassword)}
           <p className="rounded-2xl bg-amber-50 p-4 text-xs leading-5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">Copy the credentials before closing this popup.</p>
         </div>
@@ -654,15 +671,15 @@ export default function AdminUsers() {
         )}
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="portal-metric-grid grid gap-4 sm:grid-cols-3">
         <MetricCard label="Accounts shown" value={users.length} icon={UsersIcon} />
         <MetricCard label="Active access" value={active} icon={CheckCircleIcon} tone="green" />
         <MetricCard label="Staff accounts" value={staff} icon={UserGroupIcon} tone="blue" />
       </div>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_12rem_15rem_9rem]">
-          <label className="relative flex-1">
+      <section className="portal-filter-panel rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="portal-filter-grid portal-filter-grid--four grid gap-3 lg:grid-cols-[minmax(0,1fr)_12rem_15rem_9rem]">
+          <label className="portal-filter-search relative flex-1">
             <MagnifyingGlassIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
@@ -717,8 +734,72 @@ export default function AdminUsers() {
       ) : users.length === 0 ? (
         <EmptyPanel icon={UsersIcon} title="No user accounts found" description="Create a staff account or change the current filters." />
       ) : (
-        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-          <div className="overflow-x-auto">
+        <section className="portal-table-panel overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div className="touch-layout-only divide-y divide-slate-100 dark:divide-slate-800 lg:hidden">
+            {users.map((user) => {
+              const isCurrentAccount = user.id === authenticatedUser?.id;
+              const pendingProfile = isPendingProfile(user);
+              const assignedCollege = user.college || user.student?.college;
+              const assignedProgram = user.program || user.student?.program;
+
+              return (
+                <details key={user.id} className="mobile-account-card px-4 py-3">
+                  <summary className="mobile-account-summary flex cursor-pointer items-start gap-3">
+                    <UserAvatar user={user} className="h-11 w-11 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <h2 className="truncate text-sm font-black text-slate-900 dark:text-white">{user.name}</h2>
+                        {isCurrentAccount && <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">You</span>}
+                      </div>
+                      <p className="truncate text-xs text-slate-500">{user.email}</p>
+                      {user.user_id && <p className="mt-0.5 font-mono text-[11px] font-bold text-[#7D001D] dark:text-red-300">{user.user_id}</p>}
+                      <p className="mt-0.5 text-[10px] font-bold capitalize text-slate-400">{roleLabel(user.role)} · Tap for details</p>
+                    </div>
+                    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-black ${!user.is_active ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200' : pendingProfile ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'}`}>
+                      {!user.is_active ? <XCircleIcon className="h-3.5 w-3.5" /> : <CheckCircleIcon className="h-3.5 w-3.5" />}
+                      {!user.is_active ? 'Inactive' : pendingProfile ? 'Pending' : 'Active'}
+                    </span>
+                  </summary>
+
+                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-2xl bg-slate-50 p-3 text-xs dark:bg-slate-800/60">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Role</p>
+                      <p className="mt-0.5 truncate font-bold capitalize text-slate-700 dark:text-slate-200">{roleLabel(user.role)}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Last login</p>
+                      <p className="mt-0.5 truncate font-bold text-slate-700 dark:text-slate-200">{formatLastLogin(user.last_login_at)}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">College</p>
+                      <p className="mt-0.5 truncate font-bold text-slate-700 dark:text-slate-200">{assignedCollege ? `${assignedCollege.code} - ${assignedCollege.name}` : 'Not assigned'}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Program</p>
+                      <p className="mt-0.5 truncate font-bold text-slate-700 dark:text-slate-200">{assignedProgram ? `${assignedProgram.code} - ${assignedProgram.name}` : 'Not assigned'}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-4 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditor({ item: user })}
+                      className="inline-flex min-h-10 items-center justify-center gap-1 rounded-xl border border-slate-200 px-2 text-xs font-black text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                      aria-label={`Edit ${user.name}`}
+                    >
+                      <PencilSquareIcon className="h-4 w-4" />
+                      Edit
+                    </button>
+                    <button type="button" onClick={() => setPasswordResetUser(user)} className="grid min-h-10 place-items-center rounded-xl border border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-300" title="Reset password" aria-label={`Reset password for ${user.name}`}><KeyIcon className="h-4 w-4" /></button>
+                    <button type="button" disabled={isCurrentAccount} onClick={() => setAccountAction({ user, action: 'status' })} className={`grid min-h-10 place-items-center rounded-xl border disabled:cursor-not-allowed disabled:opacity-35 ${user.is_active ? 'border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-300' : 'border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-300'}`} title={isCurrentAccount ? 'You cannot change the status of your current account' : user.is_active ? 'Deactivate user' : 'Activate user'} aria-label={`${user.is_active ? 'Deactivate' : 'Activate'} ${user.name}`}><PowerIcon className="h-4 w-4" /></button>
+                    <button type="button" disabled={isCurrentAccount} onClick={() => setAccountAction({ user, action: 'delete' })} className="grid min-h-10 place-items-center rounded-xl border border-rose-200 text-rose-700 disabled:cursor-not-allowed disabled:opacity-35 dark:border-rose-900 dark:text-rose-300" title={isCurrentAccount ? 'You cannot delete your current account' : 'Permanently delete user'} aria-label={`Permanently delete ${user.name}`}><TrashIcon className="h-4 w-4" /></button>
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+
+          <div className="desktop-layout-only hidden overflow-x-auto lg:block">
             <table className="w-full min-w-[1280px]">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-800">
                 <tr>

@@ -16,7 +16,7 @@ final class TravelWorkflow
         return [
             'creator:id,name',
             'coordinator:id,name,email',
-            'hte:id,program_id,name,address,latitude,longitude',
+            'hte:id,name,address,latitude,longitude',
             'participants.user:id,name,email,is_active',
             'participants.program.college',
             'participants.hte:id,name,address',

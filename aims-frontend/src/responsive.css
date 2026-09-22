@@ -1,0 +1,460 @@
+/* Touch-first working views for data-heavy portal screens.
+   This file is imported after index.css so normal cascade order is enough;
+   avoid priority overrides and keep every rule scoped to a portal feature. */
+
+/* Mobile and touch-tablet working views for data-heavy portal screens. */
+@media screen and (max-width: 639px) {
+  .portal-header {
+    backdrop-filter: none;
+  }
+
+  .notification-preview {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + 3.75rem);
+    right: max(0.75rem, env(safe-area-inset-right));
+    left: max(0.75rem, env(safe-area-inset-left));
+    display: flex;
+    width: auto;
+    max-height: calc(100dvh - env(safe-area-inset-top) - 4.5rem);
+    flex-direction: column;
+    border-radius: 0.75rem;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.2);
+  }
+
+  .notification-preview-header-action {
+    display: none;
+  }
+
+  .notification-preview-list {
+    min-height: 0;
+    max-height: min(15rem, calc(100dvh - 11rem));
+    overscroll-behavior: contain;
+  }
+}
+
+@media screen and (max-width: 1023px),
+  screen and (min-width: 1024px) and (max-width: 1180px) and (hover: none) and (pointer: coarse) {
+  .touch-layout-only {
+    display: block;
+  }
+
+  .desktop-layout-only {
+    display: none;
+  }
+
+  .portal-mobile-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: visible;
+    gap: 0.375rem;
+  }
+
+  .portal-mobile-tabs--three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .portal-mobile-tabs > button {
+    min-width: 0;
+    width: 100%;
+    justify-content: center;
+    padding: 0.625rem 0.5rem;
+    white-space: normal;
+    text-align: center;
+    line-height: 1rem;
+  }
+
+  .portal-metric-card p,
+  .portal-summary-card p {
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
+  }
+
+  .student-attendance-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .student-attendance-summary-card {
+    min-height: 5rem;
+    padding: 0.75rem;
+  }
+
+  .student-attendance-summary-card > p:first-child {
+    font-size: 0.6875rem;
+    line-height: 0.875rem;
+  }
+
+  .student-attendance-summary-card > p:nth-child(2) {
+    margin-top: 0.25rem;
+    font-size: 1.25rem;
+    line-height: 1.5rem;
+  }
+
+  .student-attendance-summary-card > p:nth-child(2) > span {
+    font-size: 0.6875rem;
+  }
+
+  .quick-smart-clock-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.625rem;
+  }
+
+  .quick-smart-clock-header > div:first-child {
+    min-width: 0;
+  }
+
+  .dashboard-shell main .quick-smart-clock-controls {
+    grid-template-columns: minmax(0, 6.5rem);
+    grid-auto-rows: 1.625rem;
+    align-self: flex-end;
+    justify-content: end;
+    width: min(100%, 6.5rem);
+    padding: 0;
+    gap: 0.25rem;
+  }
+
+  .dashboard-shell main .quick-smart-clock-controls--single {
+    grid-template-columns: minmax(0, 6.5rem);
+  }
+
+  .quick-smart-clock-controls > label {
+    width: 100%;
+    height: 1.625rem;
+  }
+
+  .quick-smart-clock-controls > label > span {
+    width: 1.5rem;
+  }
+
+  .dashboard-shell main .quick-smart-clock-controls select {
+    font-size: 0.5625rem;
+  }
+
+  .portal-summary-card > .flex {
+    display: grid;
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .portal-summary-card > .flex > :first-child {
+    width: 1.75rem;
+    height: 1.75rem;
+    min-width: 1.75rem;
+  }
+
+  .portal-summary-card > .flex > :last-child {
+    min-width: 0;
+  }
+
+  .portal-summary-card > .flex > :last-child > p:last-child {
+    font-size: 0.625rem;
+    line-height: 0.8rem;
+  }
+
+  .coordinator-hte .portal-summary-card {
+    display: grid;
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 0.5rem;
+  }
+
+  .coordinator-hte .portal-summary-card > span {
+    grid-row: 1 / 3;
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .coordinator-hte .portal-summary-card > p {
+    grid-column: 2;
+    margin-top: 0;
+  }
+
+  .coordinator-hte .portal-summary-card > p:last-child {
+    font-size: 0.625rem;
+    line-height: 0.8rem;
+  }
+
+  .student-requirements-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .student-requirements-panel {
+    padding: 0.75rem;
+  }
+
+  .student-requirement-card {
+    position: relative;
+    padding: 0.75rem;
+  }
+
+  .student-requirement-card > div:first-child {
+    display: block;
+  }
+
+  .student-requirement-card > div:first-child > div:first-child {
+    min-width: 0;
+    gap: 0.5rem;
+    padding-right: 2rem;
+  }
+
+  .student-requirement-card > div:first-child > div:first-child > div:first-child {
+    width: 1.75rem;
+    height: 1.75rem;
+    flex: 0 0 1.75rem;
+  }
+
+  .student-requirement-card > div:first-child > div:first-child > div:last-child {
+    min-width: 0;
+  }
+
+  .student-requirement-card h3 {
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+
+  .student-requirement-card h3 + p {
+    font-size: 0.6875rem;
+    line-height: 0.875rem;
+  }
+
+  .student-requirement-card > div:first-child > div:last-child {
+    position: absolute;
+    right: 0.5rem;
+    top: 0.5rem;
+    gap: 0.25rem;
+  }
+
+  .student-requirement-card > div:first-child > div:last-child > span {
+    max-width: 3.75rem;
+    overflow: hidden;
+    padding: 0.25rem 0.375rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.5625rem;
+  }
+
+  .student-requirement-actions {
+    margin-top: 0.625rem;
+  }
+
+  .student-requirement-actions label,
+  .student-requirement-actions label > span {
+    width: 100%;
+    text-align: center;
+  }
+
+  .portal-card-tables .overflow-x-auto {
+    margin-inline: 0;
+    padding-inline: 0;
+    overflow: visible;
+  }
+
+  .dashboard-shell main .portal-card-tables .overflow-x-auto > table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .mobile-account-summary {
+    list-style: none;
+  }
+
+  .mobile-account-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .mobile-account-card[open] {
+    background: var(--ui-surface-subtle);
+  }
+
+  .portal-card-tables table thead {
+    display: none;
+  }
+
+  .portal-card-tables table tbody {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .portal-card-tables table tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: hidden;
+    border: 1px solid var(--ui-border);
+    border-radius: 0.875rem;
+    background: var(--ui-surface);
+  }
+
+  .portal-card-tables table tbody > tr > td {
+    display: block;
+    min-width: 0;
+    padding: 0.625rem 0.75rem;
+    border: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+
+  .portal-card-tables table tbody > tr > td:first-child {
+    position: static;
+    z-index: auto;
+    grid-column: 1 / -1;
+    background: var(--ui-surface-subtle);
+    box-shadow: none;
+  }
+
+  .portal-card-tables table tbody > tr > td:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .portal-card-tables table tbody > tr > td[colspan] {
+    grid-column: 1 / -1;
+    padding-block: 2rem;
+    text-align: center;
+  }
+
+  .portal-card-tables table tbody > tr > td::before {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: #94a3b8;
+    font-size: 0.5625rem;
+    font-weight: 800;
+    line-height: 0.75rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .portal-card-tables table tbody > tr > td[colspan]::before {
+    display: none;
+  }
+
+  .portal-card-table--enrollment td:nth-child(1)::before { content: 'School ID'; }
+  .portal-card-table--enrollment td:nth-child(2)::before { content: 'Full name'; }
+  .portal-card-table--enrollment td:nth-child(3)::before { content: 'Section'; }
+  .portal-card-table--enrollment td:nth-child(4)::before { content: 'Added through'; }
+  .portal-card-table--enrollment td:nth-child(5)::before { content: 'Registration'; }
+
+  .portal-card-table--coordinator-students td:nth-child(1)::before { content: 'Student'; }
+  .portal-card-table--coordinator-students td:nth-child(2)::before { content: 'Academic / HTE'; }
+  .portal-card-table--coordinator-students td:nth-child(3)::before { content: 'Registration'; }
+  .portal-card-table--coordinator-students td:nth-child(4)::before { content: 'OJT progress'; }
+  .portal-card-table--coordinator-students td:nth-child(5)::before { content: 'Requirements'; }
+  .portal-card-table--coordinator-students td:nth-child(6)::before { content: 'Actions'; }
+
+  .portal-card-table--attendance td:nth-child(1)::before { content: 'Student'; }
+  .portal-card-table--attendance td:nth-child(2)::before { content: 'Date & mode'; }
+  .portal-card-table--attendance td:nth-child(3)::before { content: 'Time record'; }
+  .portal-card-table--attendance td:nth-child(4)::before { content: 'Hours'; }
+  .portal-card-table--attendance td:nth-child(5)::before { content: 'Status'; }
+  .portal-card-table--attendance td:nth-child(6)::before { content: 'Action'; }
+
+  .coordinator-hte[data-hte-tab='htes'] > section > .overflow-x-auto > table td:nth-child(1)::before { content: 'HTE / contact'; }
+  .coordinator-hte[data-hte-tab='htes'] > section > .overflow-x-auto > table td:nth-child(2)::before { content: 'Interns'; }
+  .coordinator-hte[data-hte-tab='htes'] > section > .overflow-x-auto > table td:nth-child(3)::before { content: 'Working schedule'; }
+  .coordinator-hte[data-hte-tab='htes'] > section > .overflow-x-auto > table td:nth-child(4)::before { content: 'Geofence'; }
+  .coordinator-hte[data-hte-tab='htes'] > section > .overflow-x-auto > table td:nth-child(5)::before { content: 'MOA'; }
+  .coordinator-hte[data-hte-tab='htes'] > section > .overflow-x-auto > table td:nth-child(6)::before { content: 'Actions'; }
+  .coordinator-hte[data-hte-tab='deployments'] > section > .overflow-x-auto > table td:nth-child(1)::before { content: 'Student'; }
+  .coordinator-hte[data-hte-tab='deployments'] > section > .overflow-x-auto > table td:nth-child(2)::before { content: 'HTE / department'; }
+  .coordinator-hte[data-hte-tab='deployments'] > section > .overflow-x-auto > table td:nth-child(3)::before { content: 'Supervisor'; }
+  .coordinator-hte[data-hte-tab='deployments'] > section > .overflow-x-auto > table td:nth-child(4)::before { content: 'Internship period'; }
+  .coordinator-hte[data-hte-tab='deployments'] > section > .overflow-x-auto > table td:nth-child(5)::before { content: 'Working hours'; }
+  .coordinator-hte[data-hte-tab='deployments'] > section > .overflow-x-auto > table td:nth-child(6)::before { content: 'Status'; }
+  .coordinator-hte[data-hte-tab='deployments'] > section > .overflow-x-auto > table td:nth-child(7)::before { content: 'Action'; }
+  .coordinator-hte[data-hte-tab='moas'] > section > .overflow-x-auto > table td:nth-child(1)::before { content: 'HTE / college'; }
+  .coordinator-hte[data-hte-tab='moas'] > section > .overflow-x-auto > table td:nth-child(2)::before { content: 'Effective'; }
+  .coordinator-hte[data-hte-tab='moas'] > section > .overflow-x-auto > table td:nth-child(3)::before { content: 'Expiration'; }
+  .coordinator-hte[data-hte-tab='moas'] > section > .overflow-x-auto > table td:nth-child(4)::before { content: 'Status'; }
+  .coordinator-hte[data-hte-tab='moas'] > section > .overflow-x-auto > table td:nth-child(5)::before { content: 'Action'; }
+
+  .portal-card-table--document-review td:nth-child(1)::before { content: 'Student'; }
+  .portal-card-table--document-review td:nth-child(2)::before { content: 'Requirement'; }
+  .portal-card-table--document-review td:nth-child(3)::before { content: 'File'; }
+  .portal-card-table--document-review td:nth-child(4)::before { content: 'Submitted'; }
+  .portal-card-table--document-review td:nth-child(5)::before { content: 'Review status'; }
+  .portal-card-table--document-review td:nth-child(6)::before { content: 'Reviewer'; }
+  .portal-card-table--document-review td:nth-child(7)::before { content: 'Actions'; }
+
+  .portal-card-table--student-monitoring td:nth-child(1)::before { content: 'Student'; }
+  .portal-card-table--student-monitoring td:nth-child(2)::before { content: 'Deployment'; }
+  .portal-card-table--student-monitoring td:nth-child(3)::before { content: 'Progress'; }
+  .portal-card-table--student-monitoring td:nth-child(4)::before { content: 'Attendance'; }
+  .portal-card-table--student-monitoring td:nth-child(5)::before { content: 'Requirements'; }
+  .portal-card-table--student-monitoring td:nth-child(6)::before { content: 'Status'; }
+  .portal-card-table--student-monitoring td:nth-child(7)::before { content: 'Details'; }
+
+  .portal-card-table--program-dashboard td:nth-child(1)::before { content: 'Program'; }
+  .portal-card-table--program-dashboard td:nth-child(2)::before { content: 'Students'; }
+  .portal-card-table--program-dashboard td:nth-child(3)::before { content: 'Active'; }
+  .portal-card-table--program-dashboard td:nth-child(4)::before { content: 'OJT progress'; }
+  .portal-card-table--program-dashboard td:nth-child(5)::before { content: 'Attendance'; }
+
+  .coordinator-reports table td:nth-child(1)::before,
+  .program-head-reports table td:nth-child(1)::before { content: 'Record'; }
+  .coordinator-reports table td:nth-child(2)::before,
+  .program-head-reports table td:nth-child(2)::before { content: 'Details'; }
+  .coordinator-reports table td:nth-child(3)::before,
+  .program-head-reports table td:nth-child(3)::before { content: 'Current'; }
+  .coordinator-reports table td:nth-child(4)::before,
+  .program-head-reports table td:nth-child(4)::before { content: 'Progress / status'; }
+  .coordinator-reports table td:nth-child(5)::before,
+  .program-head-reports table td:nth-child(5)::before { content: 'Compliance'; }
+  .coordinator-reports table td:nth-child(6)::before,
+  .program-head-reports table td:nth-child(6)::before { content: 'Review details'; }
+  .coordinator-reports table td:nth-child(7)::before,
+  .program-head-reports table td:nth-child(7)::before { content: 'Status'; }
+  .coordinator-reports table td:nth-child(8)::before,
+  .program-head-reports table td:nth-child(8)::before { content: 'Actions'; }
+
+  .dashboard-shell [data-touch-active='false'],
+  .admin-system-settings [data-mobile-active='false'] {
+    display: none;
+  }
+
+  .coordinator-dashboard :where(.hidden.lg\:block, .hidden.lg\:grid),
+  .program-head-dashboard :where(.hidden.lg\:block, .hidden.lg\:grid),
+  .coordinator-reports :where(.hidden.lg\:block, .hidden.lg\:grid),
+  .program-head-reports :where(.hidden.lg\:block, .hidden.lg\:grid),
+  .student-attendance :where(.hidden.lg\:block, .hidden.lg\:flex) {
+    display: none;
+  }
+
+  .coordinator-dashboard > section.lg\:hidden,
+  .program-head-dashboard > section.lg\:hidden {
+    display: block;
+  }
+
+  .coordinator-dashboard .touch-layout-only.grid {
+    display: grid;
+  }
+}
+
+@media screen and (min-width: 640px) and (max-width: 1023px),
+  screen and (min-width: 1024px) and (max-width: 1180px) and (hover: none) and (pointer: coarse) {
+  .portal-card-tables table tbody {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media screen and (max-width: 359px) {
+  .quick-smart-clock-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .student-requirements-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .portal-mobile-tabs--three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

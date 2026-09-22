@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademicPeriod;
 use App\Models\AcademicSection;
 use App\Models\College;
-use App\Models\OjtEnrollment;
 use App\Models\Program;
 use App\Models\Student;
 use App\Models\User;
@@ -28,8 +28,16 @@ class AcademicSectionBackfillTest extends TestCase
             'code' => 'BSIS',
             'is_active' => true,
         ]);
+        $period = AcademicPeriod::create([
+            'academic_year' => '2026-2027',
+            'semester' => '2nd Semester',
+            'start_date' => '2027-01-01',
+            'end_date' => '2027-05-31',
+            'status' => 'active',
+        ]);
         $sectionA = AcademicSection::create([
             'program_id' => $program->id,
+            'academic_period_id' => $period->id,
             'name' => 'BSIS A',
             'year_level' => 4,
             'academic_year' => '2026-2027',
@@ -37,49 +45,31 @@ class AcademicSectionBackfillTest extends TestCase
         ]);
         $sectionB = AcademicSection::create([
             'program_id' => $program->id,
+            'academic_period_id' => $period->id,
             'name' => 'BSIS B',
             'year_level' => 4,
             'academic_year' => '2026-2027',
             'is_active' => true,
         ]);
 
-        $studentFromEnrollment = $this->createLegacyStudent($college, $program, '2026-001', 'A');
-        OjtEnrollment::create([
-            'school_id' => $studentFromEnrollment->student_id,
-            'full_name' => 'Enrollment Linked Student',
-            'section' => 'A',
-            'college_id' => $college->id,
-            'program_id' => $program->id,
-            'academic_section_id' => $sectionA->id,
-            'source' => 'manual',
-            'student_record_id' => $studentFromEnrollment->id,
-            'registered_at' => now(),
-        ]);
-
-        $studentFromUniqueName = $this->createLegacyStudent($college, $program, '2026-002', 'BSIS B');
+        $studentFromEnrollment = $this->createLegacyStudent($college, $program, '2026-001', 'A', $sectionA->id);
+        $studentFromUniqueName = $this->createLegacyStudent($college, $program, '2026-002', 'BSIS B', $sectionB->id);
 
         $migration = require database_path('migrations/2026_08_18_000001_backfill_legacy_academic_section_ids.php');
         $migration->up();
         $migration->up();
 
-        $this->assertDatabaseHas('students', [
-            'id' => $studentFromEnrollment->id,
-            'academic_section_id' => $sectionA->id,
-            'section' => 'BSIS A',
-        ]);
         $this->assertDatabaseHas('ojt_enrollments', [
             'student_record_id' => $studentFromEnrollment->id,
             'academic_section_id' => $sectionA->id,
-            'section' => 'BSIS A',
         ]);
-        $this->assertDatabaseHas('students', [
-            'id' => $studentFromUniqueName->id,
+        $this->assertDatabaseHas('student_internships', [
+            'student_id' => $studentFromUniqueName->id,
             'academic_section_id' => $sectionB->id,
-            'section' => 'BSIS B',
         ]);
     }
 
-    private function createLegacyStudent(College $college, Program $program, string $studentId, string $section): Student
+    private function createLegacyStudent(College $college, Program $program, string $studentId, string $section, int $academicSectionId): Student
     {
         $user = User::factory()->create(['role' => 'student']);
 
@@ -94,7 +84,7 @@ class AcademicSectionBackfillTest extends TestCase
             'contact_number' => '09170000000',
             'college_id' => $college->id,
             'program_id' => $program->id,
-            'academic_section_id' => null,
+            'academic_section_id' => $academicSectionId,
             'year_level' => 4,
             'section' => $section,
             'parent_name' => 'Test Parent',

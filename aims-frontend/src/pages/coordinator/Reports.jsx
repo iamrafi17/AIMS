@@ -62,7 +62,7 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
     violet: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
   };
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 print:border-slate-200 print:shadow-none">
+    <div className="portal-metric-card rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 print:border-slate-200 print:shadow-none">
       <div className="flex items-start justify-between gap-3">
         <div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p><p className="mt-2 text-3xl font-black text-[#690016] dark:text-white print:text-black">{value}</p><p className="mt-1 text-xs text-slate-400">{note}</p></div>
         <div className={`grid h-11 w-11 place-items-center rounded-2xl text-xl print:hidden ${tones[tone]}`}><Icon /></div>
@@ -71,9 +71,9 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   );
 }
 
-function Panel({ title, subtitle, icon: Icon, action, children, className = '' }) {
+function Panel({ title, subtitle, icon: Icon, action, children, className = '', ...sectionProps }) {
   return (
-    <section className={`rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-6 print:break-inside-avoid print:rounded-none print:border-0 print:p-0 print:shadow-none ${className}`}>
+    <section {...sectionProps} className={`rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-6 print:break-inside-avoid print:rounded-none print:border-0 print:p-0 print:shadow-none ${className}`}>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3 print:mb-3">
         <div className="flex items-start gap-3">
           {Icon && <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#7D001D]/10 text-lg text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300 print:hidden"><Icon /></div>}
@@ -98,6 +98,7 @@ function Donut({ value, label, color = '#7D001D' }) {
 
 function CoordinatorReports() {
   const [activeReport, setActiveReport] = useState('student_internship');
+  const [mobileView, setMobileView] = useState('analysis');
   const [records, setRecords] = useState({ program: null, sections: [], selected_section: null, attendance: [], journals: [], requirements: [], students: [], deployments: [], travel: [] });
 
   useEffect(() => {
@@ -167,7 +168,7 @@ function CoordinatorReports() {
   const reportPeriod = 'All available records';
 
   return (
-    <div className="space-y-6 print:space-y-4">
+    <div className="coordinator-reports portal-card-tables space-y-6 print:space-y-4">
       <div className="hidden border-b-2 border-[#7D001D] pb-4 print:block">
         <div className="flex items-end justify-between gap-4">
           <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7D001D]">Marinduque State University · AIMS</p><h1 className="mt-1 text-2xl font-black text-black">{activeModule.label}</h1><p className="mt-1 text-xs text-slate-500">{activeModule.description}</p></div>
@@ -189,9 +190,9 @@ function CoordinatorReports() {
       </header>
 
       <nav className="overflow-x-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-800 print:hidden" aria-label="Coordinator report types">
-        <div className="flex min-w-max gap-1">
+        <div className="portal-mobile-tabs flex min-w-max gap-1">
           {reportModules.map((module) => (
-            <button key={module.id} type="button" onClick={() => setActiveReport(module.id)} className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition sm:px-5 ${activeReport === module.id ? 'bg-[#7D001D] text-white shadow-md shadow-[#7D001D]/15' : 'text-slate-500 hover:bg-slate-50 hover:text-[#7D001D] dark:text-gray-300 dark:hover:bg-gray-700'}`}>
+            <button key={module.id} type="button" onClick={() => { setActiveReport(module.id); setMobileView('analysis'); }} className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition sm:px-5 ${activeReport === module.id ? 'bg-[#7D001D] text-white shadow-md shadow-[#7D001D]/15' : 'text-slate-500 hover:bg-slate-50 hover:text-[#7D001D] dark:text-gray-300 dark:hover:bg-gray-700'}`}>
               <module.icon className="text-base" /><span>{module.shortLabel}</span>
             </button>
           ))}
@@ -202,16 +203,20 @@ function CoordinatorReports() {
         <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8750b]">{activeModule.shortLabel}</p><h2 className="mt-1 text-xl font-black text-[#690016] dark:text-white">{activeModule.label}</h2><p className="mt-1 text-xs text-slate-400">{activeModule.description} · {sectionLabel} · {reportPeriod}</p></div>
       </div>
 
+      <section className="touch-layout-only rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900 lg:hidden print:hidden">
+        <label className="block"><span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-500">Report section</span><select value={mobileView} onChange={(event) => setMobileView(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold dark:border-slate-700 dark:bg-slate-950"><option value="analysis">Summary and analysis</option><option value="records">Detailed records</option></select></label>
+      </section>
+
       {activeReport === 'attendance' && (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Attendance rate" value={`${attendanceRate}%`} note={`${attendancePresent + attendanceLate}/${filteredAttendance.length} present or late`} icon={FiTrendingUp} tone="green" />
             <MetricCard label="Rendered hours" value={attendanceHours.toFixed(2)} note="For the selected records" icon={FiClock} tone="blue" />
             <MetricCard label="Late records" value={attendanceLate} note={`${percent(attendanceLate, filteredAttendance.length)}% of displayed records`} icon={FiCalendar} tone="amber" />
             <MetricCard label="Pending review" value={unverifiedAttendance} note="Unverified attendance logs" icon={FiFileText} />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div data-touch-active={mobileView === 'analysis'} className="grid gap-6 xl:grid-cols-2">
             <Panel title="Attendance Distribution" subtitle="Record status for the selected reporting period" icon={FiPieChart}>
               <div className="flex flex-col items-center gap-7 sm:flex-row">
                 <Donut value={attendanceRate} label="attendance" color="#059669" />
@@ -229,7 +234,7 @@ function CoordinatorReports() {
             </Panel>
           </div>
 
-          <Panel title="Attendance Records" subtitle={`${filteredAttendance.length} records shown`} icon={FiClock}>
+          <Panel data-touch-active={mobileView === 'records'} title="Attendance Records" subtitle={`${filteredAttendance.length} records shown`} icon={FiClock}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-left">
                 <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Date / Student</th><th className="pb-3 font-black">HTE / Mode</th><th className="pb-3 font-black">AM In / Out</th><th className="pb-3 font-black">PM In / Out</th><th className="pb-3 font-black">Hours / OT</th><th className="pb-3 font-black">GPS / Geofence</th><th className="pb-3 font-black">Status</th><th className="pb-3 font-black">Verified</th></tr></thead>
@@ -242,14 +247,14 @@ function CoordinatorReports() {
 
       {activeReport === 'journals' && (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Expected entries" value={journalExpected} note="AM and PM journals" icon={FiBookOpen} />
             <MetricCard label="Submitted" value={journalSubmitted} note={`${journalCompletion}% submission rate`} icon={FiCheckCircle} tone="green" />
             <MetricCard label="Pending review" value={journalPending} note="Awaiting coordinator review" icon={FiClock} tone="amber" />
             <MetricCard label="Missing entries" value={journalMissing} note={`${filteredJournals.length} student records`} icon={FiFileText} tone="violet" />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
+          <div data-touch-active={mobileView === 'analysis'} className="grid gap-6 xl:grid-cols-[380px_1fr]">
             <Panel title="Submission Completion" subtitle="Overall journal compliance" icon={FiPieChart}>
               <div className="flex justify-center"><Donut value={journalCompletion} label="submitted" /></div>
               <div className="mt-6 grid grid-cols-3 gap-2 text-center">
@@ -267,7 +272,7 @@ function CoordinatorReports() {
             </Panel>
           </div>
 
-          <Panel title="Student Journal Summary" subtitle={`${filteredJournals.length} student records shown`} icon={FiBookOpen}>
+          <Panel data-touch-active={mobileView === 'records'} title="Student Journal Summary" subtitle={`${filteredJournals.length} student records shown`} icon={FiBookOpen}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[800px] text-left">
                 <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Student</th><th className="pb-3 font-black">Submitted</th><th className="pb-3 font-black">Approved</th><th className="pb-3 font-black">Pending</th><th className="pb-3 font-black">Missing</th><th className="pb-3 font-black">Completion</th><th className="pb-3 font-black">Latest</th><th className="pb-3 font-black">Standing</th></tr></thead>
@@ -280,13 +285,13 @@ function CoordinatorReports() {
 
       {activeReport === 'requirements' && (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Checklist items" value={filteredRequirements.length} note="For all authorized students" icon={FiFileText} />
             <MetricCard label="Approved" value={filteredRequirements.filter((row) => row.status === 'approved').length} note="Accepted requirement files" icon={FiCheckCircle} tone="green" />
             <MetricCard label="Pending review" value={filteredRequirements.filter((row) => row.status === 'pending').length} note="Submitted files awaiting a decision" icon={FiClock} tone="amber" />
             <MetricCard label="Needs action" value={filteredRequirements.filter((row) => ['not_submitted', 'rejected'].includes(row.status)).length} note="Missing, rejected, or for correction" icon={FiUserCheck} tone="violet" />
           </div>
-          <Panel title="Student Requirements Status" subtitle={`${filteredRequirements.length} checklist records shown`} icon={FiFileText}>
+          <Panel data-touch-active={mobileView === 'records'} title="Student Requirements Status" subtitle={`${filteredRequirements.length} checklist records shown`} icon={FiFileText}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[940px] text-left">
                 <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Student</th><th className="pb-3 font-black">Requirement</th><th className="pb-3 font-black">Submitted</th><th className="pb-3 font-black">Status</th><th className="pb-3 font-black">Reviewed By</th><th className="pb-3 font-black">Remarks</th></tr></thead>
@@ -299,14 +304,14 @@ function CoordinatorReports() {
 
       {activeReport === 'student_internship' && (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Total interns" value={filteredStudents.length} note="All authorized records" icon={FiUsers} />
             <MetricCard label="Active" value={studentActive} note="Currently on internship" icon={FiUserCheck} tone="green" />
             <MetricCard label="Completed" value={studentCompleted} note="OJT requirements fulfilled" icon={FiCheckCircle} tone="blue" />
             <MetricCard label="Pending deployment" value={studentPending} note="Awaiting placement" icon={FiClock} tone="amber" />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div data-touch-active={mobileView === 'analysis'} className="grid gap-6 xl:grid-cols-2">
             <Panel title="Internship Status" subtitle="Student distribution by current OJT stage" icon={FiPieChart}>
               <div className="flex flex-col items-center gap-7 sm:flex-row"><Donut value={percent(studentActive, filteredStudents.length)} label="active" /><div className="w-full flex-1 space-y-4">{[['Active', studentActive, 'bg-emerald-500'], ['Completed', studentCompleted, 'bg-blue-500'], ['Pending', studentPending, 'bg-amber-500']].map(([label, count, color]) => <div key={label}><div className="mb-1.5 flex justify-between text-xs"><span className="font-bold text-slate-500">{label}</span><span className="font-black text-slate-700 dark:text-gray-200 print:text-black">{count}</span></div><ProgressBar value={percent(count, filteredStudents.length)} color={color} /></div>)}</div></div>
             </Panel>
@@ -315,7 +320,7 @@ function CoordinatorReports() {
             </Panel>
           </div>
 
-          <Panel title="Student Internship Report" subtitle={`${filteredStudents.length} student records shown`} icon={FiUsers}>
+          <Panel data-touch-active={mobileView === 'records'} title="Student Internship Report" subtitle={`${filteredStudents.length} student records shown`} icon={FiUsers}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1000px] text-left">
                 <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Student Number</th><th className="pb-3 font-black">Student Name</th><th className="pb-3 font-black">Academic Year</th><th className="pb-3 font-black">Semester</th><th className="pb-3 font-black">HTE</th><th className="pb-3 font-black">Working Schedule</th><th className="pb-3 font-black">Supervisor</th></tr></thead>
@@ -328,14 +333,14 @@ function CoordinatorReports() {
 
       {activeReport === 'hte_deployment' && (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Partner HTEs" value={filteredDeployments.length} note="All authorized records" icon={FiBriefcase} />
             <MetricCard label="Deployed interns" value={deployedInterns} note="Across listed partner HTEs" icon={FiUsers} tone="green" />
             <MetricCard label="Active interns" value={activeInterns} note={`${completedInterns} completed internship`} icon={FiTrendingUp} tone="blue" />
             <MetricCard label="MOA attention" value={moaAttention} note="Expiring, pending, expired, or rejected" icon={FiFileText} tone="amber" />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+          <div data-touch-active={mobileView === 'analysis'} className="grid gap-6 xl:grid-cols-[1fr_360px]">
             <Panel title="HTE Assignment Distribution" subtitle="Share of deployed interns by partner establishment" icon={FiBarChart2}>
               <div className="space-y-5">{filteredDeployments.map((row) => { const share = percent(row.deployed, deployedInterns); return <div key={row.id}><div className="mb-2 flex flex-wrap justify-between gap-2"><div><p className="text-xs font-black text-slate-700 dark:text-white print:text-black">{row.hte}</p><p className="mt-0.5 text-[9px] text-slate-400">{row.location} · {row.sector}</p></div><p className="text-xs font-black text-slate-600 dark:text-gray-300">{row.deployed} interns · {share}%</p></div><ProgressBar value={share} color="bg-[#7D001D]" /></div>; })}</div>
             </Panel>
@@ -345,7 +350,7 @@ function CoordinatorReports() {
             </Panel>
           </div>
 
-          <Panel title="Host Training Establishment Report" subtitle={`${filteredDeployments.length} partner establishments shown`} icon={FiBriefcase}>
+          <Panel data-touch-active={mobileView === 'records'} title="Host Training Establishment Report" subtitle={`${filteredDeployments.length} partner establishments shown`} icon={FiBriefcase}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[940px] text-left">
                 <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">HTE</th><th className="pb-3 font-black">HTE Address</th><th className="pb-3 font-black">Department</th><th className="pb-3 font-black">Student Count</th><th className="pb-3 font-black">Working Schedule</th><th className="pb-3 font-black">Supervisor</th></tr></thead>
@@ -358,14 +363,14 @@ function CoordinatorReports() {
 
       {activeReport === 'travel_monitoring' && (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Travel sessions" value={filteredTravel.length} note="For the selected period" icon={FiMapPin} />
             <MetricCard label="Completed" value={travelCompleted} note={`${travelCompletionRate}% of displayed sessions`} icon={FiCheckCircle} tone="green" />
             <MetricCard label="Active sessions" value={travelActive} note={`${travelScheduled} scheduled`} icon={FiClock} tone="blue" />
             <MetricCard label="Route exceptions" value={travelDelayed} note="Sessions marked delayed" icon={FiFileText} tone="amber" />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div data-touch-active={mobileView === 'analysis'} className="grid gap-6 xl:grid-cols-2">
             <Panel title="Travel Status Breakdown" subtitle="Session outcomes for the selected period" icon={FiPieChart}>
               <div className="flex flex-col items-center gap-7 sm:flex-row"><Donut value={travelCompletionRate} label="completed" color="#059669" /><div className="w-full flex-1 space-y-4">{[['Completed', travelCompleted, 'bg-emerald-500'], ['Active', travelActive, 'bg-blue-500'], ['Scheduled', travelScheduled, 'bg-violet-500'], ['Delayed', travelDelayed, 'bg-rose-500']].map(([label, count, color]) => <div key={label}><div className="mb-1.5 flex justify-between text-xs"><span className="font-bold text-slate-500">{label}</span><span className="font-black text-slate-700 dark:text-gray-200 print:text-black">{count}</span></div><ProgressBar value={percent(count, filteredTravel.length)} color={color} /></div>)}</div></div>
             </Panel>
@@ -374,7 +379,7 @@ function CoordinatorReports() {
             </Panel>
           </div>
 
-          <Panel title="Travel Session Records" subtitle={`${filteredTravel.length} session records shown`} icon={FiMapPin}>
+          <Panel data-touch-active={mobileView === 'records'} title="Travel Session Records" subtitle={`${filteredTravel.length} session records shown`} icon={FiMapPin}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[860px] text-left">
                 <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Session</th><th className="pb-3 font-black">Traveler</th><th className="pb-3 font-black">Destination</th><th className="pb-3 font-black">Date</th><th className="pb-3 font-black">Checkpoints</th><th className="pb-3 font-black">Duration</th><th className="pb-3 font-black">Compliance</th><th className="pb-3 font-black">Status</th></tr></thead>

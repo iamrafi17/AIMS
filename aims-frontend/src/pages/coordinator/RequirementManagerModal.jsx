@@ -133,34 +133,33 @@ function RequirementManagerModal({ onClose, onChanged }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/65 p-2 backdrop-blur-sm sm:p-5">
-      <section role="dialog" aria-modal="true" aria-label="Manage program requirements" className="flex max-h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-[#f7f3ee] shadow-2xl dark:border-slate-700 dark:bg-slate-950 sm:max-h-[calc(100dvh-2.5rem)]">
-        <header className="flex shrink-0 items-start justify-between border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900 sm:px-7">
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5">
+      <section role="dialog" aria-modal="true" aria-label="Manage program requirements" className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-50 shadow-2xl dark:border-slate-700 dark:bg-slate-950 sm:max-h-[calc(100dvh-2.5rem)]">
+        <header className="flex shrink-0 items-start justify-between border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8750b]">Program upload settings</p>
-            <h2 className="mt-1 text-xl font-black text-[#690016] dark:text-white">Customize Student Requirements</h2>
-            <p className="mt-1 text-xs text-slate-500">{program ? `${program.code} — ${program.name}` : 'Your assigned academic program'}</p>
+            <h2 className="text-lg font-black text-[#690016] dark:text-white">Customize Student Requirements</h2>
+            <p className="mt-1 text-xs text-slate-400">Program upload settings · {program ? `${program.code} — ${program.name}` : 'Your assigned academic program'}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close requirement manager"><FiX className="text-xl" /></button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-7">
-          <div className="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
-            <form onSubmit={addRequirement} className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          <div className="space-y-5">
+            <form onSubmit={addRequirement} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center gap-3">
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#7D001D]/10 text-[#7D001D] dark:text-red-300"><FiFilePlus /></span>
                 <div><h3 className="font-black">Add requirement</h3><p className="text-xs text-slate-500">Added to every student in this program.</p></div>
               </div>
-              <label className="mt-5 block">
+              <label className="mt-4 block">
                 <span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Document name</span>
                 <input required maxLength="255" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Barangay Clearance" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 dark:border-slate-700 dark:bg-slate-950" />
               </label>
               <label className="mt-4 block">
                 <span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Upload instructions</span>
-                <textarea rows="5" maxLength="2000" value={form.instructions} onChange={(event) => setForm((current) => ({ ...current, instructions: event.target.value }))} placeholder="Describe the document or signing requirements..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 dark:border-slate-700 dark:bg-slate-950" />
+                <textarea rows="3" maxLength="2000" value={form.instructions} onChange={(event) => setForm((current) => ({ ...current, instructions: event.target.value }))} placeholder="Describe the document or signing requirements..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 dark:border-slate-700 dark:bg-slate-950" />
               </label>
-              <button disabled={busy} className="mt-5 w-full rounded-xl bg-[#7D001D] px-4 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? 'Saving...' : 'Add to Checklist'}</button>
-              <p className="mt-4 text-[11px] leading-5 text-slate-500">Archived items disappear from student upload pages, while files already submitted remain available for historical review.</p>
+              <button disabled={busy} className="mt-4 w-full rounded-xl bg-[#7D001D] px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? 'Saving...' : 'Add to Checklist'}</button>
+              <p className="mt-3 text-[11px] leading-5 text-slate-500">Archived items disappear from student upload pages, while files already submitted remain available for historical review.</p>
             </form>
 
             <div>

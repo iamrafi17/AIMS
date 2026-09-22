@@ -26,8 +26,8 @@ class ProgramHeadStudentController extends Controller
         ]);
         $sectionId = isset($filters['academic_section_id']) ? (int) $filters['academic_section_id'] : null;
         $query = Student::with(['user', 'college', 'program', 'hte', 'supervisor:id,name', 'attendance', 'requirements'])
-            ->where('program_id', $programId)
-            ->when($sectionId, fn ($studentQuery) => $studentQuery->where('academic_section_id', $sectionId))
+            ->forProgram($programId)
+            ->when($sectionId, fn ($studentQuery) => $studentQuery->forAcademicSection($sectionId))
             ->orderBy('last_name');
 
         if (filled($filters['search'] ?? null)) {
@@ -39,7 +39,7 @@ class ProgramHeadStudentController extends Controller
             });
         }
         if (filled($filters['status'] ?? null)) {
-            $query->where('internship_status', $filters['status']);
+            $query->forInternshipStatus($filters['status']);
         }
 
         $students = $query->get()->map(fn (Student $student) => $this->payload($student));
@@ -50,10 +50,10 @@ class ProgramHeadStudentController extends Controller
                 'program' => $request->user()->program,
                 'sections' => AcademicSection::where('program_id', $programId)
                     ->where('is_active', true)
-                    ->orderByDesc('academic_year')
+                    ->newestPeriodFirst()
                     ->orderBy('year_level')
                     ->orderBy('name')
-                    ->get(['id', 'program_id', 'name', 'year_level', 'academic_year']),
+                    ->get(['id', 'program_id', 'academic_period_id', 'name', 'year_level']),
             ],
             'students' => $students,
             'summary' => [

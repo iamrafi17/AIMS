@@ -23,8 +23,8 @@ class Supervisor extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function students()
+    public function placements()
     {
-        return $this->hasMany(Student::class, 'supervisor_record_id');
+        return $this->hasMany(StudentInternshipPlacement::class, 'supervisor_record_id');
     }
 }

@@ -36,25 +36,25 @@ class ProgramHeadDashboardController extends Controller
         $sectionId = isset($filters['academic_section_id']) ? (int) $filters['academic_section_id'] : null;
         $sections = AcademicSection::where('program_id', $programId)
             ->where('is_active', true)
-            ->orderByDesc('academic_year')
+            ->newestPeriodFirst()
             ->orderBy('year_level')
             ->orderBy('name')
-            ->get(['id', 'program_id', 'name', 'year_level', 'academic_year']);
+            ->get(['id', 'program_id', 'academic_period_id', 'name', 'year_level']);
         $students = Student::with(['program', 'academicSection', 'hte', 'supervisor:id,name', 'attendance', 'requirements'])
-            ->where('program_id', $programId)
-            ->when($sectionId, fn ($query) => $query->where('academic_section_id', $sectionId))
-            ->when($filters['academic_year'] ?? null, fn ($query, $value) => $query->where('internship_year', $value))
-            ->when($filters['semester'] ?? null, fn ($query, $value) => $query->where('internship_semester', $value))
+            ->forProgram($programId)
+            ->when($sectionId, fn ($query) => $query->forAcademicSection($sectionId))
+            ->when($filters['academic_year'] ?? null, fn ($query, $value) => $query->forAcademicYear($value))
+            ->when($filters['semester'] ?? null, fn ($query, $value) => $query->forSemester($value))
             ->get();
         $studentIds = $students->pluck('id');
         $monthAttendance = Attendance::query()
             ->when($from, fn ($query, Carbon $date) => $query->whereDate('date', '>=', $date->toDateString()))
             ->when($to, fn ($query, Carbon $date) => $query->whereDate('date', '<=', $date->toDateString()))
-            ->whereIn('student_id', $studentIds)
+            ->forStudents($studentIds)
             ->get();
         $recentAttendance = Attendance::whereDate('date', '>=', $trendTo->copy()->subDays(6)->toDateString())
             ->whereDate('date', '<=', $trendTo->toDateString())
-            ->whereIn('student_id', $studentIds)
+            ->forStudents($studentIds)
             ->get();
         $requirements = InternshipRequirement::activeDefinitionOrLegacy()
             ->whereIn('student_id', $studentIds)
@@ -77,10 +77,9 @@ class ProgramHeadDashboardController extends Controller
         $pendingRequirements = $submittedRequirements->where('status', 'pending')->count();
         $requirementTotal = $requirements->count();
 
-        $pendingRegistrations = $students->where('registration_status', 'pending')->count();
         $pendingAttendance = $monthAttendance
             ->where('status', '!=', 'holiday')
-            ->where('is_verified', false)
+            ->filter(fn (Attendance $record) => ! $record->is_verified)
             ->count();
         $pendingJournals = $monthAttendance
             ->filter(fn (Attendance $record) => $record->journal_status === 'pending'
@@ -228,8 +227,8 @@ class ProgramHeadDashboardController extends Controller
                 'college' => $request->user()->college,
                 'program' => $request->user()->program,
                 'sections' => $sections,
-                'academic_years' => Student::where('program_id', $programId)->whereNotNull('internship_year')->distinct()->orderByDesc('internship_year')->pluck('internship_year'),
-                'semesters' => Student::where('program_id', $programId)->whereNotNull('internship_semester')->distinct()->orderBy('internship_semester')->pluck('internship_semester'),
+                'academic_years' => $students->pluck('internship_year')->filter()->unique()->sortDesc()->values(),
+                'semesters' => $students->pluck('internship_semester')->filter()->unique()->sort()->values(),
                 'selected_section' => $sectionId ? $sections->firstWhere('id', $sectionId) : null,
             ],
             'overview' => [
@@ -272,11 +271,10 @@ class ProgramHeadDashboardController extends Controller
                     : 0,
             ],
             'pending_reviews' => [
-                'registrations' => $pendingRegistrations,
                 'requirements' => $pendingRequirements,
                 'attendance' => $pendingAttendance,
                 'journals' => $pendingJournals,
-                'total' => $pendingRegistrations + $pendingRequirements + $pendingAttendance + $pendingJournals,
+                'total' => $pendingRequirements + $pendingAttendance + $pendingJournals,
             ],
             'deployment_reviews' => $deploymentReviews,
             'travel_reviews' => $travelReviews,

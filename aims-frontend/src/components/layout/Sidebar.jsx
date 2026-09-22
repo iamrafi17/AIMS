@@ -87,7 +87,7 @@ const roleLabels = {
   supervisor: 'HTE Supervisor',
 };
 
-function Sidebar({ isOpen, onClose }) {
+function Sidebar({ ref, isOpen, isDocked, onClose }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const items = menuItems[user?.role] || [];
@@ -95,7 +95,7 @@ function Sidebar({ isOpen, onClose }) {
   const [loggingOut, setLoggingOut] = useState(false);
 
   const handleNavigate = () => {
-    if (window.matchMedia('(max-width: 1023px)').matches) onClose();
+    if (!isDocked) onClose();
   };
 
   const handleLogout = async () => {
@@ -109,30 +109,34 @@ function Sidebar({ isOpen, onClose }) {
       <button
         type="button"
         aria-label="Close navigation menu"
-        className={`fixed inset-0 z-30 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${isOpen ? 'visible opacity-100' : 'invisible opacity-0'}`}
+        className={`fixed inset-0 z-30 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300 ${isOpen && !isDocked ? 'visible opacity-100' : 'invisible opacity-0'}`}
         onClick={onClose}
-        tabIndex={isOpen ? 0 : -1}
+        tabIndex={isOpen && !isDocked ? 0 : -1}
       />
 
       <aside
+        ref={ref}
+        id="portal-sidebar"
         aria-label={`${roleLabels[user?.role] || 'AIMS'} navigation`}
-        className={`fixed inset-y-0 left-0 z-40 flex w-[min(16rem,calc(100vw-3rem))] flex-col overflow-hidden border-r border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] text-slate-700 shadow-lg shadow-slate-900/5 transition-transform duration-300 ease-out dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        inert={!isOpen}
+        data-docked={isDocked ? 'true' : 'false'}
+        className={`portal-sidebar fixed inset-y-0 left-0 z-40 flex w-[min(16rem,calc(100vw-3rem))] flex-col overflow-hidden border-r pb-[env(safe-area-inset-bottom)] text-slate-700 transition-transform duration-300 ease-out dark:text-slate-200 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 px-4 dark:border-slate-700">
           <div className="sidebar-logo grid size-10 shrink-0 place-items-center rounded-full bg-white p-1 ring-1 ring-slate-200">
             <img src={marsuLogo} alt="Marinduque State University seal" className="h-full w-full object-contain" />
           </div>
           <div className="min-w-0 flex-1 leading-tight">
-            <p className="text-base font-black text-[#690016] dark:text-white">AIMS</p>
+            <p className="text-base font-bold text-[#690016] dark:text-white">AIMS</p>
             <p className="mt-0.5 truncate text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400">MarSU · Santa Cruz</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white lg:hidden" aria-label="Close sidebar">
+          <button type="button" onClick={onClose} className={`rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white ${isDocked ? 'hidden' : ''}`} aria-label="Close sidebar">
             <XMarkIcon className="size-5" />
           </button>
         </div>
 
         <div className="shrink-0 px-4 pb-2 pt-4">
-          <p className="px-3 text-[10px] font-black uppercase text-[#7D001D] dark:text-rose-300">{roleLabels[user?.role] || 'Portal'}</p>
+          <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500">{roleLabels[user?.role] || 'Portal'}</p>
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-4" aria-label="Portal pages">
@@ -143,9 +147,9 @@ function Sidebar({ isOpen, onClose }) {
                   to={item.path}
                   end={item.name === 'Dashboard'}
                   className={({ isActive }) =>
-                    `group relative flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors duration-150 ${
+                    `group relative flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ${
                       isActive
-                        ? 'bg-[#7D001D]/10 text-[#7D001D] before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-r-full before:bg-[#7D001D] dark:bg-rose-400/10 dark:text-rose-200 dark:before:bg-rose-300'
+                        ? 'bg-[#7D001D]/8 font-semibold text-[#7D001D] dark:bg-rose-400/10 dark:text-rose-200'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
                     }`
                   }
@@ -178,23 +182,36 @@ function Sidebar({ isOpen, onClose }) {
       </aside>
 
       {logoutConfirmOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={() => !loggingOut && setLogoutConfirmOpen(false)}>
-          <section role="dialog" aria-modal="true" aria-labelledby="sign-out-title" onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900">
-            <div className="relative flex min-h-36 items-center justify-center border-b border-slate-200 px-16 py-6 dark:border-slate-700">
-              <div className="flex flex-col items-center gap-2 text-center">
-                <ArrowRightOnRectangleIcon className="h-11 w-11 text-[#7D001D] dark:text-red-300" aria-hidden="true" />
-                <h2 id="sign-out-title" className="text-3xl font-black text-slate-900 dark:text-white">Sign out</h2>
+        <div className="sign-out-backdrop fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-3 backdrop-blur-[3px] sm:p-5" onMouseDown={() => !loggingOut && setLogoutConfirmOpen(false)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="sign-out-title" aria-describedby="sign-out-description" onMouseDown={(event) => event.stopPropagation()} className="sign-out-dialog w-full max-w-[22rem] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)] dark:border-slate-700 dark:bg-slate-900">
+            <div className="p-5">
+              <div className="flex items-start gap-3">
+                <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#7D001D]/10 text-[#7D001D] ring-1 ring-inset ring-[#7D001D]/10 dark:bg-rose-400/10 dark:text-rose-300 dark:ring-rose-300/10">
+                  <ArrowRightOnRectangleIcon className="size-5" aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#9A6A08] dark:text-amber-300">Account session</p>
+                  <h2 id="sign-out-title" className="mt-0.5 text-lg font-bold tracking-tight text-slate-900 dark:text-white">Sign out of AIMS?</h2>
+                </div>
+                <button type="button" onClick={() => setLogoutConfirmOpen(false)} disabled={loggingOut} className="grid size-8 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-white" aria-label="Close sign out dialog">
+                  <XMarkIcon className="size-4.5" />
+                </button>
               </div>
-              <button type="button" onClick={() => setLogoutConfirmOpen(false)} disabled={loggingOut} className="absolute right-5 top-5 rounded-xl p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800" aria-label="Close sign out dialog">
-                <XMarkIcon className="h-6 w-6" />
-              </button>
+
+              <p id="sign-out-description" className="mt-4 text-sm leading-5 text-slate-500 dark:text-slate-300">You’ll need to sign in again to continue.</p>
+
+              <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/70">
+                <UserAvatar user={user} className="size-8" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-slate-800 dark:text-white">{user?.name}</p>
+                  <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">{roleLabels[user?.role] || user?.role}</p>
+                </div>
+              </div>
             </div>
-            <div className="p-6">
-              <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">Do you want to sign out of your AIMS account?</p>
-            </div>
-            <div className="flex items-center justify-between gap-3 border-t border-slate-200 p-6 dark:border-slate-700">
-              <button type="button" onClick={() => setLogoutConfirmOpen(false)} disabled={loggingOut} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold disabled:opacity-40 dark:border-slate-700">Cancel</button>
-              <button type="button" onClick={handleLogout} disabled={loggingOut} className="inline-flex items-center gap-2 rounded-2xl bg-[#7D001D] px-5 py-3 font-black text-white disabled:opacity-50"><ArrowRightOnRectangleIcon className="h-5 w-5" />{loggingOut ? 'Signing out...' : 'Sign out'}</button>
+
+            <div className="flex gap-2 border-t border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-700 dark:bg-slate-950/30">
+              <button type="button" onClick={() => setLogoutConfirmOpen(false)} disabled={loggingOut} className="inline-flex min-h-10 flex-1 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Cancel</button>
+              <button type="button" onClick={handleLogout} disabled={loggingOut} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#650018] disabled:cursor-not-allowed disabled:opacity-50"><ArrowRightOnRectangleIcon className="size-4.5" />{loggingOut ? 'Signing out...' : 'Sign out'}</button>
             </div>
           </section>
         </div>

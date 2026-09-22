@@ -24,7 +24,7 @@ const emptyDashboard = {
   attendance: { present: 0, late: 0, absent: 0, holiday: 0, total: 0, rate: 0, verified: 0, total_hours: 0, trend: [] },
   requirements: { total: 0, submitted: 0, approved: 0, pending: 0, rejected: 0, missing: 0, completion_rate: 0 },
   travel: { active: 0, total_this_month: 0, completed_this_month: 0, cancelled_this_month: 0, completion_rate: 0 },
-  pending_reviews: { registrations: 0, requirements: 0, attendance: 0, journals: 0, total: 0 },
+  pending_reviews: { requirements: 0, attendance: 0, journals: 0, total: 0 },
   analytics: { average_progress: 0, internship_status: [], program_performance: [] },
 };
 
@@ -38,7 +38,7 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <div className="portal-metric-card rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
@@ -51,9 +51,9 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   );
 }
 
-function Panel({ title, subtitle, icon: Icon, action, children, className = '' }) {
+function Panel({ title, subtitle, icon: Icon, action, children, className = '', ...sectionProps }) {
   return (
-    <section className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 ${className}`}>
+    <section {...sectionProps} className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 ${className}`}>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#7D001D]/10 text-lg text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300"><Icon /></div>
@@ -86,6 +86,7 @@ function ProgramHeadDashboard() {
   const [dashboard, setDashboard] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [mobileView, setMobileView] = useState('performance');
 
   useEffect(() => {
     let mounted = true;
@@ -138,14 +139,13 @@ function ProgramHeadDashboard() {
   const statusTotal = analytics.internship_status?.reduce((sum, item) => sum + Number(item.value || 0), 0) || 0;
 
   const reviewItems = [
-    { label: 'Registration reviews', count: reviews.registrations || 0, note: 'New student registrations awaiting decision', icon: FiUsers, tone: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300', path: '/program-head/documents' },
     { label: 'Requirement reviews', count: reviews.requirements || 0, note: 'Submitted internship documents to evaluate', icon: FiFileText, tone: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300', path: '/program-head/documents' },
     { label: 'Attendance reviews', count: reviews.attendance || 0, note: 'Attendance logs pending verification', icon: FiClock, tone: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300', path: '/program-head/reports' },
     { label: 'Journal reviews', count: reviews.journals || 0, note: 'Daily accomplishment reports to review', icon: FiBookOpen, tone: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300', path: '/program-head/reports' },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="program-head-dashboard portal-card-tables space-y-6">
       <header className="border-b border-slate-200 pb-5 dark:border-slate-700">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -162,7 +162,7 @@ function ProgramHeadDashboard() {
           <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8750b]">Program Internship Overview</p><h2 className="mt-1 text-lg font-black text-[#690016] dark:text-white">Internship population and progress</h2></div>
           <p className="hidden text-xs font-bold text-slate-400 sm:block">{overview.deployed || 0} students deployed to an HTE</p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard label="Total students" value={overview.total_students || 0} note="Registered interns" icon={FiUsers} />
           <MetricCard label="Active interns" value={overview.active || 0} note="Currently deployed" icon={FiUserCheck} tone="green" />
           <MetricCard label="Completed" value={overview.completed || 0} note="OJT requirements fulfilled" icon={FiCheckCircle} tone="blue" />
@@ -171,7 +171,9 @@ function ProgramHeadDashboard() {
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <section className="touch-layout-only rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900 lg:hidden"><label className="block"><span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-500">Dashboard section</span><select value={mobileView} onChange={(event) => setMobileView(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold dark:border-slate-700 dark:bg-slate-950"><option value="performance">Attendance & requirements</option><option value="travel">Travel monitoring</option><option value="reviews">Pending reviews</option><option value="analytics">Program analytics</option></select></label></section>
+
+      <div data-touch-active={mobileView === 'performance'} className="grid gap-6 xl:grid-cols-2">
         <Panel title="Attendance Summary" subtitle={`${new Date().toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} attendance performance`} icon={FiClock} action={<Link to="/program-head/reports" className="inline-flex items-center gap-1 text-xs font-black text-[#7D001D] dark:text-rose-300">Open report <FiArrowRight /></Link>}>
           <div className="flex flex-col items-center gap-7 sm:flex-row">
             <Ring value={attendance.rate} label="attendance" color="#059669" />
@@ -207,7 +209,7 @@ function ProgramHeadDashboard() {
         </Panel>
       </div>
 
-      <Panel title="Travel Monitoring Summary" subtitle="Student travel activity and safe completion for the current month" icon={FiMapPin} action={<Link to="/program-head/travel" className="inline-flex items-center gap-1 text-xs font-black text-[#7D001D] dark:text-rose-300">Open monitor <FiArrowRight /></Link>}>
+      <Panel data-touch-active={mobileView === 'travel'} title="Travel Monitoring Summary" subtitle="Student travel activity and safe completion for the current month" icon={FiMapPin} action={<Link to="/program-head/travel" className="inline-flex items-center gap-1 text-xs font-black text-[#7D001D] dark:text-rose-300">Open monitor <FiArrowRight /></Link>}>
         <div className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl bg-gradient-to-br from-[#690016] to-[#7D001D] p-5 text-white"><FiActivity className="text-2xl text-[#f1c54c]" /><p className="mt-5 text-3xl font-black">{travel.active || 0}</p><p className="mt-1 text-[10px] font-black uppercase tracking-wider text-white/55">Active travel sessions</p><p className="mt-3 text-xs text-white/60">Students currently travelling under an authorized session.</p></div>
@@ -224,7 +226,7 @@ function ProgramHeadDashboard() {
         </div>
       </Panel>
 
-      <Panel title="Pending Reviews" subtitle="Items requiring academic review or oversight" icon={FiAlertCircle} action={<div className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black uppercase text-amber-700 dark:bg-amber-950 dark:text-amber-300">{reviews.total || 0} total</div>}>
+      <Panel data-touch-active={mobileView === 'reviews'} title="Pending Reviews" subtitle="Items requiring academic review or oversight" icon={FiAlertCircle} action={<div className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black uppercase text-amber-700 dark:bg-amber-950 dark:text-amber-300">{reviews.total || 0} total</div>}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {reviewItems.map((item) => (
             <Link key={item.label} to={item.path} className="group rounded-2xl border border-slate-100 p-4 transition hover:-translate-y-0.5 hover:border-[#7D001D]/20 hover:shadow-md dark:border-gray-700">
@@ -237,7 +239,7 @@ function ProgramHeadDashboard() {
         </div>
       </Panel>
 
-      <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+      <div data-touch-active={mobileView === 'analytics'} className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
         <Panel title="Internship Analytics" subtitle="Distribution of students by current internship status" icon={FiBarChart2}>
           {statusTotal > 0 ? (
             <div>
@@ -252,7 +254,7 @@ function ProgramHeadDashboard() {
         <Panel title="Program Performance Analytics" subtitle="Internship progress and attendance by academic program" icon={FiTrendingUp} action={<Link to="/program-head/reports" className="text-xs font-black text-[#7D001D] dark:text-rose-300">View reports</Link>}>
           {analytics.program_performance?.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[590px] text-left">
+              <table className="portal-card-table portal-card-table--program-dashboard w-full min-w-[590px] text-left">
                 <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700"><th className="pb-3 font-black">Program</th><th className="pb-3 font-black">Students</th><th className="pb-3 font-black">Active</th><th className="pb-3 font-black">OJT Progress</th><th className="pb-3 font-black">Attendance</th></tr></thead>
                 <tbody>{analytics.program_performance.map((item) => <tr key={item.program} className="border-b border-slate-100 last:border-0 dark:border-gray-700"><td className="py-4 text-sm font-black text-slate-800 dark:text-white">{item.program}</td><td className="py-4 text-xs font-black text-slate-600 dark:text-gray-300">{item.students}</td><td className="py-4 text-xs font-black text-emerald-600">{item.active}</td><td className="w-40 py-4"><div className="mb-1.5 flex justify-between text-[9px] font-black"><span className="text-slate-400">Average</span><span className="text-[#7D001D] dark:text-rose-300">{item.progress}%</span></div><ProgressBar value={item.progress} /></td><td className="w-36 py-4"><div className="mb-1.5 text-right text-[9px] font-black text-emerald-600">{item.attendance_rate}%</div><ProgressBar value={item.attendance_rate} color="bg-emerald-500" /></td></tr>)}</tbody>
               </table>
@@ -261,7 +263,7 @@ function ProgramHeadDashboard() {
         </Panel>
       </div>
 
-      <Panel title="Seven-Day Attendance Trend" subtitle="Daily verified and unverified attendance performance" icon={FiActivity}>
+      <Panel data-touch-active={mobileView === 'analytics'} title="Seven-Day Attendance Trend" subtitle="Daily verified and unverified attendance performance" icon={FiActivity}>
         {attendance.trend?.length ? (
           <div className="flex h-52 items-end justify-between gap-3 border-b border-slate-200 px-2 pb-1 dark:border-gray-700">
             {attendance.trend.map((day) => <div key={day.date} className="flex h-full flex-1 flex-col items-center justify-end gap-2"><span className="text-[9px] font-black text-slate-400">{day.rate}%</span><div className={`w-full max-w-14 rounded-t-xl ${day.rate >= 90 ? 'bg-gradient-to-t from-emerald-700 to-emerald-400' : day.rate > 0 ? 'bg-gradient-to-t from-[#7D001D] to-[#b82929]' : 'bg-slate-200 dark:bg-gray-700'}`} style={{ height: `${Math.max(day.rate, 4)}%` }} /><span className="text-[9px] font-black text-slate-500">{day.label}</span></div>)}

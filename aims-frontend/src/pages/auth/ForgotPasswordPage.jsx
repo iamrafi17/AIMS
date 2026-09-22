@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import {
   ArrowLeftIcon,
   CheckCircleIcon,
+  EyeIcon,
+  EyeSlashIcon,
   KeyIcon,
   LockClosedIcon,
   QuestionMarkCircleIcon,
@@ -30,6 +32,8 @@ export default function ForgotPasswordPage() {
   const [resetToken, setResetToken] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const requestQuestions = async (event) => {
@@ -120,6 +124,8 @@ export default function ForgotPasswordPage() {
     setResetToken('');
     setPassword('');
     setPasswordConfirmation('');
+    setShowPassword(false);
+    setShowPasswordConfirmation(false);
   };
 
   const page = {
@@ -147,7 +153,7 @@ export default function ForgotPasswordPage() {
   const StepIcon = page.icon;
 
   return (
-    <main className="grid min-h-screen bg-[#f7f4ef] lg:grid-cols-[.9fr_1.1fr] dark:bg-gray-950">
+    <main className="auth-shell recovery-shell grid min-h-screen bg-[#f7f4ef] lg:grid-cols-[.9fr_1.1fr] dark:bg-gray-950">
       <section className="relative hidden overflow-hidden bg-[#690016] p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-[#d4af37]/15 blur-3xl" />
         <div className="relative flex items-center gap-4">
@@ -169,8 +175,8 @@ export default function ForgotPasswordPage() {
         <p className="relative text-sm text-white/45">Academic Internship Monitoring System · Santa Cruz Campus</p>
       </section>
 
-      <section className="flex items-center justify-center p-5 sm:p-10">
-        <div className="w-full max-w-xl rounded-xl border border-white bg-white p-7 shadow-sm shadow-slate-900/10 dark:border-gray-700 dark:bg-gray-900 sm:p-10">
+      <section className="recovery-panel flex min-w-0 items-center justify-center p-5 sm:p-10">
+        <div className="recovery-card w-full min-w-0 max-w-xl rounded-xl border border-white bg-white p-7 shadow-sm shadow-slate-900/10 dark:border-gray-700 dark:bg-gray-900 sm:p-10">
           <Link to="/login" className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-[#7D001D]">
             <ArrowLeftIcon className="h-4 w-4" />
             Back to login
@@ -222,6 +228,7 @@ export default function ForgotPasswordPage() {
                     autoComplete="off"
                     placeholder="Your answer"
                   />
+                  {question.answer_case_sensitive && <span className="mt-2 block text-xs text-slate-500">Case-sensitive: use the same uppercase and lowercase letters as your saved answer.</span>}
                 </label>
               ))}
               <div className="flex flex-col-reverse gap-3 sm:flex-row">
@@ -244,12 +251,21 @@ export default function ForgotPasswordPage() {
                   <input
                     required
                     minLength="8"
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    className={`${inputClass} pl-12`}
+                    className={`${inputClass} pl-12 pr-12`}
                     autoComplete="new-password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:text-[#7D001D] focus:outline-none focus:ring-2 focus:ring-[#7D001D]/30"
+                    aria-label={showPassword ? 'Hide new password' : 'Show new password'}
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                  </button>
                 </div>
               </label>
               <label className="block">
@@ -259,12 +275,21 @@ export default function ForgotPasswordPage() {
                   <input
                     required
                     minLength="8"
-                    type="password"
+                    type={showPasswordConfirmation ? 'text' : 'password'}
                     value={passwordConfirmation}
                     onChange={(event) => setPasswordConfirmation(event.target.value)}
-                    className={`${inputClass} pl-12`}
+                    className={`${inputClass} pl-12 pr-12`}
                     autoComplete="new-password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordConfirmation((visible) => !visible)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:text-[#7D001D] focus:outline-none focus:ring-2 focus:ring-[#7D001D]/30"
+                    aria-label={showPasswordConfirmation ? 'Hide password confirmation' : 'Show password confirmation'}
+                    aria-pressed={showPasswordConfirmation}
+                  >
+                    {showPasswordConfirmation ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                  </button>
                 </div>
               </label>
               <button disabled={loading} className="w-full rounded-xl bg-[#7D001D] px-5 py-3.5 font-black text-white disabled:opacity-50">

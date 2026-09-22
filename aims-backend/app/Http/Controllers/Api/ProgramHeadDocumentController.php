@@ -22,7 +22,7 @@ class ProgramHeadDocumentController extends Controller
             'student.hte',
             'reviewer',
         ])
-            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('student', fn ($query) => $query->forProgram($programId))
             ->whereNotNull('file_path')
             ->latest('updated_at')
             ->get();

@@ -18,12 +18,12 @@ class VPAADashboardController extends UniversityDashboardController
         $dashboard = $response->getData(true);
 
         $studentIds = Student::query()
-            ->when($request->integer('college_id'), fn ($query, $value) => $query->where('college_id', $value))
-            ->when($request->integer('program_id'), fn ($query, $value) => $query->where('program_id', $value))
-            ->when($request->integer('hte_id'), fn ($query, $value) => $query->where('hte_id', $value))
-            ->when($request->string('academic_year')->toString(), fn ($query, $value) => $query->where('internship_year', $value))
-            ->when($request->string('semester')->toString(), fn ($query, $value) => $query->where('internship_semester', $value))
-            ->when($request->string('internship_status')->toString(), fn ($query, $value) => $query->where('internship_status', $value))
+            ->when($request->integer('college_id'), fn ($query, $value) => $query->forCollege($value))
+            ->when($request->integer('program_id'), fn ($query, $value) => $query->forProgram($value))
+            ->when($request->integer('hte_id'), fn ($query, $value) => $query->forHte($value))
+            ->when($request->string('academic_year')->toString(), fn ($query, $value) => $query->forAcademicYear($value))
+            ->when($request->string('semester')->toString(), fn ($query, $value) => $query->forSemester($value))
+            ->when($request->string('internship_status')->toString(), fn ($query, $value) => $query->forInternshipStatus($value))
             ->pluck('id');
         $moaQuery = MOA::query()
             ->when($request->integer('college_id'), fn ($query, $value) => $query->where('college_id', $value))

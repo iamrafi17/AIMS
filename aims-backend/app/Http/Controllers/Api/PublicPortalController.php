@@ -17,7 +17,7 @@ class PublicPortalController extends Controller
             'statistics' => [
                 'student_interns' => Student::count(),
                 'partner_htes' => HTE::where('is_active', true)->count(),
-                'completed_internships' => Student::where('internship_status', 'completed')->count(),
+                'completed_internships' => Student::forInternshipStatus('completed')->count(),
                 'active_supervisors' => User::where('role', 'supervisor')->where('is_active', true)->count(),
             ],
             'announcements' => Announcement::query()

@@ -72,7 +72,7 @@ function MetricCard({ label, value, note, icon: Icon, tone }) {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <div className="portal-metric-card rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
@@ -250,7 +250,7 @@ function VPAAApprovals() {
         </div>
       </header>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Endorsed Documents" value={summary.pending_documents} note="Awaiting final document decision" icon={FiFileText} tone="amber" />
         <MetricCard label="Deployment Requests" value={summary.pending_deployments} note="Awaiting deployment clearance" icon={FiUsers} tone="blue" />
         <MetricCard label="Approved Decisions" value={summary.approved} note={`${summary.decided_today} decision(s) completed today`} icon={FiCheckCircle} tone="green" />
@@ -271,13 +271,13 @@ function VPAAApprovals() {
         </div>
       </nav>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 md:flex-row">
-        <label className="relative flex-1">
+      <div className="portal-filter-panel flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 md:flex-row">
+        <label className="portal-filter-search relative flex-1">
           <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={activeTab === 'documents' ? 'Search student, ID, program, document, or endorser...' : activeTab === 'deployments' ? 'Search student, ID, HTE, or requester...' : 'Search history, decision maker, or remarks...'} className={`${inputClass} pl-10`} />
         </label>
         {activeTab === 'history' && (
-          <label className="relative md:w-48">
+          <label className="portal-filter-field--icon relative md:w-48">
             <FiFilter className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <select value={historyStatus} onChange={(event) => setHistoryStatus(event.target.value)} className={`${inputClass} appearance-none pl-10`}>
               <option value="all">All decisions</option>

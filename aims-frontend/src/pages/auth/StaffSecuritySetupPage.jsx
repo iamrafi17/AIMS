@@ -16,6 +16,7 @@ import useAuth from '../../context/useAuth';
 import api from '../../services/api';
 import marsuLogo from '../../assets/marsu-logo.png';
 import ContactNumberInput from '../../components/forms/ContactNumberInput';
+import { getPasswordStrength } from '../../utils/passwordStrength';
 
 const roleRoutes = {
   coordinator: '/coordinator/dashboard',
@@ -70,6 +71,7 @@ export default function StaffSecuritySetupPage() {
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
   const [profile, setProfile] = useState({
     email: user?.email || '',
     contact_number: user?.contact_number || '',
@@ -199,26 +201,55 @@ export default function StaffSecuritySetupPage() {
     }
   };
 
+  const passwordStrength = getPasswordStrength(password);
+  const passwordRequirements = [
+    { label: '8–12 characters', met: password.length >= 8 && password.length <= 12 },
+    { label: 'Matches Confirm new password', met: Boolean(password) && password === passwordConfirmation },
+  ];
   const passwordFields = (
     <div className="grid gap-4 sm:grid-cols-2">
-      <label>
-        <span className="mb-2 block text-sm font-bold">New password</span>
+      <div>
+        <label htmlFor="staff-new-password" className="mb-2 block text-sm font-bold">New password</label>
         <div className="relative">
-          <input required minLength="8" maxLength="255" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className={`${inputClass} pr-12`} />
-          <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#7D001D]" aria-label={showPassword ? 'Hide passwords' : 'Show passwords'}>
+          <input id="staff-new-password" required minLength="8" maxLength="12" type={showPassword ? 'text' : 'password'} autoComplete="new-password" aria-describedby="new-password-strength new-password-requirements" value={password} onChange={(event) => setPassword(event.target.value)} className={`${inputClass} pr-12`} />
+          <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#7D001D]" aria-label={showPassword ? 'Hide new password' : 'Show new password'} aria-pressed={showPassword}>
             {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
           </button>
         </div>
-      </label>
+        <div id="new-password-strength" role="status" aria-live="polite" aria-atomic="true" className="mt-2">
+          {passwordStrength && <>
+            <div aria-hidden="true" className="flex gap-1.5">
+              {[1, 2, 3].map((segment) => <span key={segment} className={`h-1.5 flex-1 rounded-full ${segment <= passwordStrength.segments ? passwordStrength.barClass : 'bg-slate-200 dark:bg-slate-700'}`} />)}
+            </div>
+            <span className={`mt-1 block text-xs font-bold ${passwordStrength.textClass}`}>Password strength: {passwordStrength.label}</span>
+          </>}
+        </div>
+        <div id="new-password-requirements" className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-5 dark:border-slate-700 dark:bg-slate-800/50">
+          <p className="font-bold text-slate-700 dark:text-slate-200">Password requirements</p>
+          <ul className="mt-1 space-y-1">
+            {passwordRequirements.map((requirement) => <li key={requirement.label} className={`flex items-start gap-2 ${requirement.met ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}>
+              {requirement.met ? <CheckCircleIcon aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /> : <span aria-hidden="true" className="mt-1 h-3 w-3 shrink-0 rounded-full border border-current" />}
+              <span><span className="sr-only">{requirement.met ? 'Met: ' : 'Not yet met: '}</span>{requirement.label}</span>
+            </li>)}
+          </ul>
+          <p className="mt-2 text-slate-500 dark:text-slate-400">Your new password must be different from your temporary password.</p>
+          <p className="mt-2 text-slate-500 dark:text-slate-400">For a stronger password, use 12 characters with uppercase and lowercase letters, numbers, and symbols.</p>
+        </div>
+      </div>
       <label>
         <span className="mb-2 block text-sm font-bold">Confirm new password</span>
-        <input required minLength="8" maxLength="255" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} className={inputClass} />
+        <div className="relative">
+          <input required minLength="8" maxLength="12" type={showPasswordConfirmation ? 'text' : 'password'} autoComplete="new-password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} className={`${inputClass} pr-12`} />
+          <button type="button" onClick={() => setShowPasswordConfirmation((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#7D001D]" aria-label={showPasswordConfirmation ? 'Hide confirm new password' : 'Show confirm new password'} aria-pressed={showPasswordConfirmation}>
+            {showPasswordConfirmation ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+          </button>
+        </div>
       </label>
     </div>
   );
 
   return (
-    <main className="min-h-screen bg-[#F6F7FB] px-4 py-6 dark:bg-slate-950 sm:px-6 lg:grid lg:grid-cols-[0.72fr_1.28fr] lg:p-0">
+    <main className="auth-shell onboarding-shell min-h-screen bg-[#F6F7FB] px-4 py-6 dark:bg-slate-950 sm:px-6 lg:grid lg:grid-cols-[0.72fr_1.28fr] lg:p-0">
       <section className="relative hidden min-h-screen overflow-hidden bg-[#690016] p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-[#d4af37]/15 blur-3xl" />
         <div className="relative flex items-center gap-4">
@@ -277,7 +308,7 @@ export default function StaffSecuritySetupPage() {
           {currentStep === 'security_setup' && (
             <form onSubmit={submitSecuritySetup} className="space-y-7">
               <section>
-                <div className="flex gap-3"><QuestionMarkCircleIcon className="h-6 w-6 shrink-0 text-[#7D001D]" /><div><h3 className="text-xl font-black">Set Up Security Questions</h3><p className="mt-1 text-sm text-slate-500">Choose three different questions for password recovery.</p></div></div>
+                <div className="flex gap-3"><QuestionMarkCircleIcon className="h-6 w-6 shrink-0 text-[#7D001D]" /><div><h3 className="text-xl font-black">Set Up Security Questions</h3><p className="mt-1 text-sm text-slate-500">Choose three different questions for password recovery. Answers are case-sensitive. Remember the uppercase and lowercase letters you use.</p></div></div>
                 <div className="mt-5 space-y-4">
                   {securityQuestions.map((item, index) => {
                     const selectedElsewhere = securityQuestions.filter((_, itemIndex) => itemIndex !== index).map((question) => String(question.security_question_id));

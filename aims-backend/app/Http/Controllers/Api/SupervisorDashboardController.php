@@ -15,7 +15,7 @@ class SupervisorDashboardController extends Controller
     {
         $supervisorId = $request->user()->id;
         $evaluations = Evaluation::where('supervisor_id', $supervisorId)->get();
-        $studentIds = Student::where('supervisor_id', $supervisorId)
+        $studentIds = Student::forSupervisorUser($supervisorId)
             ->pluck('id')
             ->merge($evaluations->pluck('student_id'))
             ->unique()
@@ -31,11 +31,11 @@ class SupervisorDashboardController extends Controller
                 ->latest(),
         ])->whereIn('id', $studentIds)->get();
 
-        $monthAttendance = Attendance::whereIn('student_id', $studentIds)
+        $monthAttendance = Attendance::forStudents($studentIds)
             ->whereMonth('date', now()->month)
             ->whereYear('date', now()->year)
             ->get();
-        $recentAttendance = Attendance::whereIn('student_id', $studentIds)
+        $recentAttendance = Attendance::forStudents($studentIds)
             ->whereDate('date', '>=', now()->subDays(6)->toDateString())
             ->get();
 

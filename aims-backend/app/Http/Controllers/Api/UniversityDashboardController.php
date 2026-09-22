@@ -45,19 +45,19 @@ class UniversityDashboardController extends Controller
 
         $students = Student::query()
             ->with(['program.college', 'hte', 'attendance', 'requirements'])
-            ->when($filters['college_id'] ?? null, fn ($query, $value) => $query->where('college_id', $value))
-            ->when($filters['program_id'] ?? null, fn ($query, $value) => $query->where('program_id', $value))
-            ->when($filters['hte_id'] ?? null, fn ($query, $value) => $query->where('hte_id', $value))
-            ->when($filters['academic_year'] ?? null, fn ($query, $value) => $query->where('internship_year', $value))
-            ->when($filters['semester'] ?? null, fn ($query, $value) => $query->where('internship_semester', $value))
-            ->when($filters['internship_status'] ?? null, fn ($query, $value) => $query->where('internship_status', $value))
+            ->when($filters['college_id'] ?? null, fn ($query, $value) => $query->forCollege($value))
+            ->when($filters['program_id'] ?? null, fn ($query, $value) => $query->forProgram($value))
+            ->when($filters['hte_id'] ?? null, fn ($query, $value) => $query->forHte($value))
+            ->when($filters['academic_year'] ?? null, fn ($query, $value) => $query->forAcademicYear($value))
+            ->when($filters['semester'] ?? null, fn ($query, $value) => $query->forSemester($value))
+            ->when($filters['internship_status'] ?? null, fn ($query, $value) => $query->forInternshipStatus($value))
             ->get();
         $studentIds = $students->pluck('id');
-        $monthAttendance = Attendance::whereIn('student_id', $studentIds)
+        $monthAttendance = Attendance::forStudents($studentIds)
             ->when($from, fn ($query, Carbon $date) => $query->whereDate('date', '>=', $date->toDateString()))
             ->when($to, fn ($query, Carbon $date) => $query->whereDate('date', '<=', $date->toDateString()))
             ->get();
-        $recentAttendance = Attendance::whereIn('student_id', $studentIds)
+        $recentAttendance = Attendance::forStudents($studentIds)
             ->whereDate('date', '>=', $trendTo->copy()->subDays(6)->toDateString())
             ->whereDate('date', '<=', $trendTo->toDateString())
             ->get();
@@ -189,7 +189,6 @@ class UniversityDashboardController extends Controller
             ->count();
         $pendingAttendance = $verifiableAttendance->where('is_verified', false)->count();
         $pendingEvaluations = $evaluations->where('status', 'draft')->count();
-        $pendingRegistrations = $students->where('registration_status', 'pending')->count();
         $pendingCheckpoints = $travelCheckpoints->where('is_verified', false)->count();
 
         return response()->json([
@@ -201,9 +200,9 @@ class UniversityDashboardController extends Controller
             'scope' => [
                 'colleges' => College::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name']),
                 'programs' => Program::query()->where('is_active', true)->orderBy('code')->get(['id', 'college_id', 'code', 'name']),
-                'htes' => HTE::query()->where('is_active', true)->orderBy('name')->get(['id', 'college_id', 'program_id', 'name']),
-                'academic_years' => Student::query()->whereNotNull('internship_year')->distinct()->orderByDesc('internship_year')->pluck('internship_year')->values(),
-                'semesters' => Student::query()->whereNotNull('internship_semester')->distinct()->orderBy('internship_semester')->pluck('internship_semester')->values(),
+                'htes' => HTE::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+                'academic_years' => $students->pluck('internship_year')->filter()->unique()->sortDesc()->values(),
+                'semesters' => $students->pluck('internship_semester')->filter()->unique()->sort()->values(),
             ],
             'overview' => [
                 'total_students' => $students->count(),
@@ -263,10 +262,9 @@ class UniversityDashboardController extends Controller
                 'evaluations' => $pendingEvaluations,
                 'attendance' => $pendingAttendance,
                 'requirements' => $pendingRequirements,
-                'registrations' => $pendingRegistrations,
                 'travel_checkpoints' => $pendingCheckpoints,
                 'total' => $pendingEvaluations + $pendingAttendance + $pendingRequirements
-                    + $pendingRegistrations + $pendingCheckpoints,
+                    + $pendingCheckpoints,
             ],
         ]);
     }

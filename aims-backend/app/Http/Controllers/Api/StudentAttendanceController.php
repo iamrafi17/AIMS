@@ -7,6 +7,8 @@ use App\Models\Attendance;
 use App\Models\Student;
 use App\Models\StudentLiveLocation;
 use App\Support\AttendanceHours;
+use App\Support\EffectiveSchedule;
+use App\Support\HolidayCalendar;
 use App\Support\ReverseGeocoder;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -19,7 +21,7 @@ class StudentAttendanceController extends Controller
     {
         $student = $request->user()->student;
 
-        $attendance = Attendance::where('student_id', $student->id)
+        $attendance = Attendance::forStudent($student->id)
             ->when($request->month, function ($query) use ($request) {
                 $query->whereMonth('date', $request->month);
             })
@@ -40,11 +42,11 @@ class StudentAttendanceController extends Controller
             return response()->json(['message' => 'Student profile not found'], 404);
         }
 
-        $attendance = Attendance::where('student_id', $student->id)
+        $attendance = Attendance::forStudent($student->id)
             ->whereDate('date', now()->toDateString())
             ->first();
 
-        return response()->json($this->quickClockPayload($attendance));
+        return response()->json($this->quickClockPayload($attendance, $student));
     }
 
     public function shareLiveLocation(Request $request)
@@ -58,11 +60,13 @@ class StudentAttendanceController extends Controller
         $student = $request->user()->student;
         abort_unless($student, 404, 'Student profile not found.');
 
-        $attendance = Attendance::where('student_id', $student->id)
+        abort_unless(! HolidayCalendar::forStudentOn($student, now()), 422, 'Live attendance monitoring is unavailable on an official holiday.');
+
+        $attendance = Attendance::forStudent($student->id)
             ->whereDate('date', now()->toDateString())
             ->first();
 
-        abort_unless($attendance?->status === 'present', 422, 'Live monitoring starts only after a successful Time In.');
+        abort_unless(in_array($attendance?->status, ['present', 'late'], true), 422, 'Live monitoring starts only after a successful Time In.');
         $nextSlot = collect($this->slotSequence($attendance->session_type))
             ->first(fn (string $slot) => $attendance->{$slot} === null);
         abort_unless($nextSlot && str_ends_with($nextSlot, 'time_out'), 422, 'There is no active timed-in session to monitor.');
@@ -122,17 +126,18 @@ class StudentAttendanceController extends Controller
         $weekStart = now()->startOfWeek(Carbon::MONDAY)->startOfDay();
         $weekEnd = $weekStart->copy()->endOfWeek(Carbon::SUNDAY)->endOfDay();
         $workDays = $this->effectiveWorkDays($student);
+        $selectedSchedule = EffectiveSchedule::forDate($student, $selectedDate);
 
-        $calendarRecords = Attendance::where('student_id', $student->id)
+        $calendarRecords = Attendance::forStudent($student->id)
             ->whereBetween('date', [$month->toDateString(), $month->copy()->endOfMonth()->toDateString()])
             ->orderBy('date')
             ->get();
 
-        $weekRecords = Attendance::where('student_id', $student->id)
+        $weekRecords = Attendance::forStudent($student->id)
             ->whereBetween('date', [$weekStart->toDateString(), $weekEnd->toDateString()])
             ->get();
 
-        $selectedAttendance = Attendance::where('student_id', $student->id)
+        $selectedAttendance = Attendance::forStudent($student->id)
             ->whereDate('date', $selectedDate->toDateString())
             ->first();
 
@@ -158,6 +163,10 @@ class StudentAttendanceController extends Controller
                 'regular_hours' => round($this->regularHours($record), 2),
                 'overtime_hours' => (float) $record->overtime_hours,
             ])->values(),
+            'holidays' => HolidayCalendar::monthForStudent($student, $month),
+            'selected_holiday' => ($selectedHoliday = HolidayCalendar::forStudentOn($student, $selectedDate))
+                ? HolidayCalendar::payload($selectedHoliday, $selectedDate, $student)
+                : null,
             'selected_attendance' => $this->workspaceAttendance($selectedAttendance),
             'settings' => [
                 'allow_past_attendance' => $student->allow_past_attendance,
@@ -165,10 +174,13 @@ class StudentAttendanceController extends Controller
                 'ojt_end_date' => $student->ojt_end_date?->toDateString(),
                 'work_days' => $workDays,
                 'official_schedule' => [
-                    'am_start' => substr($student->official_am_start, 0, 5),
-                    'am_end' => substr($student->official_am_end, 0, 5),
-                    'pm_start' => substr($student->official_pm_start, 0, 5),
-                    'pm_end' => substr($student->official_pm_end, 0, 5),
+                    'configured' => $selectedSchedule['is_configured'],
+                    'am_start' => $selectedSchedule['am_start'],
+                    'am_end' => $selectedSchedule['am_end'],
+                    'pm_start' => $selectedSchedule['pm_start'],
+                    'pm_end' => $selectedSchedule['pm_end'],
+                    'source' => $selectedSchedule['source'],
+                    'grace_period_minutes' => $selectedSchedule['grace_period_minutes'],
                 ],
                 'geofence' => $geofenceActive ? [
                     'active' => true,
@@ -183,7 +195,7 @@ class StudentAttendanceController extends Controller
     {
         $validated = $request->validate([
             'date' => ['required', 'date_format:Y-m-d'],
-            'status' => ['required', 'in:present,absent,holiday'],
+            'status' => ['required', 'in:present,absent'],
             'work_mode' => ['nullable', 'in:wfo,wfh,field'],
             'session_type' => ['nullable', 'in:full_day,am_half,pm_half'],
             'am_time_in' => ['nullable', 'date_format:H:i'],
@@ -214,7 +226,13 @@ class StudentAttendanceController extends Controller
             throw ValidationException::withMessages(['date' => 'This date is outside your configured OJT period.']);
         }
 
-        $attendance = Attendance::where('student_id', $student->id)
+        if ($holiday = HolidayCalendar::forStudentOn($student, $date)) {
+            throw ValidationException::withMessages([
+                'date' => $holiday->name.' is an official holiday. Attendance and rendered hours cannot be recorded for this date.',
+            ]);
+        }
+
+        $attendance = Attendance::forStudent($student->id)
             ->whereDate('date', $date->toDateString())
             ->first();
 
@@ -233,6 +251,7 @@ class StudentAttendanceController extends Controller
         $workMode = $isToday ? $attendance->work_mode : ($validated['work_mode'] ?? 'wfo');
 
         if (! $isToday && $status === 'present') {
+            $this->requireConfiguredWorkday($student, $date);
             $this->validatePastPresentEntry($validated, $sessionType);
         }
 
@@ -307,7 +326,7 @@ class StudentAttendanceController extends Controller
     public function smartLog(Request $request)
     {
         $validated = $request->validate([
-            'status' => 'required|in:present,absent,holiday',
+            'status' => 'required|in:present,absent',
             'work_mode' => 'required_if:status,present|nullable|in:wfo,wfh,field',
             'session_type' => 'required_if:status,present|nullable|in:full_day,am_half,pm_half',
             'latitude' => 'required_if:status,present|nullable|numeric|between:-90,90',
@@ -323,6 +342,13 @@ class StudentAttendanceController extends Controller
             return response()->json(['message' => 'Student profile not found'], 404);
         }
 
+        if ($holiday = HolidayCalendar::forStudentOn($student, now())) {
+            return response()->json([
+                'message' => $holiday->name.' is an official holiday. No OJT attendance is required and Smart Clock is unavailable today.',
+                'today_holiday' => HolidayCalendar::payload($holiday, now()->startOfDay(), $student),
+            ], 422);
+        }
+
         $usesServerTime = (bool) config('attendance.use_server_time', true);
         if (! $usesServerTime && $validated['status'] === 'present' && empty($validated['client_time'])) {
             throw ValidationException::withMessages([
@@ -332,8 +358,8 @@ class StudentAttendanceController extends Controller
 
         $today = now()->toDateString();
 
-        if (in_array($validated['status'], ['absent', 'holiday'], true)) {
-            $existing = Attendance::where('student_id', $student->id)
+        if ($validated['status'] === 'absent') {
+            $existing = Attendance::forStudent($student->id)
                 ->whereDate('date', $today)
                 ->first();
 
@@ -353,16 +379,15 @@ class StudentAttendanceController extends Controller
             StudentLiveLocation::where('student_id', $student->id)->delete();
 
             return response()->json([
-                'message' => $validated['status'] === 'absent'
-                    ? 'Attendance saved as absent.'
-                    : 'Attendance saved as holiday / no work.',
-                ...$this->quickClockPayload($attendance),
+                'message' => 'Attendance saved as absent.',
+                ...$this->quickClockPayload($attendance, $student),
             ]);
         }
 
         $recordedTime = $usesServerTime
             ? now()
             : Carbon::parse($validated['client_time'])->setTimezone(config('app.timezone'));
+        $this->requireConfiguredWorkday($student, $recordedTime);
 
         if (
             $validated['work_mode'] === 'wfo'
@@ -400,12 +425,12 @@ class StudentAttendanceController extends Controller
         ];
 
         $result = DB::transaction(function () use ($student, $today, $validated, $location, $recordedTime) {
-            $attendance = Attendance::where('student_id', $student->id)
+            $attendance = Attendance::forStudent($student->id)
                 ->whereDate('date', $today)
                 ->lockForUpdate()
                 ->first();
 
-            if ($attendance && $attendance->status !== 'present') {
+            if ($attendance && ! in_array($attendance->status, ['present', 'late'], true)) {
                 return ['error' => 'Today\'s status has already been submitted and cannot be changed.'];
             }
 
@@ -443,6 +468,15 @@ class StudentAttendanceController extends Controller
                 $nextSlot => $recordedTime,
                 $nextSlot.'_location' => $location,
             ];
+
+            if (str_ends_with($nextSlot, 'time_in')) {
+                $period = str_starts_with($nextSlot, 'am_') ? 'am' : 'pm';
+                $lateMinutes = $this->lateMinutes($student, $recordedTime, $period);
+                $updates[$period.'_late_minutes'] = $lateMinutes;
+                if ($lateMinutes > 0) {
+                    $updates['status'] = 'late';
+                }
+            }
 
             if ($isTimeOut) {
                 $updates[str_starts_with($nextSlot, 'am_') ? 'am_activity' : 'pm_activity'] = trim($validated['activity']);
@@ -512,7 +546,7 @@ class StudentAttendanceController extends Controller
                 ? $slotLabel.' recorded. Your attendance is complete for today!'
                 : $slotLabel.' recorded using '.($usesServerTime ? 'server' : 'device test').' time.',
             'just_completed' => $result['completed'],
-            ...$this->quickClockPayload($result['attendance']),
+            ...$this->quickClockPayload($result['attendance'], $student),
         ]);
     }
 
@@ -563,13 +597,14 @@ class StudentAttendanceController extends Controller
             throw ValidationException::withMessages($errors);
         }
 
-        [$scheduleStartField, $scheduleEndField] = match ($sessionType) {
-            'am_half' => ['official_am_start', 'official_am_end'],
-            'pm_half' => ['official_pm_start', 'official_pm_end'],
-            default => ['official_am_start', 'official_pm_end'],
+        $schedule = EffectiveSchedule::forDate($student, $date);
+        [$scheduleStartValue, $scheduleEndValue] = match ($sessionType) {
+            'am_half' => [$schedule['am_start'], $schedule['am_end']],
+            'pm_half' => [$schedule['pm_start'], $schedule['pm_end']],
+            default => [$schedule['am_start'], $schedule['pm_end']],
         };
-        $scheduleStart = $this->dateTime($date, substr($student->{$scheduleStartField}, 0, 5));
-        $scheduleEnd = $this->dateTime($date, substr($student->{$scheduleEndField}, 0, 5));
+        $scheduleStart = $this->dateTime($date, $scheduleStartValue ?: '00:00');
+        $scheduleEnd = $this->dateTime($date, $scheduleEndValue ?: '00:00');
         $overlapStart = $start->greaterThan($scheduleStart) ? $start : $scheduleStart;
         $overlapEnd = $end->lessThan($scheduleEnd) ? $end : $scheduleEnd;
         $overlapSeconds = $overlapEnd->gt($overlapStart) ? $overlapStart->diffInSeconds($overlapEnd) : 0;
@@ -605,8 +640,10 @@ class StudentAttendanceController extends Controller
             'work_mode' => $attendance->work_mode,
             'session_type' => $attendance->session_type,
             'am_time_in' => $attendance->am_time_in?->format('H:i'),
+            'am_late_minutes' => (int) $attendance->am_late_minutes,
             'am_time_out' => $attendance->am_time_out?->format('H:i'),
             'pm_time_in' => $attendance->pm_time_in?->format('H:i'),
+            'pm_late_minutes' => (int) $attendance->pm_late_minutes,
             'pm_time_out' => $attendance->pm_time_out?->format('H:i'),
             'ot_start' => $attendance->ot_start?->format('H:i'),
             'ot_end' => $attendance->ot_end?->format('H:i'),
@@ -631,7 +668,7 @@ class StudentAttendanceController extends Controller
         $today = now()->toDateString();
 
         // Check if already clocked in
-        $existingAttendance = Attendance::where('student_id', $student->id)
+        $existingAttendance = Attendance::forStudent($student->id)
             ->whereDate('date', $today)
             ->first();
 
@@ -653,9 +690,9 @@ class StudentAttendanceController extends Controller
             }
         }
 
-        // Determine status based on time
-        $hour = now()->hour;
-        $status = ($hour >= 8 && $hour <= 10) ? 'present' : 'late';
+        $period = $request->session_type === 'pm_half' ? 'pm' : 'am';
+        $lateMinutes = $this->lateMinutes($student, now(), $period);
+        $status = $lateMinutes > 0 ? 'late' : 'present';
 
         $attendance = Attendance::create([
             'student_id' => $student->id,
@@ -664,6 +701,7 @@ class StudentAttendanceController extends Controller
             'work_mode' => $request->work_mode,
             'session_type' => $request->session_type,
             'status' => $status,
+            $period.'_late_minutes' => $lateMinutes,
             'latitude_in' => $request->latitude,
             'longitude_in' => $request->longitude,
         ]);
@@ -684,9 +722,19 @@ class StudentAttendanceController extends Controller
         $student = $request->user()->student;
         $today = now()->toDateString();
 
-        $attendance = Attendance::where('student_id', $student->id)
+        $attendance = Attendance::forStudent($student->id)
             ->whereDate('date', $today)
-            ->whereNull('time_out')
+            ->where(function ($query) {
+                $query->where(fn ($fullDay) => $fullDay
+                    ->where('session_type', 'full_day')
+                    ->whereDoesntHave('events', fn ($events) => $events->where('event_type', 'pm_out')))
+                    ->orWhere(fn ($amHalf) => $amHalf
+                        ->where('session_type', 'am_half')
+                        ->whereDoesntHave('events', fn ($events) => $events->where('event_type', 'am_out')))
+                    ->orWhere(fn ($pmHalf) => $pmHalf
+                        ->where('session_type', 'pm_half')
+                        ->whereDoesntHave('events', fn ($events) => $events->where('event_type', 'pm_out')));
+            })
             ->first();
 
         if (! $attendance) {
@@ -705,13 +753,14 @@ class StudentAttendanceController extends Controller
         ]);
     }
 
-    private function quickClockPayload(?Attendance $attendance): array
+    private function quickClockPayload(?Attendance $attendance, Student $student): array
     {
-        $sequence = $attendance && $attendance->status === 'present'
+        $holiday = HolidayCalendar::forStudentOn($student, now());
+        $sequence = $attendance && in_array($attendance->status, ['present', 'late'], true)
             ? $this->slotSequence($attendance->session_type)
             : [];
 
-        $nextSlot = $attendance && $attendance->status === 'present'
+        $nextSlot = $attendance && in_array($attendance->status, ['present', 'late'], true)
             ? collect($sequence)->first(fn ($slot) => $attendance->{$slot} === null)
             : null;
 
@@ -724,17 +773,24 @@ class StudentAttendanceController extends Controller
             'completed' => $attendance->{$slot} !== null,
             'time' => $attendance->{$slot}?->toIso8601String(),
             'location' => $attendance->{$slot.'_location'},
+            'late_minutes' => str_ends_with($slot, 'time_in')
+                ? (int) $attendance->{str_starts_with($slot, 'am_') ? 'am_late_minutes' : 'pm_late_minutes'}
+                : 0,
         ])->values();
 
         $isDayStatus = $attendance && in_array($attendance->status, ['absent', 'holiday'], true);
-        $completed = $isDayStatus || ($attendance && $sequence && $nextSlot === null);
-        $settingsLocked = $attendance !== null;
+        $completed = $holiday !== null || $isDayStatus || ($attendance && $sequence && $nextSlot === null);
+        $settingsLocked = $holiday !== null || $attendance !== null;
 
         return [
             'server_time' => now()->toIso8601String(),
             'server_date' => now()->toDateString(),
             'timezone' => config('app.timezone'),
             'uses_server_time' => (bool) config('attendance.use_server_time', true),
+            'clock_disabled' => $holiday !== null,
+            'today_holiday' => $holiday
+                ? HolidayCalendar::payload($holiday, now()->startOfDay(), $student)
+                : null,
             'attendance' => $attendance ? [
                 'id' => $attendance->id,
                 'status' => $attendance->status,
@@ -745,6 +801,8 @@ class StudentAttendanceController extends Controller
                 'ot_start' => $attendance->ot_start?->format('H:i'),
                 'ot_end' => $attendance->ot_end?->format('H:i'),
                 'overtime_hours' => (float) $attendance->overtime_hours,
+                'am_late_minutes' => (int) $attendance->am_late_minutes,
+                'pm_late_minutes' => (int) $attendance->pm_late_minutes,
             ] : null,
             'slots' => $slots,
             'next_action' => $nextSlot ? [
@@ -780,9 +838,46 @@ class StudentAttendanceController extends Controller
 
     private function effectiveWorkDays(Student $student): array
     {
-        $workDays = $student->work_days ?: $student->hte?->work_days;
+        return EffectiveSchedule::workingDays($student);
+    }
 
-        return array_values($workDays ?: ['mon', 'tue', 'wed', 'thu', 'fri']);
+    private function requireConfiguredWorkday(Student $student, Carbon $date): array
+    {
+        $schedule = EffectiveSchedule::forDate($student, $date);
+
+        if (! $schedule['is_configured']) {
+            throw ValidationException::withMessages([
+                'schedule' => 'Your OJT schedule is not configured. Contact your coordinator before recording attendance.',
+            ]);
+        }
+
+        if (! $schedule['is_working']) {
+            throw ValidationException::withMessages([
+                'date' => 'Attendance cannot be recorded on a configured non-working day.',
+            ]);
+        }
+
+        return $schedule;
+    }
+
+    private function lateMinutes(Student $student, Carbon $recordedTime, string $period): int
+    {
+        $schedule = EffectiveSchedule::forDate($student, $recordedTime);
+        $startTime = $schedule[$period.'_start'];
+        $graceMinutes = (int) $schedule['grace_period_minutes'];
+
+        if (! $startTime) {
+            return 0;
+        }
+
+        $actualMinute = $recordedTime->copy()->startOfMinute();
+        $scheduledStart = $recordedTime->copy()->startOfDay()->setTimeFromTimeString(substr((string) $startTime, 0, 5));
+
+        if ($actualMinute->lte($scheduledStart->copy()->addMinutes($graceMinutes))) {
+            return 0;
+        }
+
+        return (int) $scheduledStart->diffInMinutes($actualMinute);
     }
 
     private function remainingWorkdaysThisWeek(Student $student, array $workDays): int
@@ -805,7 +900,9 @@ class StudentAttendanceController extends Controller
             $withinOjtPeriod = (! $student->ojt_start_date || $cursor->gte($student->ojt_start_date))
                 && (! $student->ojt_end_date || $cursor->lte($student->ojt_end_date));
 
-            if ($withinOjtPeriod && in_array($dayNames[$cursor->dayOfWeekIso], $workDays, true)) {
+            if ($withinOjtPeriod
+                && in_array($dayNames[$cursor->dayOfWeekIso], $workDays, true)
+                && ! HolidayCalendar::forStudentOn($student, $cursor)) {
                 $remaining++;
             }
 

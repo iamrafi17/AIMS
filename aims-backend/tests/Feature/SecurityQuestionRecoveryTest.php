@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademicPeriod;
+use App\Models\AcademicSection;
 use App\Models\College;
 use App\Models\OjtEnrollment;
 use App\Models\Program;
@@ -76,7 +78,8 @@ class SecurityQuestionRecoveryTest extends TestCase
         foreach ($saved as $index => $savedQuestion) {
             $this->assertSame($questions[$index]->id, $savedQuestion->security_question_id);
             $this->assertNotSame($plainAnswers[$index], $savedQuestion->answer_hash);
-            $this->assertTrue(Hash::check(mb_strtolower($plainAnswers[$index]), $savedQuestion->answer_hash));
+            $this->assertTrue($savedQuestion->answer_case_sensitive);
+            $this->assertTrue(Hash::check($plainAnswers[$index], $savedQuestion->answer_hash));
         }
     }
 
@@ -138,6 +141,15 @@ class SecurityQuestionRecoveryTest extends TestCase
             'user_id' => $student->student_id,
             'challenge_token' => $challenge,
             'answers' => $wrongAnswers,
+        ])->assertUnprocessable()
+            ->assertJsonPath('message', 'One or more security answers are incorrect.');
+
+        $wrongCase = $this->answerPayload($questions, $answers);
+        $wrongCase[0]['answer'] = mb_strtolower($answers[0]);
+        $this->postJson('/api/forgot-password/verify', [
+            'user_id' => $student->student_id,
+            'challenge_token' => $challenge,
+            'answers' => $wrongCase,
         ])->assertUnprocessable()
             ->assertJsonPath('message', 'One or more security answers are incorrect.');
 
@@ -228,12 +240,23 @@ class SecurityQuestionRecoveryTest extends TestCase
             'is_active' => true,
         ]);
         $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
+        $section = AcademicSection::create([
+            'academic_period_id' => AcademicPeriod::firstOrCreate([
+                'academic_year' => '2026-2027', 'semester' => '1st Semester',
+            ], ['start_date' => '2026-08-01', 'end_date' => '2026-12-31', 'status' => 'draft'])->id,
+            'program_id' => $program->id,
+            'name' => 'BSIT 4A',
+            'year_level' => 4,
+            'academic_year' => '2026-2027',
+            'is_active' => true,
+        ]);
         OjtEnrollment::create([
             'school_id' => $studentId,
             'full_name' => 'Security Test Student',
             'section' => 'BSIT 4A',
             'college_id' => $college->id,
             'program_id' => $program->id,
+            'academic_section_id' => $section->id,
             'source' => 'manual',
             'added_by' => $coordinator->id,
         ]);
@@ -260,8 +283,8 @@ class SecurityQuestionRecoveryTest extends TestCase
             'internship_year' => '2026-2027',
             'agree_terms' => true,
             'agree_privacy' => true,
-            'password' => 'StudentPass123!',
-            'password_confirmation' => 'StudentPass123!',
+            'password' => 'Student1234!',
+            'password_confirmation' => 'Student1234!',
         ]];
     }
 }

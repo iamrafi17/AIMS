@@ -29,7 +29,7 @@ class AdminUserController extends Controller
         $users = User::with([
             'college:id,name,code',
             'program:id,college_id,name,code',
-            'student:id,user_id,college_id,program_id',
+            'student:id,user_id',
             'student.college:id,name,code',
             'student.program:id,college_id,name,code',
             'supervisorProfile.department.hte:id,name,address',
@@ -48,7 +48,7 @@ class AdminUserController extends Controller
                 $query->where(function ($collegeQuery) use ($filters) {
                     $collegeQuery->where('college_id', $filters['college_id'])
                         ->orWhereHas('student', fn ($studentQuery) => $studentQuery
-                            ->where('college_id', $filters['college_id']));
+                            ->forCollege($filters['college_id']));
                 });
             })
             ->latest()
@@ -71,7 +71,7 @@ class AdminUserController extends Controller
     {
         $data = $request->validate([
             'name' => [$request->input('role') === 'supervisor' ? 'nullable' : 'required', 'string', 'max:255'],
-            'email' => 'nullable|email|unique:users,email',
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'role' => 'required|in:student,coordinator,program_head,vpaa,admin,supervisor',
             'supervisor_record_id' => [$request->input('role') === 'supervisor' ? 'required' : 'nullable', 'integer', 'exists:supervisors,id'],
             'is_active' => ['nullable', 'boolean'],
@@ -96,7 +96,7 @@ class AdminUserController extends Controller
 
             $user = User::create([
                 'name' => $supervisor?->full_name ?? $data['name'],
-                'email' => $data['email'] ?? null,
+                'email' => $data['email'],
                 'password' => Hash::make($temporaryPassword),
                 'role' => $data['role'],
                 'is_active' => $data['is_active'] ?? true,
@@ -108,7 +108,6 @@ class AdminUserController extends Controller
             ]);
 
             $supervisor?->update(['user_id' => $user->id]);
-            $supervisor?->students()->update(['supervisor_id' => $user->id]);
 
             return $user;
         });
@@ -171,7 +170,7 @@ class AdminUserController extends Controller
 
         $data = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'sometimes|nullable|email|unique:users,email,'.$user->id,
+            'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'role' => 'sometimes|in:student,coordinator,program_head,vpaa,admin,supervisor',
             'supervisor_record_id' => ['nullable', 'integer', 'exists:supervisors,id'],
             ...$this->assignmentRules($request, $user),
@@ -346,7 +345,6 @@ class AdminUserController extends Controller
         $current = $user->supervisorProfile()->lockForUpdate()->first();
 
         if ($data['role'] !== 'supervisor') {
-            $current?->students()->where('supervisor_id', $user->id)->update(['supervisor_id' => null]);
             $current?->update(['user_id' => null]);
 
             return null;
@@ -367,11 +365,9 @@ class AdminUserController extends Controller
         }
 
         if ($current && ! $current->is($supervisor)) {
-            $current->students()->where('supervisor_id', $user->id)->update(['supervisor_id' => null]);
             $current->update(['user_id' => null]);
         }
         $supervisor->update(['user_id' => $user->id]);
-        $supervisor->students()->update(['supervisor_id' => $user->id]);
 
         return $supervisor;
     }

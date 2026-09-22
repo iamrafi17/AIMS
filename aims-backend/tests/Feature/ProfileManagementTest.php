@@ -41,6 +41,62 @@ class ProfileManagementTest extends TestCase
         ]);
     }
 
+    public function test_login_and_user_endpoint_return_the_same_complete_student_profile(): void
+    {
+        [$user] = $this->studentAccount();
+
+        $login = $this->postJson('/api/login', [
+            'login' => $user->email,
+            'password' => 'password',
+            'device_name' => 'profile-payload-test',
+        ])->assertOk()
+            ->assertJsonPath('user.name', 'Juan Dela Cruz')
+            ->assertJsonPath('user.contact_number', '09170000000')
+            ->assertJsonPath('user.address', 'Boac, Marinduque')
+            ->assertJsonPath('user.is_active', true)
+            ->assertJsonPath('student.first_name', 'Juan')
+            ->assertJsonPath('student.middle_name', 'Dela')
+            ->assertJsonPath('student.last_name', 'Cruz')
+            ->assertJsonPath('student.gender', 'male')
+            ->assertJsonPath('student.contact_number', '09170000000')
+            ->assertJsonPath('student.address', 'Boac, Marinduque');
+
+        $this->withToken($login->json('token'))
+            ->getJson('/api/user')
+            ->assertOk()
+            ->assertJsonPath('user.name', 'Juan Dela Cruz')
+            ->assertJsonPath('user.contact_number', '09170000000')
+            ->assertJsonPath('user.address', 'Boac, Marinduque')
+            ->assertJsonPath('student.middle_name', 'Dela')
+            ->assertJsonPath('student.gender', 'male')
+            ->assertJsonPath('student.contact_number', '09170000000')
+            ->assertJsonPath('student.address', 'Boac, Marinduque');
+    }
+
+    public function test_staff_login_returns_the_complete_profile_without_a_student_record(): void
+    {
+        $staff = User::factory()->create([
+            'name' => 'Profile Test Coordinator',
+            'email' => 'profile.coordinator@example.com',
+            'contact_number' => '09181111111',
+            'address' => 'MarSU Santa Cruz Campus',
+            'role' => 'coordinator',
+            'is_active' => true,
+        ]);
+
+        $this->postJson('/api/login', [
+            'login' => $staff->email,
+            'password' => 'password',
+            'device_name' => 'staff-profile-payload-test',
+        ])->assertOk()
+            ->assertJsonPath('user.name', 'Profile Test Coordinator')
+            ->assertJsonPath('user.contact_number', '09181111111')
+            ->assertJsonPath('user.address', 'MarSU Santa Cruz Campus')
+            ->assertJsonPath('user.is_active', true)
+            ->assertJsonPath('student', null)
+            ->assertJsonStructure(['user' => ['last_login_at']]);
+    }
+
     public function test_student_can_manage_contact_information(): void
     {
         [$user, $student] = $this->studentAccount();

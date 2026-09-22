@@ -94,13 +94,17 @@ class CoordinatorAttendanceManagementTest extends TestCase
             ->assertJsonPath('message', 'Daily journal marked as reviewed.')
             ->assertJsonPath('attendance.journal_status', 'reviewed');
 
-        $this->assertDatabaseHas('attendance', [
-            'id' => $attendance->id,
-            'is_verified' => false,
-            'verified_by' => null,
-            'journal_status' => 'reviewed',
-            'journal_feedback' => null,
-            'journal_reviewed_by' => $coordinator->id,
+        $this->assertDatabaseMissing('attendance_reviews', [
+            'attendance_id' => $attendance->id,
+            'review_type' => 'verification',
+            'decision' => 'approved',
+        ]);
+        $this->assertDatabaseHas('attendance_journals', [
+            'attendance_id' => $attendance->id,
+            'period' => 'am',
+            'review_status' => 'reviewed',
+            'feedback' => null,
+            'reviewed_by' => $coordinator->id,
         ]);
     }
 
@@ -166,7 +170,7 @@ class CoordinatorAttendanceManagementTest extends TestCase
             ->assertJsonPath('sharing', 1)
             ->assertJsonCount(1, 'locations');
 
-        Attendance::where('student_id', $student->id)->update(['am_time_out' => now()]);
+        Attendance::forStudent($student->id)->firstOrFail()->update(['am_time_out' => now()]);
 
         $this->getJson('/api/coordinator/attendance/live-locations')
             ->assertOk()
@@ -257,8 +261,6 @@ class CoordinatorAttendanceManagementTest extends TestCase
         $program = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
         $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
         $hte = HTE::create([
-            'college_id' => $college->id,
-            'program_id' => $program->id,
             'name' => 'Partner Company',
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Supervisor',
@@ -266,6 +268,11 @@ class CoordinatorAttendanceManagementTest extends TestCase
             'contact_number' => '09170000000',
             'is_active' => true,
         ]);
+        $hte->programs()->attach($program->id, [
+            'linked_by' => $coordinator->id,
+            'is_active' => true,
+        ]);
+        $period = $this->academicPeriod();
         $student = Student::create([
             'user_id' => $studentUser->id,
             'student_id' => '2026-3001',
@@ -277,6 +284,7 @@ class CoordinatorAttendanceManagementTest extends TestCase
             'contact_number' => '09171111111',
             'college_id' => $college->id,
             'program_id' => $program->id,
+            'academic_period_id' => $period->id,
             'year_level' => 4,
             'section' => 'A',
             'parent_name' => 'Test Parent',

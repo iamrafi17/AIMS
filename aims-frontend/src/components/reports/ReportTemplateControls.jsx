@@ -17,7 +17,7 @@ function Modal({ children, onClose, labelledBy }) {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5" role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
       {children}
     </div>
   );
@@ -112,25 +112,28 @@ export default function ReportTemplateControls({ reportType, reportLabel, filter
 
       {uploadOpen && (
         <Modal onClose={closeUpload} labelledBy="upload-template-title">
-          <form onSubmit={uploadTemplate} className="w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900">
-            <div className="flex items-start justify-between gap-4 bg-[#690016] px-6 py-5 text-white">
-              <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#f7d979]">Shared official format</p><h2 id="upload-template-title" className="mt-1 text-xl font-black">Upload Official Template</h2><p className="mt-1 text-xs text-white/65">One template for every report type on this page</p></div>
-              <button type="button" onClick={closeUpload} disabled={uploading} className="rounded-xl p-2 text-white/70 transition hover:bg-white/10 hover:text-white" aria-label="Close upload"><FiX /></button>
+          <form onSubmit={uploadTemplate} className="w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200 bg-white font-sans shadow-[0_20px_60px_rgba(15,23,42,0.22)] dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
+              <div>
+                <h2 id="upload-template-title" className="text-lg font-black text-[#690016] dark:text-white">Upload Official Template</h2>
+                <p className="mt-1 text-xs text-slate-400">DOCX only, up to 10 MB. One template is shared by every report type.</p>
+              </div>
+              <button type="button" onClick={closeUpload} disabled={uploading} className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-[#7D001D] dark:hover:bg-slate-800" aria-label="Close upload"><FiX /></button>
             </div>
-            <div className="space-y-5 p-6">
-              <label className="block cursor-pointer rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-6 text-center transition hover:border-[#7D001D]/40 dark:border-slate-700 dark:bg-slate-800/60">
-                <FiUploadCloud className="mx-auto text-3xl text-[#7D001D] dark:text-rose-300" />
-                <span className="mt-2 block text-sm font-black text-slate-700 dark:text-white">{file?.name || 'Choose official DOCX template'}</span>
-                <span className="mt-1 block text-xs text-slate-400">DOCX only, maximum 10 MB</span>
+            <div className="space-y-4 p-5">
+              <label className="block cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-5 text-center transition hover:border-[#7D001D]/50 hover:bg-[#7D001D]/[0.03] dark:border-slate-700 dark:bg-slate-800/60">
+                <span className="mx-auto grid h-9 w-9 place-items-center rounded-full bg-[#7D001D]/10 text-[#7D001D] dark:bg-rose-400/10 dark:text-rose-300"><FiUploadCloud className="text-lg" /></span>
+                <span className="mt-2.5 block truncate text-sm font-black text-slate-700 dark:text-white">{file?.name || 'Choose official DOCX template'}</span>
+                <span className="mt-1 block text-xs text-slate-400">Click to browse for a DOCX file</span>
                 <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => setFile(event.target.files?.[0] || null)} className="sr-only" />
               </label>
-              <div className="rounded-2xl bg-amber-50 p-4 text-xs leading-5 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs leading-5 text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
                 Upload the official blank DOCX once. AIMS will use it for Student Internship, HTE Deployment, Travel Monitoring, and the other report types available to your role. No template codes or separate uploads are required.
               </div>
-              <div className="flex justify-end gap-3">
-                <button type="button" onClick={closeUpload} disabled={uploading} className="rounded-xl border border-slate-200 px-5 py-3 text-xs font-black text-slate-600 dark:border-slate-700 dark:text-slate-200">Cancel</button>
-                <button disabled={uploading} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-xs font-black text-white disabled:opacity-60"><FiUploadCloud /> {uploading ? 'Uploading…' : 'Upload and Use Template'}</button>
-              </div>
+            </div>
+            <div className="flex flex-col-reverse gap-2.5 border-t border-slate-100 px-5 py-4 dark:border-slate-700 sm:flex-row sm:justify-end">
+              <button type="button" onClick={closeUpload} disabled={uploading} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Cancel</button>
+              <button disabled={uploading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-5 py-2.5 text-sm font-black text-white transition hover:bg-[#650018] disabled:opacity-60"><FiUploadCloud /> {uploading ? 'Uploading…' : 'Upload and Use Template'}</button>
             </div>
           </form>
         </Modal>
@@ -138,12 +141,15 @@ export default function ReportTemplateControls({ reportType, reportLabel, filter
 
       {preview && (
         <Modal onClose={() => setPreview(null)} labelledBy="generated-preview-title">
-          <div className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-4 dark:border-slate-700">
-              <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#7D001D] dark:text-rose-300">Generated using the official template</p><h2 id="generated-preview-title" className="mt-1 text-xl font-black text-slate-900 dark:text-white">{reportLabel} Preview</h2><p className="mt-1 text-xs text-slate-400">{preview.template?.file_name} · Shared across all report types and periods</p></div>
-              <div className="flex flex-wrap gap-2"><button type="button" onClick={generatePreview} disabled={generating} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-slate-600 dark:border-slate-700 dark:text-slate-200"><FiEye /> {generating ? 'Refreshing…' : 'Refresh Preview'}</button><button type="button" onClick={downloadPdf} disabled={downloading} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-4 py-2.5 text-xs font-black text-white disabled:opacity-60"><FiDownload /> {downloading ? 'Preparing PDF…' : 'Download PDF'}</button><button type="button" onClick={() => setPreview(null)} className="rounded-xl border border-slate-200 p-3 text-slate-500 dark:border-slate-700" aria-label="Close preview"><FiX /></button></div>
+          <div className={`flex w-full flex-col overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900 ${reportType === 'student_internship' ? 'max-h-[calc(100dvh-1.5rem)] max-w-2xl sm:max-h-[calc(100dvh-2.5rem)]' : 'h-[92vh] max-w-6xl'}`}>
+            <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#7D001D] dark:text-rose-300">Generated using the official template</p><h2 id="generated-preview-title" className="mt-1 truncate text-lg font-black text-slate-900 dark:text-white">{reportLabel} Preview</h2><p className="mt-1 truncate text-xs text-slate-400">{preview.template?.file_name} · Shared across all report types and periods</p></div>
+                <button type="button" onClick={() => setPreview(null)} className="shrink-0 rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close preview"><FiX /></button>
+              </div>
+              <div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" onClick={generatePreview} disabled={generating} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-slate-600 dark:border-slate-700 dark:text-slate-200"><FiEye /> {generating ? 'Refreshing…' : 'Refresh Preview'}</button><button type="button" onClick={downloadPdf} disabled={downloading} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-4 py-2.5 text-xs font-black text-white disabled:opacity-60"><FiDownload /> {downloading ? 'Preparing PDF…' : 'Download PDF'}</button></div>
             </div>
-            <div className="min-h-0 flex-1 bg-slate-200 p-3 dark:bg-slate-950"><iframe title={`${reportLabel} generated preview`} srcDoc={preview.html} sandbox="" className="h-full w-full rounded-xl bg-white shadow-inner" /></div>
+            <div className={`min-h-0 bg-slate-200 p-3 dark:bg-slate-950 ${reportType === 'student_internship' ? 'h-[55dvh] min-h-80 max-h-[32rem] shrink-0' : 'flex-1'}`}><iframe title={`${reportLabel} generated preview`} srcDoc={preview.html} sandbox="" className="h-full w-full rounded-xl bg-white shadow-inner" /></div>
           </div>
         </Modal>
       )}

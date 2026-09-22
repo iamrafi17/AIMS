@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademicPeriod;
 use App\Models\AcademicSection;
 use App\Models\Attendance;
 use App\Models\College;
@@ -71,8 +72,6 @@ class ProgramScopedAccessTest extends TestCase
         ]);
         $student = $this->student($college, $bsis, '2026-BSIS-03');
         $otherHte = HTE::create([
-            'college_id' => $college->id,
-            'program_id' => $bsit->id,
             'name' => 'BSIT Partner',
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Supervisor',
@@ -80,6 +79,7 @@ class ProgramScopedAccessTest extends TestCase
             'contact_number' => '09170000001',
             'is_active' => true,
         ]);
+        $otherHte->programs()->attach($bsit->id, ['is_active' => true]);
         Sanctum::actingAs($coordinator);
 
         $this->putJson("/api/coordinator/students/{$student->id}", [
@@ -146,8 +146,10 @@ class ProgramScopedAccessTest extends TestCase
     public function test_coordinator_and_program_head_reports_can_filter_their_program_by_section(): void
     {
         [$college, $bsis, $bsit] = $this->academicContext();
+        $period = $this->academicPeriod();
         $sectionA = AcademicSection::create([
             'program_id' => $bsis->id,
+            'academic_period_id' => $period->id,
             'name' => '4A',
             'year_level' => 4,
             'academic_year' => '2026-2027',
@@ -155,6 +157,7 @@ class ProgramScopedAccessTest extends TestCase
         ]);
         $sectionB = AcademicSection::create([
             'program_id' => $bsis->id,
+            'academic_period_id' => $period->id,
             'name' => '4B',
             'year_level' => 4,
             'academic_year' => '2026-2027',
@@ -162,6 +165,7 @@ class ProgramScopedAccessTest extends TestCase
         ]);
         $otherProgramSection = AcademicSection::create([
             'program_id' => $bsit->id,
+            'academic_period_id' => $period->id,
             'name' => '4A',
             'year_level' => 4,
             'academic_year' => '2026-2027',
@@ -294,6 +298,19 @@ class ProgramScopedAccessTest extends TestCase
     private function student(College $college, Program $program, string $schoolId): Student
     {
         $user = User::factory()->create(['role' => 'student']);
+        $period = AcademicPeriod::firstOrCreate(
+            ['academic_year' => '2026-2027', 'semester' => '1st Semester'],
+            ['start_date' => '2026-08-01', 'end_date' => '2026-12-31', 'status' => 'active'],
+        );
+        $section = AcademicSection::where('program_id', $program->id)->first()
+            ?? AcademicSection::create([
+                'program_id' => $program->id,
+                'academic_period_id' => $period->id,
+                'name' => '4-'.$program->code.' A',
+                'year_level' => 4,
+                'academic_year' => $period->academic_year,
+                'is_active' => true,
+            ]);
 
         return Student::create([
             'user_id' => $user->id,
@@ -306,6 +323,7 @@ class ProgramScopedAccessTest extends TestCase
             'contact_number' => '09170000000',
             'college_id' => $college->id,
             'program_id' => $program->id,
+            'academic_section_id' => $section->id,
             'year_level' => 4,
             'section' => 'A',
             'parent_name' => 'Test Parent',

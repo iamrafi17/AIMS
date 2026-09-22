@@ -46,6 +46,7 @@ class AdminUserListTest extends TestCase
             'college_id' => null,
             'program_id' => null,
         ]);
+        $period = $this->academicPeriod();
 
         Student::create([
             'user_id' => $studentUser->id,
@@ -58,6 +59,7 @@ class AdminUserListTest extends TestCase
             'contact_number' => '09170000000',
             'college_id' => $college->id,
             'program_id' => $program->id,
+            'academic_period_id' => $period->id,
             'year_level' => 4,
             'section' => 'A',
             'parent_name' => 'Test Parent',

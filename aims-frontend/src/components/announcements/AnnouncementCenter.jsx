@@ -284,28 +284,30 @@ export default function AnnouncementCenter({ managing = false }) {
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-[#5d0000] via-[#7D001D] to-[#9d1b1b] p-4 text-white shadow-xl shadow-[#7D001D]/15 sm:p-6 lg:p-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
-              <BellAlertIcon className="h-7 w-7 text-[#f4cf63]" />
+      <section className="overflow-hidden !rounded-2xl bg-gradient-to-r from-[#690016] via-[#850020] to-[#a21b25] px-4 py-5 text-white sm:px-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3.5">
+            <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-white/10 ring-1 ring-inset ring-white/15">
+              <BellAlertIcon className="size-5.5 text-[#f4cf63]" />
             </div>
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#f4cf63]">MarSU AIMS</p>
-            <h1 className="mt-2 text-2xl font-black sm:text-3xl lg:text-4xl">{managing ? 'Announcement Management' : 'Announcements'}</h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-white/75 sm:text-base">
-              {managing
-                ? 'Create, schedule, publish, archive, and monitor official university internship notices.'
-                : 'Stay updated with internship advisories, university notices, deadlines, and upcoming activities.'}
-            </p>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#f4cf63]">MarSU AIMS</p>
+              <h1 className="mt-0.5 !text-2xl !font-bold !text-white">{managing ? 'Announcement Management' : 'Announcements'}</h1>
+              <p className="mt-1 max-w-2xl text-sm leading-5 text-white/75">
+                {managing
+                  ? 'Create, publish, and manage official university internship notices.'
+                  : 'Internship advisories, deadlines, university notices, and upcoming activities.'}
+              </p>
+            </div>
           </div>
           {managing ? (
-            <button onClick={() => setEditing(null)} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#690016] shadow-lg transition hover:-translate-y-0.5 hover:bg-[#e3c45e] sm:w-auto">
+            <button onClick={() => setEditing(null)} className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-[#690016] transition hover:bg-[#e3c45e] sm:w-auto">
               <PlusIcon className="h-5 w-5" /> New announcement
             </button>
           ) : (
-            <div className="rounded-2xl bg-white/10 px-5 py-4 ring-1 ring-white/15 backdrop-blur">
-              <p className="text-xs uppercase tracking-wider text-white/60">Unread notices</p>
-              <p className="mt-1 text-3xl font-black">{unread}</p>
+            <div className="flex shrink-0 items-center justify-between gap-5 rounded-xl bg-white/10 px-4 py-2.5 ring-1 ring-inset ring-white/15 sm:min-w-40 sm:block">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">Unread notices</p>
+              <p className="text-xl font-bold text-white sm:mt-0.5">{unread}</p>
             </div>
           )}
         </div>
@@ -318,14 +320,14 @@ export default function AnnouncementCenter({ managing = false }) {
         </div>
       )}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-5">
-        <div className="flex flex-col gap-3 md:flex-row">
+      <section className="portal-filter-panel !rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+        <div className="portal-filter-grid grid gap-2.5 md:grid-cols-[minmax(0,1fr)_13rem]">
           <label className="relative flex-1">
-            <MagnifyingGlassIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search announcements..." className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700" />
+            <MagnifyingGlassIcon className="absolute left-3.5 top-1/2 size-5 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search announcements..." className="w-full !rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700" />
           </label>
           {managing ? (
-            <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700 md:min-w-44">
+            <select value={status} onChange={(event) => setStatus(event.target.value)} className="!rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm dark:border-slate-700">
               <option value="all">All statuses</option>
               <option value="published">Published</option>
               <option value="scheduled">Scheduled</option>
@@ -333,7 +335,7 @@ export default function AnnouncementCenter({ managing = false }) {
               <option value="archived">Archived</option>
             </select>
           ) : (
-            <select value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700 md:min-w-52">
+            <select value={category} onChange={(event) => setCategory(event.target.value)} className="!rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm dark:border-slate-700">
               <option value="all">All categories</option>
               <option value="general">General</option>
               <option value="advisory">Internship advisories</option>

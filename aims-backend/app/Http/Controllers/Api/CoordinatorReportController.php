@@ -23,7 +23,11 @@ class CoordinatorReportController extends Controller
         $filters = $request->validate([
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
-            'student_id' => ['nullable', 'integer', Rule::exists('students', 'id')->where(fn ($query) => $query->where('program_id', $programId))],
+            'student_id' => ['nullable', 'integer', function (string $attribute, mixed $value, \Closure $fail) use ($programId): void {
+                if (! Student::forProgram($programId)->whereKey($value)->exists()) {
+                    $fail('The selected student does not belong to your program.');
+                }
+            }],
             'hte_id' => ['nullable', 'integer', Rule::exists('hte_programs', 'hte_id')->where(fn ($query) => $query->where('program_id', $programId)->where('is_active', true))],
             'attendance_status' => ['nullable', Rule::in(['present', 'late', 'absent', 'holiday'])],
             'work_mode' => ['nullable', Rule::in(['wfo', 'wfh', 'field'])],
@@ -38,24 +42,25 @@ class CoordinatorReportController extends Controller
         $program = $request->user()->program()->first(['programs.id', 'programs.name', 'programs.code']);
         $sections = AcademicSection::where('program_id', $programId)
             ->where('is_active', true)
-            ->orderByDesc('academic_year')
+            ->newestPeriodFirst()
             ->orderBy('year_level')
             ->orderBy('name')
-            ->get(['id', 'program_id', 'name', 'year_level', 'academic_year']);
+            ->get(['id', 'program_id', 'academic_period_id', 'name', 'year_level']);
         $from = isset($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : null;
         $to = isset($filters['date_to']) ? Carbon::parse($filters['date_to'])->endOfDay() : null;
 
         $students = Student::query()
-            ->where('program_id', $programId)
-            ->when($sectionId, fn ($query) => $query->where('academic_section_id', $sectionId))
+            ->forProgram($programId)
+            ->when($sectionId, fn ($query) => $query->forAcademicSection($sectionId))
             ->when($filters['student_id'] ?? null, fn ($query, $value) => $query->whereKey($value))
-            ->when($filters['hte_id'] ?? null, fn ($query, $value) => $query->where('hte_id', $value))
-            ->when($filters['internship_status'] ?? null, fn ($query, $value) => $query->where('internship_status', $value))
-            ->when($filters['academic_year'] ?? null, fn ($query, $value) => $query->where('internship_year', $value))
-            ->when($filters['semester'] ?? null, fn ($query, $value) => $query->where('internship_semester', $value))
+            ->when($filters['hte_id'] ?? null, fn ($query, $value) => $query->forHte($value))
+            ->when($filters['internship_status'] ?? null, fn ($query, $value) => $query->forInternshipStatus($value))
+            ->when($filters['academic_year'] ?? null, fn ($query, $value) => $query->forAcademicYear($value))
+            ->when($filters['semester'] ?? null, fn ($query, $value) => $query->forSemester($value))
             ->with([
                 'program:id,code',
-                'academicSection:id,name,year_level,academic_year',
+                'academicSection:id,academic_period_id,name,year_level',
+                'academicSection.academicPeriod:id,academic_year,semester',
                 'hte:id,name,address,latitude,longitude,geofence_radius,geofence_enabled',
                 'hteDepartment:id,hte_id,department_name',
                 'requirements.reviewer:id,name',
@@ -67,16 +72,16 @@ class CoordinatorReportController extends Controller
         $studentIds = $students->pluck('id');
 
         $attendance = Attendance::query()
-            ->whereIn('student_id', $studentIds)
+            ->forStudents($studentIds)
             ->when($from, fn ($query, Carbon $date) => $query->whereDate('date', '>=', $date->toDateString()))
             ->when($to, fn ($query, Carbon $date) => $query->whereDate('date', '<=', $date->toDateString()))
             ->when($filters['attendance_status'] ?? null, fn ($query, $value) => $query->where('status', $value))
             ->when($filters['work_mode'] ?? null, fn ($query, $value) => $query->where('work_mode', $value))
-            ->with(['student:id,student_id,first_name,last_name,program_id,academic_section_id,section,hte_id', 'student.program:id,code', 'student.hte:id,name,latitude,longitude,geofence_radius,geofence_enabled'])
+            ->with(['student', 'student.program:id,code', 'student.hte:id,name,latitude,longitude,geofence_radius,geofence_enabled'])
             ->latest('date')
             ->get();
         $attendanceByStudent = $attendance->groupBy('student_id');
-        $allAttendanceByStudent = Attendance::query()->whereIn('student_id', $studentIds)->get()->groupBy('student_id');
+        $allAttendanceByStudent = Attendance::query()->forStudents($studentIds)->get()->groupBy('student_id');
         $deploymentApprovals = ApprovalRecord::query()
             ->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)
             ->whereIn('subject_id', $studentIds)
@@ -204,24 +209,18 @@ class CoordinatorReportController extends Controller
             ];
         })->values();
 
+        $studentsByHte = $students
+            ->filter(fn (Student $student) => filled($student->hte_id))
+            ->groupBy(fn (Student $student) => (int) $student->hte_id);
         $deploymentRows = HTE::query()
             ->whereHas('programs', fn ($query) => $query->whereKey($programId)->where('hte_programs.is_active', true))
-            ->whereHas('students', fn ($query) => $query->whereIn('students.id', $studentIds))
-            ->with([
-                'students' => fn ($query) => $query
-                    ->whereIn('students.id', $studentIds)
-                    ->with([
-                        'program:id,code',
-                        'hteDepartment:id,hte_id,department_name',
-                        'supervisor:id,name',
-                        'supervisorRecord:id,hte_department_id,full_name',
-                    ]),
-                'moas' => fn ($query) => $query->where('program_id', $programId),
-            ])
+            ->whereIn('id', $studentsByHte->keys())
+            ->with(['moas' => fn ($query) => $query->where('program_id', $programId)])
             ->orderBy('name')
             ->get()
-            ->map(function (HTE $hte) {
-                $students = $hte->students;
+            ->map(function (HTE $hte) use ($studentsByHte) {
+                $students = $studentsByHte->get($hte->id, collect());
+                $hte->setRelation('students', $students);
                 $latestMoa = $hte->moas->sortByDesc('expiration_date')->first();
                 $moa = ! $latestMoa ? 'Pending' : ($latestMoa->expiration_date?->isPast() ? 'Expiring' : ucfirst($latestMoa->status));
 
@@ -242,7 +241,7 @@ class CoordinatorReportController extends Controller
             ->with([
                 'participants' => fn ($query) => $query
                     ->whereIn('students.id', $studentIds)
-                    ->select(['students.id', 'students.student_id', 'students.first_name', 'students.last_name', 'students.program_id', 'students.academic_section_id', 'students.section'])
+                    ->select(['students.id', 'students.student_id', 'students.first_name', 'students.last_name'])
                     ->with('program:id,code'),
                 'checkpoints:id,travel_log_id,sequence,checkpoint_name,point_type,captured_at,latitude,longitude,readable_location,photo_path,notes,is_verified',
                 'hte:id,name',

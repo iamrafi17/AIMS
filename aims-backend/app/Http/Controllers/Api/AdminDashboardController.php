@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\OjtEnrollment;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -20,9 +21,9 @@ class AdminDashboardController extends Controller
         // Get student statistics
         $studentStats = [
             'total' => Student::count(),
-            'pending' => Student::where('registration_status', 'pending')->count(),
-            'active' => Student::where('internship_status', 'active')->count(),
-            'completed' => Student::where('internship_status', 'completed')->count(),
+            'awaiting_registration' => OjtEnrollment::whereNull('registered_at')->count(),
+            'active' => Student::forInternshipStatus('active')->count(),
+            'completed' => Student::forInternshipStatus('completed')->count(),
         ];
 
         // Get attendance statistics for current month

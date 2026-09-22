@@ -251,7 +251,7 @@ export default function StudentTravel() {
 
       {!session && !data.can_start.allowed && <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/30"><p className="font-black text-amber-800 dark:text-amber-200">Travel session unavailable</p><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-700 dark:text-amber-300">{data.can_start.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul></section>}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Assigned HTE" value={data.student?.hte?.name || 'Not assigned'} icon={MapPinIcon} />
         <MetricCard label="Coordinator" value={data.coordinator?.name || 'Not assigned'} icon={CheckCircleIcon} tone="violet" />
         <MetricCard label="Current status" value={session?.status || 'Not started'} icon={ArrowPathIcon} tone="green" />

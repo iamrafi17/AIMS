@@ -21,7 +21,7 @@ class SecurityHardeningTest extends TestCase
             'role' => 'coordinator',
         ]);
 
-        for ($attempt = 0; $attempt < 5; $attempt++) {
+        for ($attempt = 0; $attempt < 10; $attempt++) {
             $this->postJson('/api/login', [
                 'login' => 'rate-limit@example.com',
                 'password' => 'wrong-password',

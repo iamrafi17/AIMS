@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\ActivityLogController;
+use App\Http\Controllers\Api\AcademicPeriodController;
 use App\Http\Controllers\Api\AdminDashboardController;
 use App\Http\Controllers\Api\AdminSystemController;
 use App\Http\Controllers\Api\AdminUserController;
@@ -153,9 +154,6 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::post('/students/import', [CoordinatorStudentController::class, 'importCsv']);
         Route::post('/students/import/confirm', [CoordinatorStudentController::class, 'confirmCsvImport']);
         Route::apiResource('students', CoordinatorStudentController::class);
-        Route::post('/students/{student}/approve', [CoordinatorStudentController::class, 'approveRegistration']);
-        Route::post('/students/{student}/reject', [CoordinatorStudentController::class, 'rejectRegistration']);
-        Route::put('/students/{student}/deactivate', [CoordinatorStudentController::class, 'deactivate']);
         Route::post('/students/{student}/requirements/{requirement}/review', [CoordinatorStudentController::class, 'reviewRequirement']);
         Route::get('/students/{student}/requirements/{requirement}/download', [CoordinatorStudentController::class, 'downloadRequirement']);
         Route::get('/travel/{travel}/arrival-photo', [CoordinatorTravelController::class, 'arrivalPhoto']);
@@ -197,17 +195,20 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::post('/academic/colleges', [AdminSystemController::class, 'storeCollege']);
         Route::put('/academic/colleges/{college}', [AdminSystemController::class, 'updateCollege']);
         Route::delete('/academic/colleges/{college}', [AdminSystemController::class, 'destroyCollege']);
-        Route::delete('/academic/colleges/{college}/permanent', [AdminSystemController::class, 'permanentDestroyCollege']);
         Route::post('/academic/programs', [AdminSystemController::class, 'storeProgram']);
         Route::put('/academic/programs/{program}', [AdminSystemController::class, 'updateProgram']);
         Route::delete('/academic/programs/{program}', [AdminSystemController::class, 'destroyProgram']);
-        Route::delete('/academic/programs/{program}/permanent', [AdminSystemController::class, 'permanentDestroyProgram']);
         Route::post('/academic/sections', [AdminSystemController::class, 'storeSection']);
         Route::put('/academic/sections/{section}', [AdminSystemController::class, 'updateSection']);
         Route::delete('/academic/sections/{section}', [AdminSystemController::class, 'destroySection']);
-        Route::delete('/academic/sections/{section}/permanent', [AdminSystemController::class, 'permanentDestroySection']);
         Route::get('/settings', [AdminSystemController::class, 'settings']);
         Route::put('/settings', [AdminSystemController::class, 'updateSettings']);
+        Route::get('/academic-periods', [AcademicPeriodController::class, 'index']);
+        Route::post('/academic-periods', [AcademicPeriodController::class, 'store']);
+        Route::put('/academic-periods/{academicPeriod}', [AcademicPeriodController::class, 'update']);
+        Route::put('/academic-periods/{academicPeriod}/activate', [AcademicPeriodController::class, 'activate']);
+        Route::put('/academic-periods/{academicPeriod}/complete', [AcademicPeriodController::class, 'complete']);
+        Route::delete('/academic-periods/{academicPeriod}', [AcademicPeriodController::class, 'destroy']);
         Route::get('/reports', [AdminSystemController::class, 'reports']);
     });
 

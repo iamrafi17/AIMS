@@ -144,7 +144,7 @@ class CoordinatorRequirementController extends Controller
     private function syncStudents(int $programId): void
     {
         InternshipRequirement::ensureForStudents(
-            Student::where('program_id', $programId)->pluck('id')
+            Student::forProgram($programId)->pluck('id')
         );
     }
 

@@ -28,15 +28,29 @@ class Program extends Model
         return $this->belongsTo(College::class);
     }
 
-    public function students()
+    public function enrollments()
     {
-        return $this->hasMany(Student::class);
+        return $this->hasManyThrough(
+            OjtEnrollment::class,
+            AcademicSection::class,
+            'program_id',
+            'academic_section_id',
+            'id',
+            'id',
+        );
     }
 
     public function htes()
     {
         return $this->belongsToMany(HTE::class, 'hte_programs', 'program_id', 'hte_id')
-            ->withPivot(['college_id', 'linked_by', 'is_active'])
+            ->withPivot(['linked_by', 'is_active'])
+            ->withTimestamps();
+    }
+
+    public function hteDepartments()
+    {
+        return $this->belongsToMany(HteDepartment::class, 'hte_department_programs', 'program_id', 'hte_department_id')
+            ->withPivot(['linked_by', 'is_active'])
             ->withTimestamps();
     }
 

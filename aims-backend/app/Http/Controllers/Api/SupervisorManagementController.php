@@ -72,16 +72,16 @@ class SupervisorManagementController extends Controller
     {
         $studentIds = $this->students($request)->pluck('id');
         $query = Attendance::with(['student.user', 'student.program', 'student.hte'])
-            ->whereIn('student_id', $studentIds)->latest('date');
+            ->forStudents($studentIds)->latest('date');
 
         if ($request->filled('student_id')) {
-            $query->where('student_id', $request->input('student_id'));
+            $query->forStudent((int) $request->input('student_id'));
         }
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
         }
         if ($request->filled('review_status')) {
-            $query->where('supervisor_review_status', $request->input('review_status'));
+            $query->forSupervisorReviewStatus($request->input('review_status'));
         }
         if ($request->filled('date_from')) {
             $query->whereDate('date', '>=', $request->input('date_from'));
@@ -153,13 +153,13 @@ class SupervisorManagementController extends Controller
     private function students(Request $request)
     {
         return Student::with(['user', 'program', 'hte', 'attendance', 'tasks' => fn ($query) => $query->where('supervisor_id', $request->user()->id), 'evaluations' => fn ($query) => $query->where('supervisor_id', $request->user()->id)])
-            ->where('supervisor_id', $request->user()->id)
+            ->forSupervisorUser($request->user()->id)
             ->orderBy('last_name');
     }
 
     private function assignedStudent(Request $request, int $studentId): Student
     {
-        return Student::where('id', $studentId)->where('supervisor_id', $request->user()->id)->firstOrFail();
+        return Student::where('id', $studentId)->forSupervisorUser($request->user()->id)->firstOrFail();
     }
 
     private function studentPayload(Student $student): array

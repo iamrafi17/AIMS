@@ -21,7 +21,7 @@ const emptyReport = {
   attendance: { present: 0, late: 0, absent: 0, holiday: 0, total: 0, rate: 0, verified: 0, total_hours: 0, trend: [] },
   requirements: { total: 0, submitted: 0, approved: 0, pending: 0, rejected: 0, missing: 0, completion_rate: 0 },
   travel: { active: 0, total_this_month: 0, completed_this_month: 0, cancelled_this_month: 0, completion_rate: 0 },
-  pending_reviews: { registrations: 0, requirements: 0, attendance: 0, journals: 0, total: 0 },
+  pending_reviews: { requirements: 0, attendance: 0, journals: 0, total: 0 },
   analytics: { average_progress: 0, internship_status: [], program_performance: [], section_performance: [] },
 };
 
@@ -46,7 +46,7 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 print:border-slate-200 print:shadow-none">
+    <div className="portal-metric-card rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 print:border-slate-200 print:shadow-none">
       <div className="flex items-start justify-between gap-3">
         <div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p><p className="mt-2 text-3xl font-black text-[#690016] dark:text-white print:text-black">{value}</p><p className="mt-1 text-xs text-slate-400">{note}</p></div>
         <div className={`grid h-11 w-11 place-items-center rounded-2xl text-xl print:hidden ${tones[tone]}`}><Icon /></div>
@@ -55,9 +55,9 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   );
 }
 
-function Panel({ title, subtitle, icon: Icon, action, children, className = '' }) {
+function Panel({ title, subtitle, icon: Icon, action, children, className = '', ...sectionProps }) {
   return (
-    <section className={`rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-6 print:break-inside-avoid print:rounded-none print:border-0 print:p-0 print:shadow-none ${className}`}>
+    <section {...sectionProps} className={`rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-6 print:break-inside-avoid print:rounded-none print:border-0 print:p-0 print:shadow-none ${className}`}>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3 print:mb-3">
         <div className="flex items-start gap-3">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#7D001D]/10 text-lg text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300 print:hidden"><Icon /></div>
@@ -89,6 +89,7 @@ function Ring({ value, label, color = '#7D001D' }) {
 function ProgramHeadReports() {
   const [report, setReport] = useState(emptyReport);
   const [activeTab, setActiveTab] = useState('program_summary');
+  const [mobileView, setMobileView] = useState('compliance');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [reviewingDeployment, setReviewingDeployment] = useState(null);
@@ -176,7 +177,7 @@ function ProgramHeadReports() {
   const statusTotal = analytics.internship_status?.reduce((sum, item) => sum + Number(item.value || 0), 0) || 0;
 
   return (
-    <div className="space-y-6 print:space-y-4">
+    <div className="program-head-reports portal-card-tables space-y-6 print:space-y-4">
       <div className="hidden border-b-2 border-[#7D001D] pb-4 print:block">
         <div className="flex items-end justify-between gap-4">
           <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7D001D]">Marinduque State University · AIMS</p><h1 className="mt-1 text-2xl font-black text-black">{tabs.find((tab) => tab.id === activeTab)?.label}</h1><p className="mt-1 text-xs text-slate-500">Program Head summary and review report</p></div>
@@ -198,21 +199,23 @@ function ProgramHeadReports() {
       </header>
 
       <div className="rounded-2xl border border-slate-100 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-800 print:hidden">
-        <nav className="flex flex-1 gap-1 overflow-x-auto" aria-label="Program Head analytics reports">
-          {tabs.map((tab) => <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition ${activeTab === tab.id ? 'bg-[#7D001D] text-white shadow-md shadow-[#7D001D]/15' : 'text-slate-500 hover:bg-slate-50 hover:text-[#7D001D] dark:text-gray-300 dark:hover:bg-gray-700'}`}><tab.icon className="text-base" /> {tab.label}</button>)}
+        <nav className="portal-mobile-tabs flex flex-1 gap-1 overflow-x-auto" aria-label="Program Head analytics reports">
+          {tabs.map((tab) => <button key={tab.id} type="button" onClick={() => { setActiveTab(tab.id); setMobileView('compliance'); }} className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition ${activeTab === tab.id ? 'bg-[#7D001D] text-white shadow-md shadow-[#7D001D]/15' : 'text-slate-500 hover:bg-slate-50 hover:text-[#7D001D] dark:text-gray-300 dark:hover:bg-gray-700'}`}><tab.icon className="text-base" /> {tab.label}</button>)}
         </nav>
       </div>
 
+      {activeTab === 'program_summary' && <section className="touch-layout-only rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900 lg:hidden print:hidden"><label className="block"><span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-500">Report section</span><select value={mobileView} onChange={(event) => setMobileView(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold dark:border-slate-700 dark:bg-slate-950"><option value="compliance">Compliance overview</option><option value="decisions">Documents and review queues</option><option value="compliance_detail">Compliance details</option><option value="performance">Performance overview</option><option value="performance_detail">Performance details</option></select></label></section>}
+
       {activeTab === 'program_summary' && (
-        <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div data-touch-active={['compliance', 'decisions', 'compliance_detail'].includes(mobileView)} className="space-y-6">
+          <div data-touch-active={mobileView === 'compliance'} className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Compliance score" value={`${complianceScore}%`} note="Average of core indicators" icon={FiShield} tone="green" />
             <MetricCard label="Attendance rate" value={`${attendance.rate || 0}%`} note={`${attendance.total || 0} monthly records`} icon={FiClock} tone="blue" />
             <MetricCard label="Requirements approved" value={`${requirements.completion_rate || 0}%`} note={`${requirements.pending || 0} pending decisions`} icon={FiFileText} />
             <MetricCard label="Pending reviews" value={reviews.total || 0} note="Across all review queues" icon={FiAlertTriangle} tone="amber" />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
+          <div data-touch-active={mobileView === 'compliance'} className="grid gap-6 xl:grid-cols-[380px_1fr]">
             <Panel title="Overall Compliance" subtitle="Combined attendance, requirement, and travel compliance" icon={FiPieChart}>
               <div className="flex justify-center"><Ring value={complianceScore} label="compliant" color={complianceScore >= 90 ? '#059669' : '#d97706'} /></div>
               <div className={`mt-6 rounded-2xl p-4 ${complianceScore >= 90 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-amber-50 dark:bg-amber-950/30'}`}>
@@ -227,7 +230,7 @@ function ProgramHeadReports() {
             </Panel>
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div data-touch-active={mobileView === 'decisions'} className="grid gap-6 xl:grid-cols-2">
             <Panel title="Document Compliance" subtitle="Internship requirement submission and decision status" icon={FiFileText}>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[['Approved', requirements.approved, 'text-emerald-600', 'bg-emerald-50 dark:bg-emerald-950/30'], ['Pending', requirements.pending, 'text-amber-600', 'bg-amber-50 dark:bg-amber-950/30'], ['Rejected', requirements.rejected, 'text-rose-600', 'bg-rose-50 dark:bg-rose-950/30'], ['Missing', requirements.missing, 'text-slate-600 dark:text-gray-300', 'bg-slate-50 dark:bg-gray-900']].map(([label, value, color, background]) => <div key={label} className={`rounded-2xl p-4 text-center ${background}`}><p className={`text-2xl font-black ${color}`}>{value || 0}</p><p className="mt-1 text-[9px] font-black uppercase text-slate-400">{label}</p></div>)}
@@ -237,12 +240,12 @@ function ProgramHeadReports() {
 
             <Panel title="Review Queue Compliance" subtitle="Outstanding academic decisions by review category" icon={FiAlertTriangle}>
               <div className="space-y-4">
-                {[['Registrations', reviews.registrations, 'bg-violet-500'], ['Requirements', reviews.requirements, 'bg-blue-500'], ['Attendance', reviews.attendance, 'bg-amber-500'], ['Journals', reviews.journals, 'bg-rose-500']].map(([label, value, color]) => <div key={label} className="flex items-center gap-3"><div className={`h-2.5 w-2.5 rounded-full ${color}`} /><span className="flex-1 text-xs font-bold text-slate-600 dark:text-gray-300">{label}</span><span className={`grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-black ${value ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'}`}>{value || 0}</span></div>)}
+                {[['Requirements', reviews.requirements, 'bg-blue-500'], ['Attendance', reviews.attendance, 'bg-amber-500'], ['Journals', reviews.journals, 'bg-rose-500']].map(([label, value, color]) => <div key={label} className="flex items-center gap-3"><div className={`h-2.5 w-2.5 rounded-full ${color}`} /><span className="flex-1 text-xs font-bold text-slate-600 dark:text-gray-300">{label}</span><span className={`grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-black ${value ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'}`}>{value || 0}</span></div>)}
               </div>
             </Panel>
           </div>
 
-          <Panel title="Compliance Gap Analysis" subtitle="Detailed indicator results for audit and follow-up" icon={FiShield}>
+          <Panel data-touch-active={mobileView === 'compliance_detail'} title="Compliance Gap Analysis" subtitle="Detailed indicator results for audit and follow-up" icon={FiShield}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[700px] text-left">
                 <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Category</th><th className="pb-3 font-black">Metric</th><th className="pb-3 font-black">Current</th><th className="pb-3 font-black">Target</th><th className="pb-3 font-black">Standing</th></tr></thead>
@@ -254,15 +257,15 @@ function ProgramHeadReports() {
       )}
 
       {activeTab === 'program_summary' && (
-        <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div data-touch-active={mobileView === 'performance' || mobileView === 'performance_detail'} className="space-y-6">
+          <div data-touch-active={mobileView === 'performance'} className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Total interns" value={overview.total_students || 0} note={`${overview.deployed || 0} deployed to HTEs`} icon={FiUsers} />
             <MetricCard label="Active interns" value={overview.active || 0} note={`${deploymentRate}% deployment coverage`} icon={FiActivity} tone="green" />
             <MetricCard label="Average OJT progress" value={`${overview.average_progress || 0}%`} note="Across active interns" icon={FiTrendingUp} tone="blue" />
             <MetricCard label="Completed internships" value={overview.completed || 0} note={`${overview.pending || 0} pending deployment`} icon={FiCheckCircle} tone="violet" />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[370px_1fr]">
+          <div data-touch-active={mobileView === 'performance'} className="grid gap-6 xl:grid-cols-[370px_1fr]">
             <Panel title="Internship Status Distribution" subtitle="Students grouped by current internship stage" icon={FiPieChart}>
               <div className="flex justify-center"><Ring value={statusTotal ? ((overview.active || 0) / statusTotal) * 100 : 0} label="active interns" color="#059669" /></div>
               <div className="mt-6 space-y-3">{(analytics.internship_status || []).map((item) => <div key={item.label} className="flex items-center gap-3"><span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} /><span className="flex-1 text-xs font-bold text-slate-500">{item.label}</span><span className="text-xs font-black text-slate-700 dark:text-gray-200">{item.value}</span></div>)}</div>
@@ -273,7 +276,7 @@ function ProgramHeadReports() {
             </Panel>
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div data-touch-active={mobileView === 'performance_detail'} className="grid gap-6 xl:grid-cols-2">
             <Panel title="Seven-Day Attendance Performance" subtitle="Daily attendance rate across internship programs" icon={FiActivity}>
               {attendance.trend?.length ? <div className="flex h-56 items-end justify-between gap-3 border-b border-slate-200 px-2 pb-1 dark:border-gray-700">{attendance.trend.map((day) => <div key={day.date} className="flex h-full flex-1 flex-col items-center justify-end gap-2"><span className="text-[9px] font-black text-slate-400">{day.rate}%</span><div className={`w-full max-w-12 rounded-t-xl ${day.rate >= 90 ? 'bg-gradient-to-t from-emerald-700 to-emerald-400' : day.rate > 0 ? 'bg-gradient-to-t from-[#7D001D] to-[#b82929]' : 'bg-slate-200 dark:bg-gray-700'}`} style={{ height: `${Math.max(day.rate, 4)}%` }} /><span className="text-[9px] font-black text-slate-500">{day.label}</span></div>)}</div> : <div className="py-16 text-center text-sm font-bold text-slate-400">No recent attendance trend is available.</div>}
             </Panel>
@@ -285,7 +288,7 @@ function ProgramHeadReports() {
             </Panel>
           </div>
 
-          <Panel title="Section Performance Detail" subtitle={`${filteredPrograms.length} academic sections shown`} icon={FiUsers}>
+          <Panel data-touch-active={mobileView === 'performance_detail'} title="Section Performance Detail" subtitle={`${filteredPrograms.length} academic sections shown`} icon={FiUsers}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-left">
                 <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700 print:border-slate-300"><th className="pb-3 font-black">Section</th><th className="pb-3 font-black">Students</th><th className="pb-3 font-black">Active Interns</th><th className="pb-3 font-black">OJT Progress</th><th className="pb-3 font-black">Attendance Rate</th><th className="pb-3 font-black">Performance Standing</th></tr></thead>

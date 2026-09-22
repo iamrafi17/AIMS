@@ -73,7 +73,6 @@ const emptyDashboard = {
     evaluations: 0,
     attendance: 0,
     requirements: 0,
-    registrations: 0,
     travel_checkpoints: 0,
     moas: 0,
     total: 0,
@@ -90,7 +89,7 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   };
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <article className="portal-metric-card rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
@@ -107,7 +106,7 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
 
 function Panel({ title, subtitle, icon: Icon, action, children, className = '' }) {
   return (
-    <section className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 ${className}`}>
+    <section className={`portal-content-panel rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-5 ${className}`}>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#7D001D]/10 text-lg text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300">
@@ -269,14 +268,6 @@ function UniversityInternshipDashboard({
       path: routes.approvals,
     },
     {
-      label: 'Registrations',
-      count: approvals.registrations,
-      note: 'Student registrations awaiting approval',
-      icon: FiUsers,
-      tone: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-      path: routes.approvals,
-    },
-    {
       label: 'Travel checkpoints',
       count: approvals.travel_checkpoints,
       note: 'Location and photo records awaiting review',
@@ -307,7 +298,7 @@ function UniversityInternshipDashboard({
   return (
     <div className="space-y-6">
       <header className="border-b border-slate-200 pb-5 dark:border-slate-700">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="portal-page-heading flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="mb-1.5 inline-flex items-center gap-2 text-xs font-bold uppercase text-[#7D001D] dark:text-rose-300">
               <FiShield /> {audienceLabel}
@@ -344,7 +335,7 @@ function UniversityInternshipDashboard({
             </p>
           )}
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+         <div className="portal-metric-grid grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-5">
           <MetricCard label="Total interns" value={overview.total_students} note="Registered university interns" icon={FiUsers} />
           <MetricCard label="Active interns" value={overview.active} note="Currently completing OJT" icon={FiUserCheck} tone="green" />
           <MetricCard label="Completed" value={overview.completed} note="Internships successfully finished" icon={FiCheckCircle} tone="blue" />

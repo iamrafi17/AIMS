@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   AcademicCapIcon,
   BuildingLibraryIcon,
   PencilSquareIcon,
   PlusIcon,
-  PowerIcon,
   RectangleGroupIcon,
   TrashIcon,
   UsersIcon,
@@ -15,17 +15,21 @@ import api from '../../services/api';
 import { LoadingPanel, MetricCard, PageIntro } from '../../components/common/PortalUI';
 
 const baseForms = {
-  college: { name: '', code: '', required_ojt_hours: 486, is_active: true },
-  program: { college_id: '', name: '', code: '', is_active: true },
-  section: { program_id: '', name: '', year_level: 4, academic_year: '2026-2027', is_active: true },
+  college: { name: '', code: '', required_ojt_hours: 486 },
+  program: { college_id: '', name: '', code: '' },
+  section: { program_id: '', name: '', year_level: '', academic_period_id: '' },
 };
 
-function AcademicModal({ type, item, colleges, programs, onClose, onSaved }) {
+function AcademicModal({ type, item, colleges, programs, academicPeriods, onClose, onSaved }) {
   const [form, setForm] = useState(() => item ? {
     ...item,
     college_id: item.college_id || '',
     program_id: item.program_id || '',
-  } : { ...baseForms[type] });
+    academic_period_id: item.academic_period_id || '',
+  } : {
+    ...baseForms[type],
+    ...(type === 'section' ? { academic_period_id: academicPeriods.find((period) => period.status === 'active')?.id || '' } : {}),
+  });
   const [saving, setSaving] = useState(false);
   const title = `${item ? 'Edit' : 'Add'} ${type}`;
 
@@ -80,37 +84,42 @@ function AcademicModal({ type, item, colleges, programs, onClose, onSaved }) {
           )}
           {type === 'section' && (
             <div className="grid gap-4 sm:grid-cols-2">
-              <label><span className="mb-2 block text-sm font-bold">Year level</span><select value={form.year_level} onChange={(event) => setForm({ ...form, year_level: Number(event.target.value) })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700"><option value="4">4th year</option><option value="5">5th year</option></select></label>
-              <label><span className="mb-2 block text-sm font-bold">Academic year</span><input required pattern="\d{4}-\d{4}" value={form.academic_year} onChange={(event) => setForm({ ...form, academic_year: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" /></label>
+              <label><span className="mb-2 block text-sm font-bold">Year level</span><input type="number" required min="1" max="6" step="1" value={form.year_level} onChange={(event) => setForm({ ...form, year_level: event.target.value })} placeholder="Enter year level" className="w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" /></label>
+              <label>
+                <span className="mb-2 block text-sm font-bold">Academic year / semester</span>
+                <select required value={form.academic_period_id} onChange={(event) => setForm({ ...form, academic_period_id: event.target.value })} disabled={academicPeriods.length === 0} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-950">
+                  <option value="">Select academic period</option>
+                  {academicPeriods.map((period) => <option key={period.id} value={period.id}>{period.academic_year.replace('-', '–')} · {period.semester}{period.status === 'active' ? ' (Active)' : period.status === 'completed' ? ' (Completed)' : ' (Draft)'}</option>)}
+                </select>
+                <span className="mt-1 block text-xs text-slate-500">{academicPeriods.length === 0 ? <>Create an academic period in <Link to="/admin/system" className="font-bold text-[#7D001D] underline dark:text-rose-300">System Settings</Link> first.</> : 'Choose from the Academic Periods in System Settings.'}</span>
+              </label>
             </div>
           )}
-          <label className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800"><input type="checkbox" checked={Boolean(form.is_active)} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} className="h-5 w-5 accent-[#7D001D]" /><span className="font-bold">Active and available for enrollment</span></label>
         </div>
         <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-5 dark:border-slate-700">
           <button type="button" onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold dark:border-slate-700">Cancel</button>
-          <button disabled={saving} className="rounded-2xl bg-[#7D001D] px-6 py-3 font-bold text-white disabled:opacity-60">{saving ? 'Saving...' : 'Save record'}</button>
+          <button disabled={saving || (type === 'section' && !form.academic_period_id)} className="rounded-2xl bg-[#7D001D] px-6 py-3 font-bold text-white disabled:opacity-60">{saving ? 'Saving...' : 'Save record'}</button>
         </div>
       </form>
     </div>
   );
 }
 
-function AcademicActionModal({ type, item, action, onClose, onCompleted }) {
+function AcademicActionModal({ type, item, onClose, onCompleted }) {
   const [busy, setBusy] = useState(false);
   const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
-  const deleting = action === 'delete';
 
   const confirmAction = async () => {
     setBusy(true);
 
     try {
       const plural = type === 'college' ? 'colleges' : type === 'program' ? 'programs' : 'sections';
-      const endpoint = `/admin/academic/${plural}/${item.id}${deleting ? '/permanent' : ''}`;
+      const endpoint = `/admin/academic/${plural}/${item.id}`;
       const response = await api.delete(endpoint);
       toast.success(response.data.message);
       onCompleted();
     } catch (error) {
-      toast.error(error.response?.data?.message || `Unable to ${deleting ? 'delete' : 'deactivate'} this ${type}.`);
+      toast.error(error.response?.data?.message || `Unable to delete this ${type}.`);
     } finally {
       setBusy(false);
     }
@@ -129,18 +138,16 @@ function AcademicActionModal({ type, item, action, onClose, onCompleted }) {
         onMouseDown={(event) => event.stopPropagation()}
         className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900"
       >
-        <div className={`border-b p-6 ${deleting ? 'border-rose-100 bg-rose-50 dark:border-rose-950 dark:bg-rose-950/30' : 'border-amber-100 bg-amber-50 dark:border-amber-950 dark:bg-amber-950/30'}`}>
+        <div className="border-b border-rose-100 bg-rose-50 p-6 dark:border-rose-950 dark:bg-rose-950/30">
           <div className="flex items-start gap-4">
-            <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${deleting ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'}`}>
-              {deleting ? <TrashIcon className="h-6 w-6" /> : <PowerIcon className="h-6 w-6" />}
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300">
+              <TrashIcon className="h-6 w-6" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className={`text-xs font-black uppercase tracking-widest ${deleting ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300'}`}>{deleting ? 'Permanent delete confirmation' : 'Deactivate confirmation'}</p>
-              <h2 id="academic-action-title" className="mt-1 text-2xl font-black">{deleting ? 'Delete' : 'Deactivate'} {typeLabel}?</h2>
+              <p className="text-xs font-black uppercase tracking-widest text-rose-700 dark:text-rose-300">Delete confirmation</p>
+              <h2 id="academic-action-title" className="mt-1 text-2xl font-black">Delete {typeLabel}?</h2>
               <p id="academic-action-description" className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                {deleting
-                  ? `This permanently deletes the ${type}. This action cannot be undone and is blocked when connected records exist.`
-                  : `This removes the ${type} from active academic workflows while preserving connected and historical records.`}
+                This permanently deletes the {type}. This action cannot be undone and is blocked when connected records exist.
               </p>
             </div>
             <button
@@ -176,9 +183,9 @@ function AcademicActionModal({ type, item, action, onClose, onCompleted }) {
             type="button"
             onClick={confirmAction}
             disabled={busy}
-            className={`rounded-2xl px-5 py-3 font-black text-white transition disabled:cursor-not-allowed disabled:opacity-40 ${deleting ? 'bg-rose-700 hover:bg-rose-800' : 'bg-amber-600 hover:bg-amber-700'}`}
+            className="rounded-2xl bg-rose-700 px-5 py-3 font-black text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {busy ? `${deleting ? 'Deleting' : 'Deactivating'}...` : `${deleting ? 'Delete' : 'Deactivate'} ${typeLabel}`}
+            {busy ? 'Deleting...' : `Delete ${typeLabel}`}
           </button>
         </div>
       </section>
@@ -215,34 +222,64 @@ export default function AdminAcademic() {
       <PageIntro eyebrow="System administration" title="Academic Management" description="Maintain colleges, degree programs, sections, and academic-year structures used by enrollment and internship workflows." icon={AcademicCapIcon} actions={
         <button onClick={() => setModal({ type, item: null })} className="inline-flex items-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#690016]"><PlusIcon className="h-5 w-5" />Add {type}</button>
       } />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Active colleges" value={data?.overview.colleges} icon={BuildingLibraryIcon} />
-        <MetricCard label="Active programs" value={data?.overview.programs} icon={AcademicCapIcon} tone="gold" />
-        <MetricCard label="Active sections" value={data?.overview.sections} icon={RectangleGroupIcon} tone="blue" />
+      <div className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Colleges" value={data?.overview.colleges} icon={BuildingLibraryIcon} />
+        <MetricCard label="Programs" value={data?.overview.programs} icon={AcademicCapIcon} tone="gold" />
+        <MetricCard label="Sections" value={data?.overview.sections} icon={RectangleGroupIcon} tone="blue" />
         <MetricCard label="Student records" value={data?.overview.enrolled_students} icon={UsersIcon} tone="green" />
       </div>
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex gap-1 overflow-x-auto border-b border-slate-200 p-3 dark:border-slate-700">
-          {tabs.map(([name, Icon]) => <button key={name} onClick={() => setTab(name)} className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-black capitalize transition ${tab === name ? 'bg-[#7D001D] text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}><Icon className="h-5 w-5" />{name}</button>)}
+        <div className="portal-mobile-tabs portal-mobile-tabs--three grid grid-cols-3 gap-1 border-b border-slate-200 p-2 dark:border-slate-700 lg:flex lg:p-3">
+          {tabs.map(([name, Icon]) => <button key={name} onClick={() => setTab(name)} className={`inline-flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-xs font-black capitalize transition lg:flex-row lg:gap-2 lg:px-4 lg:py-2.5 lg:text-sm ${tab === name ? 'bg-[#7D001D] text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}><Icon className="h-4 w-4 lg:h-5 lg:w-5" />{name}</button>)}
         </div>
-        <div className="overflow-x-auto">
+
+        <div className="touch-layout-only divide-y divide-slate-100 dark:divide-slate-800 lg:hidden">
+          {records.map((item) => (
+            <article key={item.id} className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="break-words text-sm font-black text-slate-900 dark:text-white">{item.name}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    {type === 'college' ? `${Number(item.required_ojt_hours || 486)} required internship hours` : type === 'program' ? item.college?.name || 'Academic program' : item.program?.name || 'Official academic record'}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button onClick={() => setModal({ type, item })} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300" title={`Edit ${item.name}`} aria-label={`Edit ${item.name}`}><PencilSquareIcon className="h-5 w-5" /></button>
+                  <button onClick={() => setActionTarget({ type, item })} className="grid h-10 w-10 place-items-center rounded-xl border border-rose-200 text-rose-700 dark:border-rose-900 dark:text-rose-300" title={`Delete ${item.name}`} aria-label={`Delete ${item.name}`}><TrashIcon className="h-5 w-5" /></button>
+                </div>
+              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-xs dark:bg-slate-800/60">
+                <div className="min-w-0">
+                  <dt className="text-[10px] font-black uppercase tracking-wider text-slate-400">{type === 'section' ? 'Academic details' : 'Code / Parent'}</dt>
+                  <dd className="mt-1 break-words font-bold text-slate-700 dark:text-slate-200">{item.code || (item.program ? `${item.program.code} · Year ${item.year_level} · ${item.academic_year}${item.academic_period ? ` · ${item.academic_period.semester}` : ''}` : item.college?.code) || '—'}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[10px] font-black uppercase tracking-wider text-slate-400">Connected</dt>
+                  <dd className="mt-1 break-words font-bold text-slate-700 dark:text-slate-200">{type === 'college' ? `${item.programs_count} programs · ${item.students_count} students` : type === 'program' ? `${item.students_count} students` : item.program?.code || '—'}</dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+          {records.length === 0 && <p className="px-4 py-12 text-center text-sm text-slate-500">No {tab} have been configured.</p>}
+        </div>
+
+        <div className="desktop-layout-only hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[720px]">
-            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-800/70"><tr><th className="px-6 py-4">Record</th><th className="px-6 py-4">{type === 'section' ? 'Academic details' : 'Code / Parent'}</th><th className="px-6 py-4">Connected</th><th className="px-6 py-4">Status</th><th className="px-6 py-4 text-right">Actions</th></tr></thead>
+            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-800/70"><tr><th className="px-6 py-4">Record</th><th className="px-6 py-4">{type === 'section' ? 'Academic details' : 'Code / Parent'}</th><th className="px-6 py-4">Connected</th><th className="px-6 py-4 text-right">Actions</th></tr></thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {records.map((item) => <tr key={item.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                 <td className="px-6 py-4"><p className="font-black text-slate-900 dark:text-white">{item.name}</p><p className="mt-1 max-w-xs truncate text-xs text-slate-500">{type === 'college' ? `${Number(item.required_ojt_hours || 486)} required internship hours` : type === 'program' ? item.college?.name || 'Academic program' : item.program?.name || 'Official academic record'}</p></td>
-                <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.code || (item.program ? `${item.program.code} · Year ${item.year_level} · ${item.academic_year}` : item.college?.code)}</td>
+                <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.code || (item.program ? `${item.program.code} · Year ${item.year_level} · ${item.academic_year}${item.academic_period ? ` · ${item.academic_period.semester}` : ''}` : item.college?.code)}</td>
                 <td className="px-6 py-4 text-sm font-bold text-slate-700 dark:text-slate-200">{type === 'college' ? `${item.programs_count} programs · ${item.students_count} students` : type === 'program' ? `${item.students_count} students` : item.program?.code}</td>
-                <td className="px-6 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${item.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>{item.is_active ? 'Active' : 'Inactive'}</span></td>
-                <td className="px-6 py-4"><div className="flex justify-end gap-2"><button onClick={() => setModal({ type, item })} className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:text-[#7D001D] dark:border-slate-700 dark:text-slate-300"><PencilSquareIcon className="h-5 w-5" /></button>{item.is_active && <button onClick={() => setActionTarget({ type, item, action: 'deactivate' })} className="rounded-xl border border-slate-200 p-2 text-amber-600 dark:border-slate-700" title={`Deactivate ${item.name}`}><PowerIcon className="h-5 w-5" /></button>}<button onClick={() => setActionTarget({ type, item, action: 'delete' })} className="rounded-xl border border-rose-200 p-2 text-rose-700 transition hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30" title={`Permanently delete ${item.name}`} aria-label={`Permanently delete ${item.name}`}><TrashIcon className="h-5 w-5" /></button></div></td>
+                <td className="px-6 py-4"><div className="flex justify-end gap-2"><button onClick={() => setModal({ type, item })} className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:text-[#7D001D] dark:border-slate-700 dark:text-slate-300"><PencilSquareIcon className="h-5 w-5" /></button><button onClick={() => setActionTarget({ type, item })} className="rounded-xl border border-rose-200 p-2 text-rose-700 transition hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30" title={`Delete ${item.name}`} aria-label={`Delete ${item.name}`}><TrashIcon className="h-5 w-5" /></button></div></td>
               </tr>)}
-              {records.length === 0 && <tr><td colSpan="5" className="px-6 py-14 text-center text-slate-500">No {tab} have been configured.</td></tr>}
+              {records.length === 0 && <tr><td colSpan="4" className="px-6 py-14 text-center text-slate-500">No {tab} have been configured.</td></tr>}
             </tbody>
           </table>
         </div>
       </section>
-      {modal && <AcademicModal type={modal.type} item={modal.item} colleges={data?.colleges || []} programs={data?.programs || []} onClose={() => setModal(null)} onSaved={() => { setModal(null); load(); }} />}
-      {actionTarget && <AcademicActionModal type={actionTarget.type} item={actionTarget.item} action={actionTarget.action} onClose={() => setActionTarget(null)} onCompleted={() => { setActionTarget(null); load(); }} />}
+      {modal && <AcademicModal type={modal.type} item={modal.item} colleges={data?.colleges || []} programs={data?.programs || []} academicPeriods={data?.academic_periods || []} onClose={() => setModal(null)} onSaved={() => { setModal(null); load(); }} />}
+      {actionTarget && <AcademicActionModal type={actionTarget.type} item={actionTarget.item} onClose={() => setActionTarget(null)} onCompleted={() => { setActionTarget(null); load(); }} />}
     </div>
   );
 }

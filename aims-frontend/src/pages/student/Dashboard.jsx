@@ -7,11 +7,9 @@ import {
   FiCheckCircle,
   FiClock,
   FiClipboard,
-  FiFileText,
   FiGlobe,
   FiHome,
   FiMapPin,
-  FiSun,
   FiTrendingUp,
   FiX,
   FiXCircle,
@@ -24,7 +22,6 @@ import api from '../../services/api';
 const statusOptions = [
   { value: 'present', label: 'Present', icon: FiCheckCircle },
   { value: 'absent', label: 'Absent', icon: FiXCircle },
-  { value: 'holiday', label: 'Holiday / No Work', icon: FiSun },
 ];
 
 const workModeOptions = [
@@ -439,14 +436,14 @@ function StudentDashboard() {
   }
 
   const settingsLocked = clockState?.settings_locked || false;
-  const displaySlots = clockState?.slots?.length ? clockState.slots : previewSlots[sessionType];
+  const todayHoliday = clockState?.today_holiday;
+  const clockDisabled = Boolean(clockState?.clock_disabled);
+  const displaySlots = clockDisabled ? [] : clockState?.slots?.length ? clockState.slots : previewSlots[sessionType];
   const nextKey = clockState?.next_action?.key || (status === 'present' && !settingsLocked ? displaySlots[0]?.key : null);
   const complete = clockState?.completed || false;
   const primaryLabel = status === 'absent'
     ? 'Submit as Absent'
-    : status === 'holiday'
-      ? 'Submit as No Work'
-      : clockState?.next_action?.label || (complete ? 'All Time Slots Completed' : displaySlots[0]?.label || 'Time In');
+    : clockState?.next_action?.label || (complete ? 'All Time Slots Completed' : displaySlots[0]?.label || 'Time In');
 
   const formattedTime = currentTime.toLocaleTimeString('en-PH', {
     timeZone: clockState?.timezone || 'Asia/Manila',
@@ -462,7 +459,10 @@ function StudentDashboard() {
     day: 'numeric',
   });
   const dashboardStatus = dashboardData?.dashboard_status || {};
+  const requirementsProgress = dashboardData?.requirements_progress || {};
+  const requirementsPercent = Math.min(Math.max(Number(requirementsProgress.percent_complete) || 0, 0), 100);
   const progress = dashboardData?.ojt_progress || {};
+  const holidayForecast = dashboardData?.holiday_forecast || {};
   const weeklyHours = progress.weekly_hours || [];
   const weeklyScale = Math.max(...weeklyHours.map((item) => Number(item.hours) || 0), 8);
   const completedSlots = displaySlots.filter((slot) => slot.completed).length;
@@ -481,31 +481,42 @@ function StudentDashboard() {
         </div>
       </div>
 
-      <section className="quick-smart-clock relative isolate mx-auto flex min-h-[25rem] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-[#690016] px-5 py-4 text-white shadow-sm sm:px-6 sm:py-5 lg:min-h-[420px]">
+      <section className="quick-smart-clock relative isolate mx-auto flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#690016_0%,#820020_55%,#690016_100%)] px-4 py-4 text-white sm:px-5">
 
-        <header className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <header className="quick-smart-clock-header relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
-            <FiClock className="h-6 w-6 shrink-0" aria-hidden="true" />
-            <h2 className="text-lg font-black tracking-tight sm:text-xl">Quick Smart Clock</h2>
+            <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/10 ring-1 ring-inset ring-white/15">
+              <FiClock className="size-5" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#f4cf63]">Attendance</p>
+              <h2 className="text-lg font-bold text-white">Quick Smart Clock</h2>
+            </div>
           </div>
 
-          <div className="grid w-[118px] max-w-[118px] self-end gap-1.5 sm:self-auto">
-            <label className="flex h-[34px] min-h-0 w-[118px] max-w-[118px] items-center gap-1.5 overflow-hidden rounded-xl border border-white/35 bg-white/15 px-2.5 shadow-sm backdrop-blur">
-              <FiCheckCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <select value={status} onChange={(event) => setStatus(event.target.value)} disabled={settingsLocked} aria-label="Attendance status" className="h-full min-h-0 w-full min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-center text-xs font-black text-white outline-none">
+          <div className={`quick-smart-clock-controls grid w-full grid-cols-3 gap-1.5 p-1.5 md:w-32 md:grid-cols-1 ${status === 'present' ? '' : 'quick-smart-clock-controls--single'}`}>
+            <label className="flex h-8 min-h-0 min-w-0 items-center overflow-hidden rounded-lg border border-white/25 bg-white/10">
+              <span className="grid h-full w-8 shrink-0 place-items-center border-r border-white/20">
+                <FiCheckCircle className="size-3.5" aria-hidden="true" />
+              </span>
+              <select id="quick-clock-attendance-status" name="attendance_status" value={status} onChange={(event) => setStatus(event.target.value)} disabled={settingsLocked} aria-label="Attendance status" className="h-full min-h-0 w-full min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-center text-[11px] font-bold text-white outline-none">
                 {statusOptions.map((option) => <option key={option.value} value={option.value} className="bg-[#720b0b] text-white">{option.label}</option>)}
               </select>
             </label>
             {status === 'present' && <>
-              <label className="flex h-[34px] min-h-0 w-[118px] max-w-[118px] items-center gap-1.5 overflow-hidden rounded-xl border border-white/35 bg-white/15 px-2.5 shadow-sm backdrop-blur">
-                <FiBriefcase className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <select value={workMode} onChange={(event) => setWorkMode(event.target.value)} disabled={settingsLocked} aria-label="Work mode" className="h-full min-h-0 w-full min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-center text-xs font-black text-white outline-none">
+              <label className="flex h-8 min-h-0 min-w-0 items-center overflow-hidden rounded-lg border border-white/25 bg-white/10">
+                <span className="grid h-full w-8 shrink-0 place-items-center border-r border-white/20">
+                  <FiBriefcase className="size-3.5" aria-hidden="true" />
+                </span>
+                <select id="quick-clock-work-mode" name="work_mode" value={workMode} onChange={(event) => setWorkMode(event.target.value)} disabled={settingsLocked} aria-label="Work mode" className="h-full min-h-0 w-full min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-center text-[11px] font-bold text-white outline-none">
                   {workModeOptions.map((option) => <option key={option.value} value={option.value} className="bg-[#720b0b] text-white">{option.label}</option>)}
                 </select>
               </label>
-              <label className="flex h-[34px] min-h-0 w-[118px] max-w-[118px] items-center gap-1.5 overflow-hidden rounded-xl border border-white/35 bg-white/15 px-2.5 shadow-sm backdrop-blur">
-                <FiClock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <select value={sessionType} onChange={(event) => setSessionType(event.target.value)} disabled={settingsLocked} aria-label="Session type" className="h-full min-h-0 w-full min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-center text-xs font-black text-white outline-none">
+              <label className="flex h-8 min-h-0 min-w-0 items-center overflow-hidden rounded-lg border border-white/25 bg-white/10">
+                <span className="grid h-full w-8 shrink-0 place-items-center border-r border-white/20">
+                  <FiClock className="size-3.5" aria-hidden="true" />
+                </span>
+                <select id="quick-clock-session-type" name="session_type" value={sessionType} onChange={(event) => setSessionType(event.target.value)} disabled={settingsLocked} aria-label="Session type" className="h-full min-h-0 w-full min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-center text-[11px] font-bold text-white outline-none">
                   {sessionOptions.map((option) => <option key={option.value} value={option.value} className="bg-[#720b0b] text-white">{option.label}</option>)}
                 </select>
               </label>
@@ -513,11 +524,11 @@ function StudentDashboard() {
           </div>
         </header>
 
-        <div className="relative mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center py-3 text-center">
-          <time className="font-mono text-4xl font-black leading-none tabular-nums sm:text-5xl">
+        <div className="quick-smart-clock-face relative mx-auto flex w-full max-w-xl flex-col items-center py-6 text-center sm:py-7">
+          <time className="font-mono text-3xl font-black leading-none tabular-nums sm:text-4xl">
             {clockLoading ? '--:--:--' : formattedTime}
           </time>
-          <p className="mt-2 text-sm font-bold text-white/70 sm:text-base">{formattedDate}</p>
+          <p className="mt-2 text-sm font-bold text-white/85">{formattedDate}</p>
           <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-white/55">{clockState?.uses_server_time ? 'Server-synchronized time' : 'Device time · test mode'}</p>
 
           {liveTrackingActive && (
@@ -542,40 +553,59 @@ function StudentDashboard() {
           )}
 
           {status === 'present' && displaySlots.length > 0 && (
-            <ol className={'mt-5 grid w-full max-w-xs gap-2 ' + (displaySlots.length === 4 ? 'grid-cols-4' : 'grid-cols-2')} aria-label="Clock progress">
+            <ol className={'mt-4 grid w-full max-w-xs gap-2 ' + (displaySlots.length === 4 ? 'grid-cols-4' : 'grid-cols-2')} aria-label="Clock progress">
               {displaySlots.map((slot, index) => {
                 const isCurrent = !slot.completed && slot.key === nextKey && !complete;
                 const period = slot.period || (slot.key?.startsWith('am_') ? 'AM' : 'PM');
                 const action = slot.label?.includes('Out') ? 'Out' : 'In';
                 return <li key={slot.key} className="flex min-w-0 flex-col items-center">
-                  <span className={'grid h-10 w-10 place-items-center rounded-full border-2 text-sm font-black ' + (slot.completed ? 'border-[#f2cf70] bg-[#f2cf70] text-[#690016]' : isCurrent ? 'border-white bg-white/20 text-white' : 'border-white/20 bg-black/10 text-white/70')}>
+                  <span className={'grid size-9 place-items-center rounded-full border-2 text-xs font-bold ' + (slot.completed ? 'border-[#f2cf70] bg-[#f2cf70] text-[#690016]' : isCurrent ? 'border-white bg-white/15 text-white' : 'border-white/20 bg-black/10 text-white/70')}>
                     {slot.completed ? <FiCheck aria-label="Completed" /> : slot.number || index + 1}
                   </span>
-                  <span className="mt-1.5 text-[11px] font-black text-white/75 sm:text-xs">{period} {action}</span>
+                  <span className="mt-1.5 text-[10px] font-bold text-white/75 sm:text-[11px]">{period} {action}</span>
+                  {slot.late_minutes > 0 && <span className="mt-1 text-[9px] font-black text-amber-200">{slot.late_minutes}m late</span>}
                 </li>;
               })}
             </ol>
           )}
 
-          {status !== 'present' && <div className="mt-6 rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-bold text-white/80">{status === 'absent' ? 'Record today as absent' : 'Record today as holiday / no work'}</div>}
+          {status !== 'present' && !clockDisabled && <div className="mt-4 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-bold text-white/80">Record today as absent</div>}
 
-          {complete ? (
+          {clockDisabled ? (
+            <div className="mt-6 w-full max-w-lg rounded-2xl border border-violet-200/30 bg-white/15 px-5 py-4 text-left shadow-lg">
+              <p className="text-sm font-black text-amber-200">Official Holiday · Smart Clock unavailable</p>
+              <p className="mt-1 text-lg font-black">{todayHoliday?.name}</p>
+              <p className="mt-2 text-xs leading-5 text-white/75">No OJT attendance is required today. No hours, absence, or late record will be added.</p>
+              {todayHoliday?.official_reference && <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-white/55">{todayHoliday.official_reference}</p>}
+            </div>
+          ) : complete ? (
             <div className="mt-8 rounded-full border border-white/20 bg-white/15 px-7 py-4 text-sm font-black shadow-lg"><FiCheckCircle className="mr-2 inline h-5 w-5" />Today’s attendance is complete</div>
           ) : (
-            <button type="button" onClick={handlePrimaryAction} disabled={submitting || clockLoading} className="mt-5 inline-flex w-full max-w-52 items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-black text-[#7D001D] shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:bg-[#fff9e8] disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="button" onClick={handlePrimaryAction} disabled={submitting || clockLoading} className="quick-smart-clock-action mt-4 inline-flex w-full max-w-44 items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-[#7D001D] transition hover:bg-[#fff9e8] disabled:cursor-not-allowed disabled:opacity-60">
               {submitting ? <><span className="h-5 w-5 animate-spin rounded-full border-2 border-[#7D001D]/25 border-t-[#7D001D]" />Recording...</> : <><FiClock />{primaryLabel}</>}
             </button>
           )}
         </div>
 
-        <footer className="relative">
+        <footer className="quick-smart-clock-footer relative">
           <div className="h-1 overflow-hidden rounded-full bg-white/15" aria-hidden="true"><div className="h-full rounded-full bg-[#d4af37] transition-[width] duration-300" style={{ width: clockProgress + '%' }} /></div>
-          <div className="mt-3 flex items-center justify-between gap-4 text-sm font-bold text-white/65">
-            <span>{completedSlots}/{displaySlots.length} completed</span>
+          <div className="mt-2.5 flex items-center justify-between gap-4 text-xs font-bold text-white/70">
+            <span>{clockDisabled ? 'Official holiday · no attendance required' : `${completedSlots}/${displaySlots.length} completed`}</span>
             <Link to="/student/attendance" className="inline-flex items-center gap-1.5 text-sm font-black text-white/75 transition hover:text-white">See full log <span aria-hidden="true">↗</span></Link>
           </div>
           <button type="button" onClick={fetchQuickClock} disabled={clockLoading} className="sr-only">Resync clock</button>
         </footer>
+      </section>
+      <section className="rounded-3xl border border-violet-100 bg-[linear-gradient(135deg,#faf7ff,#fff)] p-5 shadow-sm dark:border-violet-900 dark:bg-none dark:bg-gray-800">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-100 text-xl text-violet-700"><FiCalendar /></span>
+            <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-600">Holiday Forecast</p><h2 className="mt-1 text-lg font-black text-slate-800 dark:text-white">{holidayForecast.next?.name || 'No upcoming official holiday'}</h2>{holidayForecast.next && <p className="mt-1 text-xs text-slate-500">{new Date(`${holidayForecast.next.date}T00:00:00`).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {holidayForecast.next.days_until === 0 ? 'Today' : `${holidayForecast.next.days_until} days remaining`}</p>}</div>
+          </div>
+          {holidayForecast.next && <span className="rounded-full bg-violet-100 px-3 py-1.5 text-[10px] font-black uppercase text-violet-700">{holidayForecast.next.type_label}</span>}
+        </div>
+        {holidayForecast.next && <div className="mt-4 rounded-2xl border border-violet-100 bg-white/80 p-4 text-xs text-slate-600 dark:border-violet-900 dark:bg-gray-900 dark:text-slate-300"><p className="font-black text-violet-800 dark:text-violet-300">No OJT attendance required</p><p className="mt-1">{holidayForecast.next.affects_workday ? 'This holiday falls on your scheduled working day. Your remaining required hours and working days will not decrease.' : 'This holiday does not fall on your scheduled working day, so it has no attendance impact.'}</p></div>}
+        {!!holidayForecast.upcoming?.length && <Link to="/student/attendance" className="mt-4 inline-flex items-center gap-2 text-xs font-black text-[#7D001D] hover:underline"><FiCalendar /> View holidays in calendar</Link>}
       </section>
       <section>
         <div className="mb-4 flex items-end justify-between gap-4">
@@ -583,12 +613,6 @@ function StudentDashboard() {
           <p className="hidden text-xs font-semibold text-slate-400 sm:block">Synced with your AIMS records</p>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
-          <StatusCard
-            title="Consent"
-            status={dashboardStatus.consent}
-            icon={FiFileText}
-            description="Your consent form review and completion status."
-          />
           <StatusCard
             title="Schedule"
             status={dashboardStatus.schedule}
@@ -602,6 +626,20 @@ function StudentDashboard() {
             </div>
             <p className="mt-5 text-sm font-black text-slate-800">Attendance</p>
             <p className="mt-1 text-2xl font-black text-[#690016]">{dashboardStatus.attendance_days || 0} <span className="text-sm text-slate-400">days</span></p>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div className="flex items-start justify-between gap-4">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-violet-50 text-xl text-violet-600"><FiClipboard /></div>
+              <span className="rounded-full bg-violet-100 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-violet-700">{requirementsPercent.toFixed(1)}%</span>
+            </div>
+            <p className="mt-5 text-sm font-black text-slate-800">Requirements</p>
+            <div className="mt-2 flex items-center justify-between gap-3 text-xs font-bold">
+              <span className="text-slate-500">{requirementsProgress.approved || 0} of {requirementsProgress.total || 0} approved</span>
+              <Link to="/student/requirements" className="text-[#7D001D] hover:underline">View</Link>
+            </div>
+            <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-label="Requirements progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={requirementsPercent}>
+              <div className="h-full rounded-full bg-gradient-to-r from-violet-600 to-[#d4af37] transition-all duration-700" style={{ width: `${requirementsPercent}%` }} />
+            </div>
           </div>
         </div>
       </section>
@@ -621,7 +659,7 @@ function StudentDashboard() {
                   { value: formatMetric(progress.rendered_hours), label: 'hrs done', tone: 'text-emerald-600' },
                   { value: formatMetric(progress.hours_left), label: 'hrs left', tone: 'text-[#7D001D]' },
                   { value: progress.entries || 0, label: 'entries', tone: 'text-blue-600' },
-                  { value: progress.days_left ?? '—', label: 'days left', tone: 'text-[#a8750b]' },
+                  { value: progress.working_days_left ?? progress.days_left ?? '—', label: 'working days left', tone: 'text-[#a8750b]' },
                 ].map((metric) => (
                   <div key={metric.label} className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-gray-700 dark:bg-gray-900/80">
                     <p className={`text-2xl font-black ${metric.tone}`}>{metric.value}</p>
@@ -643,6 +681,7 @@ function StudentDashboard() {
               </div>
               <div className={`rounded-xl border px-4 py-3 text-sm font-bold ${progress.period_state === 'ended' ? 'border-amber-200 bg-amber-50 text-amber-800' : progress.period_state === 'active' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
                 {progress.period_message || 'OJT schedule dates are not configured yet.'}
+                {progress.projected_completion_date && <span className="mt-1 block text-xs font-semibold">Projected completion from remaining hours: {formatOjtDate(progress.projected_completion_date)}</span>}
               </div>
             </div>
           </div>

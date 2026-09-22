@@ -96,18 +96,18 @@ function StudentRequirements() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="student-requirements space-y-6">
       <div>
         <p className="text-xs font-black uppercase tracking-[0.18em] text-[#a8750b]">Program checklist</p>
         <h1 className="mt-1 text-2xl font-black text-[#690016] dark:text-white">Internship Requirements</h1>
         <p className="mt-1 text-sm text-slate-500">Upload the documents configured by your internship coordinator.</p>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="student-requirements-panel rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         {requirements.length > 0 ? (
-          <div className="space-y-4">
+          <div className="student-requirements-grid grid gap-3">
             {requirements.map((req) => (
-              <div key={req.id} className="rounded-xl border border-slate-200 p-4 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60">
+              <div key={req.id} className="student-requirement-card min-w-0 rounded-xl border border-slate-200 p-4 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60">
                 {(() => {
                   const displayStatus = req.file_path ? req.status : 'missing';
                   return <>
@@ -138,7 +138,7 @@ function StudentRequirements() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center gap-4">
+                <div className="student-requirement-actions mt-4 flex items-center gap-4">
                   {req.file_path ? (
                     <button type="button" onClick={() => handleDownload(req)} className="text-sm text-[#7D001D] hover:text-[#690016] font-medium">Download File</button>
                   ) : null}

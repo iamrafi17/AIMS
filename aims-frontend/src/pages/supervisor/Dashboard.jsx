@@ -71,7 +71,7 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   };
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <article className="portal-metric-card rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
@@ -256,7 +256,7 @@ function SupervisorDashboard() {
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8750b]">Supervisor Overview</p>
           <h2 className="mt-1 text-lg font-black text-[#690016] dark:text-white">Your internship supervision workload</h2>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard label="Assigned interns" value={overview.assigned} note="Students under your supervision" icon={FiUsers} />
           <MetricCard label="Active interns" value={overview.active} note="Currently completing OJT" icon={FiUserCheck} tone="green" />
           <MetricCard label="Pending evaluations" value={overview.pending_evaluations} note="Midterm or final actions" icon={FiClipboard} tone="amber" />

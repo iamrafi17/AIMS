@@ -271,7 +271,7 @@ export default function TravelMonitoring() {
   if (loading) return <LoadingPanel />;
 
   return (
-    <div className="space-y-6">
+    <div className="coordinator-travel space-y-6">
       <PageIntro
         eyebrow="Coordinator monitoring and reporting"
         title="Travel Monitoring Management"
@@ -287,7 +287,7 @@ export default function TravelMonitoring() {
           </button>
         }
       />
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Active"
           value={data.summary.active_sessions || 0}
@@ -313,7 +313,7 @@ export default function TravelMonitoring() {
         />
       </section>
       <nav
-        className="flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900"
+        className="portal-mobile-tabs flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900"
         aria-label="Travel workflow sections"
       >
         {tabs.map(([id, label]) => (

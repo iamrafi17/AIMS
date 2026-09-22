@@ -263,7 +263,7 @@ export default function TravelMonitoringManagement({
     );
 
   return (
-    <div className="space-y-6">
+    <div className="program-head-travel space-y-6">
       <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#690016] via-[#690d0d] to-[#8d1717] p-6 text-white shadow-lg sm:p-8">
         <div className="relative flex flex-wrap items-end justify-between gap-5">
           <div>
@@ -309,7 +309,7 @@ export default function TravelMonitoringManagement({
           icon={FiCheck}
         />
       </section>
-      <nav className="flex gap-1 overflow-x-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <nav className="portal-mobile-tabs flex gap-1 overflow-x-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-800">
         {availableTabs.map(([id, label]) => (
           <button
             key={id}

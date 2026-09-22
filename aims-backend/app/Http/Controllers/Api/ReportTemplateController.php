@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicPeriod;
 use App\Models\GeneratedReport;
 use App\Models\Program;
 use App\Models\ReportTemplate;
@@ -28,7 +29,7 @@ class ReportTemplateController extends Controller
         $user = $request->user();
         $reportTypes = ReportTemplateService::reportTypesForRole($user->role);
         $query = ReportTemplate::query()
-            ->with(['program:id,name,code', 'uploader:id,name'])
+            ->with(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name'])
             ->whereIn('report_type', [...array_keys($reportTypes), ReportTemplateService::SHARED_REPORT_TYPE]);
 
         if ($user->role === 'coordinator') {
@@ -78,9 +79,6 @@ class ReportTemplateController extends Controller
             ],
         ]);
         $reportType = ReportTemplateService::SHARED_REPORT_TYPE;
-        $templateAcademicYear = 'All Academic Years';
-        $templateSemester = 'All Semesters';
-
         $programId = in_array($request->user()->role, ['coordinator', 'program_head'], true)
             ? (int) $request->user()->program_id
             : ($validated['program_id'] ?? null);
@@ -91,7 +89,7 @@ class ReportTemplateController extends Controller
         $upload = $request->file('file');
         $checksum = hash_file('sha256', $upload->getRealPath());
         $duplicate = ReportTemplate::query()
-            ->forPeriod($programId, $reportType, $templateAcademicYear, $templateSemester)
+            ->forTemplateScope($programId, $reportType, ReportTemplate::SCOPE_ALL_PERIODS)
             ->where('checksum', $checksum)
             ->exists();
         if ($duplicate) {
@@ -125,12 +123,11 @@ class ReportTemplateController extends Controller
                 'file_size' => $upload->getSize(),
                 'checksum' => $checksum,
                 'version' => $validated['version'] ?? null,
-                'academic_year' => $templateAcademicYear,
-                'semester' => $templateSemester,
+                'period_scope' => ReportTemplate::SCOPE_ALL_PERIODS,
+                'academic_period_id' => null,
                 'description' => $validated['description'] ?? null,
                 'validation_status' => $inspection['is_valid'] ? 'valid' : 'invalid',
                 'validation_result' => $inspection,
-                'detected_placeholders' => $inspection['detected_placeholders'],
                 'is_active' => false,
                 'uploaded_by' => $request->user()->id,
                 'validated_at' => now(),
@@ -147,7 +144,7 @@ class ReportTemplateController extends Controller
                 : ($inspection['is_valid']
                     ? 'Template uploaded and validated successfully. Preview and activate it before use.'
                     : 'Template uploaded, but validation found issues that must be corrected before activation.'),
-            'template' => $this->resource($template->fresh(['program:id,name,code', 'uploader:id,name'])),
+            'template' => $this->resource($template->fresh(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name'])),
         ], 201);
     }
 
@@ -159,14 +156,13 @@ class ReportTemplateController extends Controller
         $reportTemplate->update([
             'validation_status' => $inspection['is_valid'] ? 'valid' : 'invalid',
             'validation_result' => $inspection,
-            'detected_placeholders' => $inspection['detected_placeholders'],
             'validated_at' => now(),
         ]);
 
         return response()->json([
             'message' => $inspection['is_valid'] ? 'Template validation passed.' : 'Template validation failed.',
             'validation' => $inspection,
-            'template' => $this->resource($reportTemplate->fresh(['program:id,name,code', 'uploader:id,name'])),
+            'template' => $this->resource($reportTemplate->fresh(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name'])),
         ], $inspection['is_valid'] ? 200 : 422);
     }
 
@@ -178,7 +174,7 @@ class ReportTemplateController extends Controller
         $bindingSet = $this->datasets->bindings($dataset, $reportTemplate->academic_year, $reportTemplate->semester);
 
         return response()->json([
-            'template' => $this->resource($reportTemplate->loadMissing(['program:id,name,code', 'uploader:id,name'])),
+            'template' => $this->resource($reportTemplate->loadMissing(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name'])),
             'html' => $this->templates->renderHtml(
                 Storage::disk('local')->path($reportTemplate->file_path),
                 $bindingSet['values'], $bindingSet['rows'], $bindingSet['headers'], $bindingSet['summary'],
@@ -202,7 +198,7 @@ class ReportTemplateController extends Controller
             'message' => $replaced
                 ? 'New template activated. The previous template has been marked as inactive.'
                 : ReportTemplateService::label($reportTemplate->report_type).' template is now active.',
-            'template' => $this->resource($reportTemplate->fresh(['program:id,name,code', 'uploader:id,name'])),
+            'template' => $this->resource($reportTemplate->fresh(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name'])),
         ]);
     }
 
@@ -211,7 +207,7 @@ class ReportTemplateController extends Controller
         $this->authorizeManage($request, $reportTemplate);
         $reportTemplate->update(['is_active' => false, 'active_key' => null, 'deactivated_at' => now()]);
 
-        return response()->json(['message' => 'Template deactivated successfully.', 'template' => $this->resource($reportTemplate->fresh(['program:id,name,code', 'uploader:id,name']))]);
+        return response()->json(['message' => 'Template deactivated successfully.', 'template' => $this->resource($reportTemplate->fresh(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name']))]);
     }
 
     public function download(Request $request, ReportTemplate $reportTemplate)
@@ -249,7 +245,7 @@ class ReportTemplateController extends Controller
         );
 
         return response()->json([
-            'template' => $this->resource($template->loadMissing(['program:id,name,code', 'uploader:id,name'])),
+            'template' => $this->resource($template->loadMissing(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name'])),
             'html' => $this->templates->renderHtml(
                 Storage::disk('local')->path($template->file_path),
                 $bindings['values'],
@@ -305,11 +301,24 @@ class ReportTemplateController extends Controller
         $programId = in_array($request->user()->role, ['coordinator', 'program_head'], true)
             ? (int) $request->user()->program_id
             : ($validated['program_id'] ?? null);
+        $periodId = $this->requestedAcademicPeriodId($validated);
 
         $template = ReportTemplate::query()
             ->where('is_active', true)
             ->where('validation_status', 'valid')
             ->whereIn('report_type', [ReportTemplateService::SHARED_REPORT_TYPE, $validated['report_type']])
+            ->where(function ($query) use ($periodId) {
+                $query->where(function ($global) {
+                    $global->where('period_scope', ReportTemplate::SCOPE_ALL_PERIODS)
+                        ->whereNull('academic_period_id');
+                });
+                if ($periodId) {
+                    $query->orWhere(function ($specific) use ($periodId) {
+                        $specific->where('period_scope', ReportTemplate::SCOPE_ACADEMIC_PERIOD)
+                            ->where('academic_period_id', $periodId);
+                    });
+                }
+            })
             ->where(function ($query) use ($programId) {
                 if ($programId) {
                     $query->where('program_id', $programId)->orWhereNull('program_id');
@@ -319,6 +328,7 @@ class ReportTemplateController extends Controller
             })
             ->orderByRaw('CASE WHEN program_id IS NULL THEN 1 ELSE 0 END')
             ->orderByRaw('CASE WHEN report_type = ? THEN 0 ELSE 1 END', [ReportTemplateService::SHARED_REPORT_TYPE])
+            ->orderByRaw("CASE WHEN period_scope = 'academic_period' THEN 0 ELSE 1 END")
             ->latest('activated_at')
             ->first();
 
@@ -389,6 +399,8 @@ class ReportTemplateController extends Controller
             'file_name' => $template->original_filename,
             'file_size' => $template->file_size,
             'version' => $template->version,
+            'period_scope' => $template->period_scope,
+            'academic_period_id' => $template->academic_period_id,
             'academic_year' => $template->academic_year,
             'semester' => $template->semester,
             'description' => $template->description,
@@ -410,12 +422,13 @@ class ReportTemplateController extends Controller
         return DB::transaction(function () use ($template) {
             $previousQuery = ReportTemplate::query()
                 ->where('program_id', $template->program_id)
-                ->where('report_type', $template->report_type);
-            if ($template->report_type !== ReportTemplateService::SHARED_REPORT_TYPE) {
-                $previousQuery
-                    ->where('academic_year', $template->academic_year)
-                    ->where('semester', $template->semester);
-            }
+                ->where('report_type', $template->report_type)
+                ->where('period_scope', $template->period_scope)
+                ->when(
+                    $template->period_scope === ReportTemplate::SCOPE_ACADEMIC_PERIOD,
+                    fn ($query) => $query->where('academic_period_id', $template->academic_period_id),
+                    fn ($query) => $query->whereNull('academic_period_id'),
+                );
             $previous = $previousQuery
                 ->where('is_active', true)
                 ->where('id', '!=', $template->id)
@@ -435,5 +448,17 @@ class ReportTemplateController extends Controller
 
             return $previous->count();
         });
+    }
+
+    private function requestedAcademicPeriodId(array $validated): ?int
+    {
+        if (empty($validated['academic_year']) || empty($validated['semester'])) {
+            return null;
+        }
+
+        return AcademicPeriod::query()
+            ->where('academic_year', AcademicPeriod::normalizeYear($validated['academic_year']))
+            ->where('semester', AcademicPeriod::normalizeSemester($validated['semester']))
+            ->value('id');
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicPeriod;
 use App\Models\ActivityLog;
 use App\Models\HTE;
 use App\Models\InternshipRequirement;
@@ -55,12 +56,8 @@ class AuthController extends Controller
             ]);
         }
 
-        if ($user->role === 'student' && $user->student?->registration_status !== 'approved') {
-            $message = $user->student?->registration_status === 'rejected'
-                ? 'Your registration was not approved. Please contact your internship coordinator.'
-                : 'Your registration is still awaiting coordinator approval.';
-
-            throw ValidationException::withMessages(['login' => [$message]]);
+        if ($user->role === 'student' && ! $user->student) {
+            throw ValidationException::withMessages(['login' => ['Student profile not found. Please contact your internship coordinator.']]);
         }
 
         $user->update(['last_login_at' => now()]);
@@ -68,40 +65,19 @@ class AuthController extends Controller
         $token = $user->createToken($request->device_name)->plainTextToken;
         ActivityLog::record($user, 'Authentication', 'Logged in.');
 
-        $student = $user->student;
+        $user->loadMissing([
+            'college',
+            'program',
+            'student.college',
+            'student.program',
+            'student.hte',
+            'supervisorProfile.department.hte',
+        ]);
+        $student = $user->isStudent() ? $user->student : null;
 
         return response()->json([
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'user_id' => $user->user_id,
-                'contact_number' => $user->contact_number,
-                'address' => $user->address,
-                'role' => $user->role,
-                'college' => $user->college,
-                'program' => $user->program,
-                'avatar' => $user->avatar,
-                'avatar_url' => $user->avatar_url,
-                'requires_password_change' => (bool) $user->requires_password_change,
-                'requires_security_setup' => $user->requiresStaffSecuritySetup(),
-                'requires_profile_setup' => (bool) $user->requires_profile_setup,
-                'profile_completed_at' => $user->profile_completed_at,
-                'onboarding_step' => $user->onboardingStep(),
-                'supervisor_assignment' => $this->supervisorAssignmentPayload($user),
-            ],
-            'student' => $student ? [
-                'id' => $student->id,
-                'student_id' => $student->student_id,
-                'first_name' => $student->first_name,
-                'last_name' => $student->last_name,
-                'college' => $student->college,
-                'program' => $student->program,
-                'year_level' => $student->year_level,
-                'section' => $student->section,
-                'hte' => $student->hte,
-                'internship_status' => $student->internship_status,
-            ] : null,
+            'user' => $this->userPayload($user),
+            'student' => $this->studentPayload($student),
             'token' => $token,
         ]);
     }
@@ -120,18 +96,15 @@ class AuthController extends Controller
             'email' => 'required|email|unique:users,email',
             'college_id' => 'nullable|exists:colleges,id',
             'program_id' => 'nullable|exists:programs,id',
-            'year_level' => 'required|integer|between:4,5',
             'section' => 'required|string|max:50',
             'parent_name' => 'required|string|max:255',
             'parent_relationship' => 'required|string|max:50',
             'parent_address' => 'required|string|max:1000',
             'parent_contact_number' => ['required', 'string', 'digits:11'],
             'hte_id' => 'nullable|exists:htes,id',
-            'internship_semester' => 'required|string|max:30',
-            'internship_year' => ['required', 'string', 'max:20', 'regex:/^\d{4}-\d{4}$/'],
             'agree_terms' => 'accepted',
             'agree_privacy' => 'accepted',
-            'password' => 'required|string|min:8|max:255|confirmed',
+            'password' => 'required|string|min:8|max:12|confirmed',
             'security_questions' => ['required', 'array', 'size:3'],
             'security_questions.*.security_question_id' => [
                 'required',
@@ -146,6 +119,7 @@ class AuthController extends Controller
 
         [$user, $student] = DB::transaction(function () use ($request, $validated) {
             $enrollment = OjtEnrollment::where('school_id', $request->student_id)
+                ->with(['academicSection.program.college', 'academicSection.academicPeriod'])
                 ->lockForUpdate()
                 ->first();
 
@@ -167,6 +141,9 @@ class AuthController extends Controller
                 ]);
             }
 
+            $yearLevel = $this->registrationYearLevel($enrollment);
+            $academicPeriod = $this->registrationAcademicPeriod($enrollment);
+
             if ($request->hte_id && ! HTE::whereKey($request->hte_id)
                 ->whereHas('programs', fn ($query) => $query
                     ->whereKey($enrollment->program_id)
@@ -180,13 +157,18 @@ class AuthController extends Controller
             [$firstName, $lastName] = $this->splitEnrollmentName($enrollment->full_name);
 
             $user = User::create([
-                'name' => $enrollment->full_name,
+                'name' => $this->studentFullName($firstName, $request->middle_name, $lastName),
                 'email' => $request->email,
+                'contact_number' => $request->contact_number,
+                'address' => $request->address,
                 'password' => Hash::make($request->password),
                 'role' => 'student',
             ]);
 
             $student = Student::create([
+                // The official enrollment list establishes eligibility; deployment is separate.
+                'registration_status' => 'approved',
+                'internship_status' => 'pending',
                 'user_id' => $user->id,
                 'student_id' => $request->student_id,
                 'first_name' => $firstName,
@@ -199,7 +181,7 @@ class AuthController extends Controller
                 'college_id' => $enrollment->college_id,
                 'program_id' => $enrollment->program_id,
                 'academic_section_id' => $enrollment->academic_section_id,
-                'year_level' => $enrollment->academicSection?->year_level ?? $request->year_level,
+                'year_level' => $yearLevel,
                 'section' => $enrollment->section,
                 'required_ojt_hours' => $enrollment->college?->required_ojt_hours ?? 486,
                 'parent_name' => $request->parent_name,
@@ -207,8 +189,9 @@ class AuthController extends Controller
                 'parent_address' => $request->parent_address,
                 'parent_contact_number' => $request->parent_contact_number,
                 'hte_id' => $request->hte_id,
-                'internship_semester' => $request->internship_semester,
-                'internship_year' => $request->internship_year,
+                'academic_period_id' => $academicPeriod->id,
+                'internship_semester' => $academicPeriod->legacySemester(),
+                'internship_year' => $academicPeriod->academic_year,
             ]);
 
             foreach ($validated['security_questions'] as $index => $securityQuestion) {
@@ -217,23 +200,25 @@ class AuthController extends Controller
                     'security_question_id' => $securityQuestion['security_question_id'],
                     'position' => $index + 1,
                     'answer_hash' => Hash::make(
-                        UserSecurityQuestion::normalizeAnswer($securityQuestion['answer']),
+                        UserSecurityQuestion::normalizeAnswer($securityQuestion['answer'], true),
                     ),
+                    'answer_case_sensitive' => true,
                 ]);
             }
 
             InternshipRequirement::ensureForStudent($student->id);
 
-            $enrollment->update([
+            DB::table('ojt_enrollments')->where('id', $enrollment->id)->update([
                 'student_record_id' => $student->id,
                 'registered_at' => now(),
+                'updated_at' => now(),
             ]);
 
             return [$user, $student];
         });
 
         return response()->json([
-            'message' => 'Registration successful. Please wait for approval.',
+            'message' => 'Registration successful. You can now log in.',
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
@@ -250,9 +235,8 @@ class AuthController extends Controller
     public function enrollment(string $schoolId)
     {
         $enrollment = OjtEnrollment::with([
-            'college:id,name,code,required_ojt_hours',
-            'program:id,college_id,name,code',
-            'academicSection:id,program_id,name,year_level,academic_year',
+            'academicSection.program.college:id,name,code,required_ojt_hours',
+            'academicSection.academicPeriod:id,academic_year,semester',
         ])
             ->where('school_id', trim($schoolId))
             ->first();
@@ -269,6 +253,9 @@ class AuthController extends Controller
             ], 409);
         }
 
+        $this->registrationYearLevel($enrollment);
+        $academicPeriod = $this->registrationAcademicPeriod($enrollment);
+
         [$firstName, $lastName] = $this->splitEnrollmentName($enrollment->full_name);
 
         return response()->json([
@@ -280,8 +267,37 @@ class AuthController extends Controller
             'academic_section' => $enrollment->academicSection,
             'college' => $enrollment->college,
             'program' => $enrollment->program,
+            'academic_period' => $academicPeriod->only(['id', 'academic_year', 'semester']),
+            'internship_semester' => $academicPeriod->legacySemester(),
+            'internship_year' => $academicPeriod->academic_year,
             'required_ojt_hours' => (float) ($enrollment->college?->required_ojt_hours ?? 486),
         ]);
+    }
+
+    private function registrationAcademicPeriod(OjtEnrollment $enrollment): AcademicPeriod
+    {
+        $period = $enrollment->academicPeriod ?? $enrollment->academicSection?->academicPeriod;
+
+        if (! $period) {
+            throw ValidationException::withMessages([
+                'student_id' => ['Your official OJT enrollment has no academic period assignment. Contact your coordinator.'],
+            ]);
+        }
+
+        return $period;
+    }
+
+    private function registrationYearLevel(OjtEnrollment $enrollment): int
+    {
+        $section = $enrollment->academicSection;
+
+        if (! $section || (int) $section->program_id !== (int) $enrollment->program_id || $section->year_level < 1) {
+            throw ValidationException::withMessages([
+                'student_id' => ['Your official OJT enrollment has no valid section and year level assignment. Contact your coordinator.'],
+            ]);
+        }
+
+        return $section->year_level;
     }
 
     private function splitEnrollmentName(string $fullName): array
@@ -314,52 +330,19 @@ class AuthController extends Controller
     public function user(Request $request)
     {
         $user = $request->user();
-        $user->loadMissing('supervisorProfile.department.hte');
-        $student = $user->student;
+        $user->loadMissing([
+            'college',
+            'program',
+            'student.college',
+            'student.program',
+            'student.hte',
+            'supervisorProfile.department.hte',
+        ]);
+        $student = $user->isStudent() ? $user->student : null;
 
         return response()->json([
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'user_id' => $user->user_id,
-                'contact_number' => $user->contact_number,
-                'address' => $user->address,
-                'role' => $user->role,
-                'college' => $user->college,
-                'program' => $user->program,
-                'avatar' => $user->avatar,
-                'avatar_url' => $user->avatar_url,
-                'is_active' => $user->is_active,
-                'last_login_at' => $user->last_login_at,
-                'requires_password_change' => (bool) $user->requires_password_change,
-                'requires_security_setup' => $user->requiresStaffSecuritySetup(),
-                'requires_profile_setup' => (bool) $user->requires_profile_setup,
-                'profile_completed_at' => $user->profile_completed_at,
-                'onboarding_step' => $user->onboardingStep(),
-                'supervisor_assignment' => $this->supervisorAssignmentPayload($user),
-            ],
-            'student' => $student ? [
-                'id' => $student->id,
-                'student_id' => $student->student_id,
-                'first_name' => $student->first_name,
-                'last_name' => $student->last_name,
-                'middle_name' => $student->middle_name,
-                'gender' => $student->gender,
-                'birth_date' => $student->birth_date,
-                'address' => $student->address,
-                'contact_number' => $student->contact_number,
-                'college' => $student->college,
-                'program' => $student->program,
-                'year_level' => $student->year_level,
-                'section' => $student->section,
-                'parent_name' => $student->parent_name,
-                'parent_address' => $student->parent_address,
-                'parent_contact_number' => $student->parent_contact_number,
-                'hte' => $student->hte,
-                'internship_status' => $student->internship_status,
-                'registration_status' => $student->registration_status,
-            ] : null,
+            'user' => $this->userPayload($user),
+            'student' => $this->studentPayload($student),
         ]);
     }
 
@@ -384,7 +367,7 @@ class AuthController extends Controller
         );
 
         $validated = $request->validate([
-            'password' => ['required', 'string', 'min:8', 'max:255', 'confirmed'],
+            'password' => ['required', 'string', 'min:8', 'max:12', 'confirmed'],
         ]);
 
         if (Hash::check($validated['password'], $user->password)) {
@@ -444,8 +427,9 @@ class AuthController extends Controller
                     'security_question_id' => $securityQuestion['security_question_id'],
                     'position' => $index + 1,
                     'answer_hash' => Hash::make(
-                        UserSecurityQuestion::normalizeAnswer($securityQuestion['answer']),
+                        UserSecurityQuestion::normalizeAnswer($securityQuestion['answer'], true),
                     ),
+                    'answer_case_sensitive' => true,
                 ]);
             }
 
@@ -488,25 +472,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Profile saved. Continue with account security setup.',
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'user_id' => $user->user_id,
-                'contact_number' => $user->contact_number,
-                'address' => $user->address,
-                'role' => $user->role,
-                'college' => $user->college,
-                'program' => $user->program,
-                'avatar' => $user->avatar,
-                'avatar_url' => $user->avatar_url,
-                'requires_password_change' => (bool) $user->requires_password_change,
-                'requires_security_setup' => (bool) $user->requires_security_setup,
-                'requires_profile_setup' => (bool) $user->requires_profile_setup,
-                'profile_completed_at' => $user->profile_completed_at,
-                'onboarding_step' => $user->onboardingStep(),
-                'supervisor_assignment' => $this->supervisorAssignmentPayload($user),
-            ],
+            'user' => $this->userPayload($user),
             'onboarding_step' => $user->onboardingStep(),
         ]);
     }
@@ -518,7 +484,7 @@ class AuthController extends Controller
         abort_unless($user?->requiresStaffSecuritySetup(), 403, 'This account does not require first-login security setup.');
 
         $validated = $request->validate([
-            'password' => ['required', 'string', 'min:8', 'max:255', 'confirmed'],
+            'password' => ['required', 'string', 'min:8', 'max:12', 'confirmed'],
             'security_questions' => ['required', 'array', 'size:3'],
             'security_questions.*.security_question_id' => [
                 'required',
@@ -546,8 +512,9 @@ class AuthController extends Controller
                     'security_question_id' => $securityQuestion['security_question_id'],
                     'position' => $index + 1,
                     'answer_hash' => Hash::make(
-                        UserSecurityQuestion::normalizeAnswer($securityQuestion['answer']),
+                        UserSecurityQuestion::normalizeAnswer($securityQuestion['answer'], true),
                     ),
+                    'answer_case_sensitive' => true,
                 ]);
             }
 
@@ -605,6 +572,7 @@ class AuthController extends Controller
                 'id' => $item instanceof UserSecurityQuestion ? $item->security_question_id : $item->id,
                 'position' => $item instanceof UserSecurityQuestion ? $item->position : $index + 1,
                 'question' => $item instanceof UserSecurityQuestion ? $item->question->question : $item->question,
+                'answer_case_sensitive' => $item instanceof UserSecurityQuestion ? $item->answer_case_sensitive : true,
             ])->values(),
         ]);
     }
@@ -640,7 +608,7 @@ class AuthController extends Controller
         foreach ($configured as $securityQuestion) {
             $answer = $submitted->get($securityQuestion->security_question_id);
             $correct = $answer && Hash::check(
-                UserSecurityQuestion::normalizeAnswer($answer['answer']),
+                UserSecurityQuestion::normalizeAnswer($answer['answer'], $securityQuestion->answer_case_sensitive),
                 $securityQuestion->answer_hash,
             );
             $allCorrect = $allCorrect && $correct;
@@ -725,6 +693,73 @@ class AuthController extends Controller
         }
 
         return Hash::check($plainToken, Str::after($record->token, ':'));
+    }
+
+    private function userPayload(User $user): array
+    {
+        $student = $user->isStudent() ? $user->student : null;
+
+        return [
+            'id' => $user->id,
+            'name' => $student
+                ? $this->studentFullName($student->first_name, $student->middle_name, $student->last_name)
+                : $user->name,
+            'email' => $user->email,
+            'user_id' => $user->user_id,
+            'contact_number' => $student?->contact_number ?? $user->contact_number,
+            'address' => $student?->address ?? $user->address,
+            'role' => $user->role,
+            'college' => $student?->college ?? $user->college,
+            'program' => $student?->program ?? $user->program,
+            'avatar' => $user->avatar,
+            'avatar_url' => $user->avatar_url,
+            'is_active' => $user->is_active,
+            'last_login_at' => $user->last_login_at,
+            'requires_password_change' => (bool) $user->requires_password_change,
+            'requires_security_setup' => $user->requiresStaffSecuritySetup(),
+            'requires_profile_setup' => (bool) $user->requires_profile_setup,
+            'profile_completed_at' => $user->profile_completed_at,
+            'onboarding_step' => $user->onboardingStep(),
+            'supervisor_assignment' => $this->supervisorAssignmentPayload($user),
+        ];
+    }
+
+    private function studentPayload(?Student $student): ?array
+    {
+        if (! $student) {
+            return null;
+        }
+
+        return [
+            'id' => $student->id,
+            'student_id' => $student->student_id,
+            'first_name' => $student->first_name,
+            'middle_name' => $student->middle_name,
+            'last_name' => $student->last_name,
+            'gender' => $student->gender,
+            'birth_date' => $student->birth_date,
+            'address' => $student->address,
+            'contact_number' => $student->contact_number,
+            'college' => $student->college,
+            'program' => $student->program,
+            'year_level' => $student->year_level,
+            'section' => $student->section,
+            'parent_name' => $student->parent_name,
+            'parent_relationship' => $student->parent_relationship,
+            'parent_address' => $student->parent_address,
+            'parent_contact_number' => $student->parent_contact_number,
+            'hte' => $student->hte,
+            'internship_status' => $student->internship_status,
+            'registration_status' => $student->registration_status,
+        ];
+    }
+
+    private function studentFullName(?string $firstName, ?string $middleName, ?string $lastName): string
+    {
+        return collect([$firstName, $middleName, $lastName])
+            ->filter(fn ($part) => filled($part))
+            ->map(fn ($part) => trim($part))
+            ->implode(' ');
     }
 
     private function supervisorAssignmentPayload(User $user): ?array

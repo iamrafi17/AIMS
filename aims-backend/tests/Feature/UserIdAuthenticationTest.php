@@ -98,6 +98,7 @@ class UserIdAuthenticationTest extends TestCase
         Sanctum::actingAs($admin);
 
         $this->postJson('/api/admin/users', [
+            'email' => 'internship.supervisor@example.com',
             'role' => 'supervisor',
             'supervisor_record_id' => $supervisor->id,
         ])->assertCreated()

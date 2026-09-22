@@ -42,7 +42,9 @@ final class ProgramAccess
 
     public static function studentQuery(User $user): Builder
     {
-        return Student::query()->where('program_id', self::programId($user));
+        $programId = self::programId($user);
+
+        return Student::query()->forProgram($programId);
     }
 
     public static function authorizeStudent(User $user, Student $student): void
@@ -52,13 +54,13 @@ final class ProgramAccess
 
     public static function authorizeAttendance(User $user, Attendance $attendance): void
     {
-        $attendance->loadMissing('student:id,program_id');
+        $attendance->loadMissing('student');
         abort_unless((int) $attendance->student?->program_id === self::programId($user), 404);
     }
 
     public static function authorizeRequirement(User $user, InternshipRequirement $requirement): void
     {
-        $requirement->loadMissing('student:id,program_id');
+        $requirement->loadMissing('student');
         abort_unless((int) $requirement->student?->program_id === self::programId($user), 404);
     }
 
@@ -69,7 +71,7 @@ final class ProgramAccess
 
         abort_unless(
             $travel->hte?->programs()->whereKey($programId)->wherePivot('is_active', true)->exists()
-            && $travel->participants()->where('program_id', $programId)->exists(),
+            && $travel->participants()->forProgram($programId)->exists(),
             404,
         );
     }

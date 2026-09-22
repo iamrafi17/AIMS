@@ -51,6 +51,8 @@ class DailyJournalTemplateController extends Controller
     {
         return ReportTemplate::query()
             ->where('report_type', ReportTemplateService::SHARED_REPORT_TYPE)
+            ->where('period_scope', ReportTemplate::SCOPE_ALL_PERIODS)
+            ->whereNull('academic_period_id')
             ->where('is_active', true)
             ->where('validation_status', 'valid')
             ->where(fn ($query) => $query->where('program_id', $programId)->orWhereNull('program_id'))

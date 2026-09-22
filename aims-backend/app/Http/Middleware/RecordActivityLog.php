@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Http\Controllers\Api\AdminSystemController;
+use App\Http\Controllers\Api\AcademicPeriodController;
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AuthController;
@@ -73,8 +74,6 @@ class RecordActivityLog
             CoordinatorStudentController::class.'@update' => ['Student Management', 'Updated student information.'],
             CoordinatorStudentController::class.'@destroy',
             CoordinatorStudentController::class.'@deactivate' => ['Student Management', 'Deactivated a student record.'],
-            CoordinatorStudentController::class.'@approveRegistration' => ['Registration', 'Approved a student registration.'],
-            CoordinatorStudentController::class.'@rejectRegistration' => ['Registration', 'Rejected a student registration.'],
             CoordinatorStudentController::class.'@reviewRequirement' => [
                 'Request Review',
                 ucfirst((string) $request->input('decision', $request->input('status', 'reviewed'))).' a student requirement.',
@@ -137,18 +136,20 @@ class RecordActivityLog
             AdminUserController::class.'@toggleStatus' => $this->userStatusActivity($request),
             AdminUserController::class.'@resetPassword' => ['User Management', 'Reset a user account password.'],
             AdminSystemController::class.'@updateSettings' => ['System Settings', 'Updated system settings.'],
-            AdminSystemController::class.'@storeCollege',
-            AdminSystemController::class.'@updateCollege',
-            AdminSystemController::class.'@destroyCollege',
-            AdminSystemController::class.'@storeProgram',
-            AdminSystemController::class.'@updateProgram',
-            AdminSystemController::class.'@destroyProgram',
-            AdminSystemController::class.'@storeSection',
-            AdminSystemController::class.'@updateSection',
-            AdminSystemController::class.'@destroySection' => ['Academic Settings', 'Updated academic settings.'],
-            AdminSystemController::class.'@permanentDestroyCollege',
-            AdminSystemController::class.'@permanentDestroyProgram',
-            AdminSystemController::class.'@permanentDestroySection' => ['Academic Settings', 'Permanently deleted an academic record.'],
+            AcademicPeriodController::class.'@store' => ['Academic Period', 'Created an academic period.'],
+            AcademicPeriodController::class.'@update' => ['Academic Period', 'Updated an academic period.'],
+            AcademicPeriodController::class.'@activate' => ['Academic Period', 'Set an academic period as active.'],
+            AcademicPeriodController::class.'@complete' => ['Academic Period', 'Completed and archived an academic period.'],
+            AcademicPeriodController::class.'@destroy' => ['Academic Period', 'Deleted an unlinked academic period.'],
+            AdminSystemController::class.'@storeCollege' => ['Academic Settings', 'Created a college.'],
+            AdminSystemController::class.'@updateCollege' => ['Academic Settings', 'Updated a college.'],
+            AdminSystemController::class.'@destroyCollege' => ['Academic Settings', 'Deleted a college.'],
+            AdminSystemController::class.'@storeProgram' => ['Academic Settings', 'Created a program.'],
+            AdminSystemController::class.'@updateProgram' => ['Academic Settings', 'Updated a program.'],
+            AdminSystemController::class.'@destroyProgram' => ['Academic Settings', 'Deleted a program.'],
+            AdminSystemController::class.'@storeSection' => ['Academic Settings', 'Created a section.'],
+            AdminSystemController::class.'@updateSection' => ['Academic Settings', 'Updated a section.'],
+            AdminSystemController::class.'@destroySection' => ['Academic Settings', 'Deleted a section.'],
             AdminSystemController::class.'@reports' => ['Report', 'Generated a report.'],
 
             default => null,

@@ -48,8 +48,8 @@ class StudentTravelController extends Controller
         $student->load(['program.college', 'hte']);
         $coordinates = $this->coordinates($request);
 
-        if ($student->registration_status !== 'approved' || $student->internship_status !== 'active') {
-            throw ValidationException::withMessages(['session' => 'Your approved active internship is required before starting travel.']);
+        if ($student->internship_status !== 'active') {
+            throw ValidationException::withMessages(['session' => 'Your active internship is required before starting travel.']);
         }
         if (! $student->hte_id || ! $student->hte?->is_active) {
             throw ValidationException::withMessages(['session' => 'An active assigned HTE is required before starting travel.']);
@@ -312,7 +312,7 @@ class StudentTravelController extends Controller
     {
         $reasons = [];
         if (! $request->user()->is_active) $reasons[] = 'Student account is inactive.';
-        if ($student->registration_status !== 'approved' || $student->internship_status !== 'active') $reasons[] = 'An approved active internship is required.';
+        if ($student->internship_status !== 'active') $reasons[] = 'An active internship is required.';
         if (! $student->hte_id || ! $student->hte?->is_active) $reasons[] = 'An active HTE assignment is required.';
         if (($student->ojt_start_date && now()->startOfDay()->lt($student->ojt_start_date)) || ($student->ojt_end_date && now()->startOfDay()->gt($student->ojt_end_date))) $reasons[] = 'The internship period is not currently active.';
         if ($current) $reasons[] = 'Another travel session is active.';

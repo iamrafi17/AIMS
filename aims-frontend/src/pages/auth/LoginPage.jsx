@@ -55,7 +55,7 @@ function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#F6F7FB] lg:grid lg:h-screen lg:grid-cols-[1.08fr_0.92fr] lg:overflow-hidden">
+    <main className="auth-shell login-shell min-h-screen bg-[#F6F7FB] lg:grid lg:h-screen lg:grid-cols-[1.08fr_0.92fr] lg:overflow-hidden">
       <section className="relative hidden min-h-0 overflow-hidden bg-[#5a0707] p-7 text-white lg:flex lg:flex-col lg:justify-between xl:p-9 2xl:p-10">
         <Link to="/" className="relative z-10 flex items-center gap-3 self-start">
           <span className="rounded-full bg-white p-1.5 shadow-lg"><img src={marsuLogo} alt="Marinduque State University seal" className="h-12 w-12 object-contain" /></span>
@@ -79,9 +79,9 @@ function LoginPage() {
         </div>
       </section>
 
-      <section className="flex min-h-screen items-center justify-center overflow-y-auto px-5 py-7 sm:px-8 lg:min-h-0 lg:px-10 lg:py-6 xl:px-12">
-        <div className="w-full max-w-md">
-          <div className="mb-8 flex items-center justify-between lg:hidden">
+      <section className="login-panel flex min-h-screen min-w-0 items-center justify-center overflow-y-auto px-5 py-7 sm:px-8 lg:min-h-0 lg:px-10 lg:py-6 xl:px-12">
+        <div className="login-card w-full min-w-0 max-w-md">
+          <div className="login-mobile-brand mb-8 flex items-center justify-between lg:hidden">
             <Link to="/" className="flex items-center gap-3">
               <img src={marsuLogo} alt="Marinduque State University seal" className="h-12 w-12 object-contain" />
               <span><strong className="block text-sm text-[#720b0b]">Marinduque State University</strong><span className="text-xs text-slate-500">AIMS · Santa Cruz Campus</span></span>
@@ -138,7 +138,7 @@ function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-4">
+            <div className="login-options flex flex-wrap items-center justify-between gap-3">
               <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-600">
                 <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="h-4 w-4 rounded border-slate-300 accent-[#7D001D]" />
                 Remember me

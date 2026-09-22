@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FiCheck, FiChevronLeft, FiChevronRight, FiDownload, FiEdit2, FiEye, FiFileText, FiPlus, FiSearch, FiSettings, FiTrash2, FiUpload, FiUserCheck, FiUsers, FiX } from 'react-icons/fi';
+import { FiAlertTriangle, FiCheck, FiChevronLeft, FiChevronRight, FiDownload, FiEdit2, FiEye, FiFileText, FiPlus, FiSearch, FiSettings, FiTrash2, FiUpload, FiUserCheck, FiUsers, FiX } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import RequirementManagerModal from './RequirementManagerModal';
@@ -29,7 +29,6 @@ const emptyForm = {
   hte_id: '',
   internship_semester: '',
   internship_year: '',
-  registration_status: 'pending',
   internship_status: 'pending',
   consent_status: 'pending',
   schedule_status: 'pending',
@@ -57,7 +56,7 @@ function StatusBadge({ value }) {
 }
 
 function Modal({ title, subtitle, onClose, children, size = 'default' }) {
-  const maxWidths = { default: '42rem', form: '56rem', wide: '56rem' };
+  const maxWidths = { confirm: '30rem', default: '42rem', form: '56rem', wide: '56rem' };
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -68,8 +67,8 @@ function Modal({ title, subtitle, onClose, children, size = 'default' }) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-hidden bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4">
-      <div role="dialog" aria-modal="true" aria-label={title} style={{ maxWidth: maxWidths[size] || maxWidths.default, maxHeight: 'calc(100dvh - 1rem)' }} className="flex w-full flex-col overflow-hidden rounded-2xl border border-white/20 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-hidden bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5">
+      <div role="dialog" aria-modal="true" aria-label={title} style={{ maxWidth: maxWidths[size] || maxWidths.default }} className="flex max-h-[calc(100dvh-1.5rem)] w-full flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800 sm:max-h-[calc(100dvh-2.5rem)]">
         <div className="flex shrink-0 items-start justify-between border-b border-slate-100 bg-white px-4 py-4 dark:border-gray-700 dark:bg-gray-800 sm:px-5">
           <div className="min-w-0 pr-4">
             <h2 className="truncate text-lg font-black text-[#690016] dark:text-white">{title}</h2>
@@ -232,7 +231,6 @@ function StudentManagement() {
   const [options, setOptions] = useState({ colleges: [], htes: [], sections: [] });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
   const [internshipStatus, setInternshipStatus] = useState('');
   const [sectionFilter, setSectionFilter] = useState('');
   const [page, setPage] = useState(1);
@@ -243,6 +241,7 @@ function StudentManagement() {
   const [editorStep, setEditorStep] = useState(0);
   const [form, setForm] = useState(emptyForm);
   const [selected, setSelected] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
@@ -254,7 +253,7 @@ function StudentManagement() {
   const fetchStudents = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await api.get('/coordinator/students', { params: { search, status, internship_status: internshipStatus, academic_section_id: sectionFilter || undefined, page, per_page: studentPerPage } });
+      const response = await api.get('/coordinator/students', { params: { search, internship_status: internshipStatus, academic_section_id: sectionFilter || undefined, page, per_page: studentPerPage } });
       setStudents(response.data.data || []);
       setSummary(response.data.summary || {});
       setLastPage(response.data.last_page || 1);
@@ -264,7 +263,7 @@ function StudentManagement() {
     } finally {
       setLoading(false);
     }
-  }, [internshipStatus, page, search, sectionFilter, status, studentPerPage]);
+  }, [internshipStatus, page, search, sectionFilter, studentPerPage]);
 
   const fetchEnrollments = useCallback(async () => {
     try {
@@ -301,7 +300,7 @@ function StudentManagement() {
   }, [fetchEnrollments]);
   useEffect(() => {
     setPage(1);
-  }, [search, status, internshipStatus, sectionFilter]);
+  }, [search, internshipStatus, sectionFilter]);
   useEffect(() => {
     setEnrollmentPage(1);
   }, [search, sectionFilter]);
@@ -349,6 +348,7 @@ function StudentManagement() {
     setBusy(true);
     try {
       const payload = editor.mode === 'create' ? { full_name: form.student_name.trim(), school_id: form.student_id.trim(), academic_section_id: Number(form.academic_section_id) } : { ...form, college_id: Number(form.college_id), program_id: Number(form.program_id), hte_id: form.hte_id ? Number(form.hte_id) : null, year_level: Number(form.year_level), required_ojt_hours: Number(form.required_ojt_hours), allow_past_attendance: Boolean(form.allow_past_attendance) };
+      delete payload.registration_status;
       if (!payload.password) delete payload.password;
       const response = editor.mode === 'create' ? await api.post('/coordinator/students', payload) : await api.put(`/coordinator/students/${editor.student.id}`, payload);
       toast.success(response.data.message);
@@ -368,25 +368,6 @@ function StudentManagement() {
       setSelected(response.data);
     } catch (error) {
       toast.error(errorMessage(error, 'Unable to load student details.'));
-    }
-  };
-
-  const decideRegistration = async (student, decision) => {
-    let reason = '';
-    if (decision === 'reject') {
-      reason = window.prompt('Reason for rejecting this registration:') || '';
-      if (!reason.trim()) return;
-    }
-    setBusy(true);
-    try {
-      const response = await api.post(`/coordinator/students/${student.id}/${decision}`, decision === 'reject' ? { reason } : {});
-      toast.success(response.data.message);
-      await fetchStudents();
-      if (selected?.id === student.id) viewStudent(student.id);
-    } catch (error) {
-      toast.error(errorMessage(error, 'Unable to review registration.'));
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -423,15 +404,19 @@ function StudentManagement() {
     }
   };
 
-  const deactivateStudent = async (student) => {
-    if (!window.confirm(`Deactivate ${student.first_name} ${student.last_name}? Their historical attendance, requirements, and reports will be preserved.`)) return;
+  const deleteStudent = async () => {
+    if (!deleteTarget) return;
+    setBusy(true);
     try {
-      const response = await api.put(`/coordinator/students/${student.id}/deactivate`);
+      const response = await api.delete(`/coordinator/students/${deleteTarget.id}`);
       toast.success(response.data.message);
+      setDeleteTarget(null);
       setSelected(null);
       fetchStudents();
     } catch (error) {
-      toast.error(errorMessage(error, 'Unable to deactivate student.'));
+      toast.error(errorMessage(error, 'Unable to delete student.'));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -481,7 +466,7 @@ function StudentManagement() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="coordinator-students portal-card-tables space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Coordinator Portal</p>
@@ -508,15 +493,15 @@ function StudentManagement() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="portal-summary-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {[
           ['Total Students', summary.total, FiUsers, 'text-[#7D001D]'],
-          ['Pending Review', summary.pending, FiFileText, 'text-amber-600'],
-          ['Approved', summary.approved, FiCheck, 'text-emerald-600'],
-          ['Rejected', summary.rejected, FiX, 'text-rose-600'],
+          ['Awaiting Deployment', summary.awaiting_deployment, FiFileText, 'text-amber-600'],
+          ['Completed', summary.completed, FiCheck, 'text-emerald-600'],
+          ['Dropped', summary.dropped, FiX, 'text-rose-600'],
           ['Active Interns', summary.active, FiUserCheck, 'text-blue-600'],
         ].map(([label, value, Icon, color]) => (
-          <div key={label} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div key={label} className="portal-metric-card portal-summary-card rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div className="flex items-center gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 dark:bg-gray-700">
                 <Icon className={color} />
@@ -530,7 +515,7 @@ function StudentManagement() {
         ))}
       </div>
 
-      <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <section className="portal-table-panel overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-gray-700">
           <div>
             <h2 className="font-black text-[#690016] dark:text-white">OJT Enrollment List</h2>
@@ -562,7 +547,7 @@ function StudentManagement() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left">
+          <table className="portal-card-table portal-card-table--enrollment w-full min-w-[720px] text-left">
             <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-gray-900">
               <tr>
                 <th className="px-5 py-3">School ID</th>
@@ -613,18 +598,12 @@ function StudentManagement() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <div className="grid gap-3 lg:grid-cols-[1fr_180px_180px_220px]">
-          <label className="relative">
+      <section className="portal-filter-panel rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="portal-filter-grid grid gap-3 lg:grid-cols-[1fr_180px_220px]">
+          <label className="portal-filter-search relative">
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, student ID, or email..." className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none dark:border-gray-600 dark:bg-gray-900" />
           </label>
-          <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-xl border border-slate-200 px-3 text-sm dark:border-gray-600 dark:bg-gray-900">
-            <option value="">All registrations</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
           <select value={internshipStatus} onChange={(event) => setInternshipStatus(event.target.value)} className="rounded-xl border border-slate-200 px-3 text-sm dark:border-gray-600 dark:bg-gray-900">
             <option value="">All internships</option>
             <option value="pending">Pending</option>
@@ -643,14 +622,14 @@ function StudentManagement() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <section className="portal-table-panel overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1050px] text-left">
+          <table className="portal-card-table portal-card-table--coordinator-students w-full min-w-[1050px] text-left">
             <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-gray-900">
               <tr>
                 <th className="px-5 py-4 font-extrabold">Student</th>
                 <th className="px-4 py-4 font-extrabold">Academic / HTE</th>
-                <th className="px-4 py-4 font-extrabold">Registration</th>
+                <th className="px-4 py-4 font-extrabold">Account / Internship</th>
                 <th className="px-4 py-4 font-extrabold">OJT Progress</th>
                 <th className="px-4 py-4 font-extrabold">Requirements</th>
                 <th className="px-5 py-4 text-right font-extrabold">Actions</th>
@@ -681,7 +660,7 @@ function StudentManagement() {
                       <p className="mt-1 max-w-48 truncate text-[11px] text-slate-400">{student.hte?.name || 'No HTE assigned'}</p>
                     </td>
                     <td className="px-4 py-4">
-                      <StatusBadge value={student.registration_status} />
+                      <StatusBadge value="registered" />
                       <div className="mt-1.5">
                         <StatusBadge value={student.internship_status} />
                       </div>
@@ -709,23 +688,13 @@ function StudentManagement() {
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-1.5">
-                        {student.registration_status === 'pending' && (
-                          <>
-                            <button onClick={() => decideRegistration(student, 'approve')} className="rounded-lg bg-emerald-100 p-2 text-emerald-700" title="Approve">
-                              <FiCheck />
-                            </button>
-                            <button onClick={() => decideRegistration(student, 'reject')} className="rounded-lg bg-rose-100 p-2 text-rose-700" title="Reject">
-                              <FiX />
-                            </button>
-                          </>
-                        )}
                         <button onClick={() => viewStudent(student.id)} className="rounded-lg bg-blue-100 p-2 text-blue-700" title="Review">
                           <FiEye />
                         </button>
                         <button onClick={() => openEdit(student)} className="rounded-lg bg-amber-100 p-2 text-amber-700" title="Edit">
                           <FiEdit2 />
                         </button>
-                        <button onClick={() => deactivateStudent(student)} className="rounded-lg bg-rose-100 p-2 text-rose-700" title="Deactivate and preserve records">
+                        <button onClick={() => setDeleteTarget(student)} className="rounded-lg bg-rose-100 p-2 text-rose-700" title="Delete student">
                           <FiTrash2 />
                         </button>
                       </div>
@@ -780,7 +749,7 @@ function StudentManagement() {
       {editor?.mode === 'create' && (
         <Modal title="Add Student Manually" subtitle="Add one OJT student who was not included in the CSV file." onClose={() => setEditor(null)}>
           <form onSubmit={saveStudent}>
-            <div className="space-y-4 p-6">
+            <div className="space-y-4 p-5">
               <Input label="Full Name" name="student_name" form={form} setForm={setForm} placeholder="e.g. Juan Dela Cruz" autoFocus required />
               <Input label="School ID" name="student_id" form={form} setForm={setForm} placeholder="e.g. 2026-1001" required />
               <Select label="Section" name="academic_section_id" form={form} setForm={setForm} required>
@@ -793,7 +762,7 @@ function StudentManagement() {
               </Select>
               <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">This adds the student to the OJT enrollment list. The student will create their own email address and password on the Registration page.</div>
             </div>
-            <div className="flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4 dark:border-gray-700 dark:bg-gray-800">
+            <div className="flex justify-end gap-3 border-t border-slate-100 bg-white px-5 py-4 dark:border-gray-700 dark:bg-gray-800">
               <button type="button" onClick={() => setEditor(null)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold dark:border-gray-600">
                 Cancel
               </button>
@@ -836,7 +805,6 @@ function StudentManagement() {
                     <Select label="Gender" name="gender" form={form} setForm={setForm} required>
                       <option value="female">Female</option>
                       <option value="male">Male</option>
-                      <option value="other">Other</option>
                     </Select>
                     <Input label="Birth Date" name="birth_date" type="date" form={form} setForm={setForm} required />
                     <Input label="Contact Number" name="contact_number" form={form} setForm={setForm} required />
@@ -911,11 +879,6 @@ function StudentManagement() {
                     Review the final information, then click <b>Save Changes</b>. This step will not save automatically.
                   </p>
                   <div className="grid gap-3 md:grid-cols-3">
-                    <Select label="Registration Status" name="registration_status" form={form} setForm={setForm}>
-                      <option value="pending">Pending</option>
-                      <option value="approved">Approved</option>
-                      <option value="rejected">Rejected</option>
-                    </Select>
                     <Select label="Internship Status" name="internship_status" form={form} setForm={setForm}>
                       <option value="pending">Pending</option>
                       <option value="active">Active</option>
@@ -982,20 +945,9 @@ function StudentManagement() {
             <aside className="space-y-5">
               <div className="rounded-2xl bg-slate-50 p-5 dark:bg-gray-900">
                 <div className="flex flex-wrap gap-2">
-                  <StatusBadge value={selected.registration_status} />
+                  <StatusBadge value="registered" />
                   <StatusBadge value={selected.internship_status} />
                 </div>
-                {selected.registration_feedback && <p className="mt-3 text-xs leading-5 text-rose-600">Review feedback: {selected.registration_feedback}</p>}
-                {selected.registration_status === 'pending' && (
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button onClick={() => decideRegistration(selected, 'approve')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white">
-                      Approve
-                    </button>
-                    <button onClick={() => decideRegistration(selected, 'reject')} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-black text-white">
-                      Reject
-                    </button>
-                  </div>
-                )}
               </div>
               <div>
                 <div className="mb-2 flex justify-between text-xs">
@@ -1017,8 +969,8 @@ function StudentManagement() {
       )}
 
       {importOpen && (
-        <Modal title="Import Student List" subtitle="Preview the official school CSV before saving eligible students." onClose={closeImport} size="wide">
-          <div className="p-6">
+        <Modal title="Import Student List" subtitle="Preview the official school CSV before saving eligible students." onClose={closeImport}>
+          <div className="p-5">
             <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
               Upload the existing predefined school CSV without changing its layout. AIMS reads only <b>Column E (School No.)</b> and <b>Column F (Full Name)</b> from numbered student rows.
             </div>
@@ -1043,9 +995,9 @@ function StudentManagement() {
                     ))}
                   </select>
                 </label>
-                <button onClick={() => importInput.current?.click()} className="mt-5 flex w-full flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center hover:border-[#7D001D]/40 dark:border-gray-600">
-                  <FiUpload className="text-3xl text-[#7D001D] dark:text-rose-300" />
-                  <p className="mt-3 text-sm font-black">{importFile?.name || 'Choose the predefined school CSV file'}</p>
+                <button onClick={() => importInput.current?.click()} className="mt-4 flex w-full flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 p-5 text-center transition hover:border-[#7D001D]/40 hover:bg-slate-50 dark:border-gray-600 dark:hover:bg-gray-900/40">
+                  <FiUpload className="text-2xl text-[#7D001D] dark:text-rose-300" />
+                  <p className="mt-2 text-sm font-black">{importFile?.name || 'Choose the predefined school CSV file'}</p>
                   <p className="mt-1 text-xs text-slate-400">CSV only, maximum 5 MB</p>
                 </button>
                 <input
@@ -1148,6 +1100,34 @@ function StudentManagement() {
             if (selected) viewStudent(selected.id);
           }}
         />
+      )}
+      {deleteTarget && (
+        <Modal
+          title="Delete Student"
+          subtitle="This action cannot be undone."
+          onClose={() => !busy && setDeleteTarget(null)}
+          size="confirm"
+        >
+          <div className="p-5">
+            <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-900/70 dark:bg-rose-950/30">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300">
+                <FiAlertTriangle className="text-lg" />
+              </span>
+              <div>
+                <p className="font-black text-slate-800 dark:text-white">Delete {deleteTarget.first_name} {deleteTarget.last_name}?</p>
+                <p className="mt-1.5 text-sm leading-6 text-slate-600 dark:text-slate-300">The student account and all related internship records will be permanently deleted.</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col-reverse gap-2.5 border-t border-slate-100 px-5 py-4 dark:border-gray-700 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setDeleteTarget(null)} disabled={busy} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold text-slate-600 disabled:opacity-50 dark:border-gray-600 dark:text-slate-200">
+              Cancel
+            </button>
+            <button type="button" onClick={deleteStudent} disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-black text-white transition hover:bg-rose-700 disabled:opacity-50">
+              <FiTrash2 /> {busy ? 'Deleting...' : 'Delete Student'}
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

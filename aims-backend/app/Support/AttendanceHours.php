@@ -20,24 +20,50 @@ class AttendanceHours
             return self::duration($attendance->time_in, $attendance->time_out);
         }
 
-        $student ??= $attendance->student;
-        if (! $student || ! $attendance->date || ! $student->official_am_start || ! $student->official_am_end
-            || ! $student->official_pm_start || ! $student->official_pm_end) {
+        if (! $attendance->date) {
             return $rawHours;
         }
 
         $date = $attendance->date->toDateString();
+        $snapshots = $attendance->relationLoaded('scheduleSnapshots')
+            ? $attendance->scheduleSnapshots->keyBy('period')
+            : $attendance->scheduleSnapshots()->get()->keyBy('period');
+        $am = $snapshots->get('am');
+        $pm = $snapshots->get('pm');
+
+        if (! $am || ! $pm) {
+            $student ??= $attendance->student;
+            if (! $student) {
+                return $rawHours;
+            }
+            $schedule = EffectiveSchedule::forDate($student, $attendance->date);
+            $amStart = $schedule['am_start'];
+            $amEnd = $schedule['am_end'];
+            $pmStart = $schedule['pm_start'];
+            $pmEnd = $schedule['pm_end'];
+            $isWorking = $schedule['is_working'];
+        } else {
+            $amStart = $am->scheduled_start;
+            $amEnd = $am->scheduled_end;
+            $pmStart = $pm->scheduled_start;
+            $pmEnd = $pm->scheduled_end;
+            $isWorking = $am->is_working || $pm->is_working;
+        }
+
+        if (! $isWorking || ! $amStart || ! $amEnd || ! $pmStart || ! $pmEnd) {
+            return $rawHours;
+        }
 
         return self::overlap(
             $attendance->am_time_in,
             $attendance->am_time_out,
-            Carbon::parse($date.' '.$student->official_am_start),
-            Carbon::parse($date.' '.$student->official_am_end),
+            Carbon::parse($date.' '.$amStart),
+            Carbon::parse($date.' '.$amEnd),
         ) + self::overlap(
             $attendance->pm_time_in,
             $attendance->pm_time_out,
-            Carbon::parse($date.' '.$student->official_pm_start),
-            Carbon::parse($date.' '.$student->official_pm_end),
+            Carbon::parse($date.' '.$pmStart),
+            Carbon::parse($date.' '.$pmEnd),
         );
     }
 

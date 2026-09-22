@@ -30,6 +30,8 @@ class ReportTemplateManagementTest extends TestCase
         ))->assertCreated()
             ->assertJsonPath('template.program_id', $program->id)
             ->assertJsonPath('template.report_type', 'all_reports')
+            ->assertJsonPath('template.period_scope', ReportTemplate::SCOPE_ALL_PERIODS)
+            ->assertJsonPath('template.academic_period_id', null)
             ->assertJsonPath('template.academic_year', 'All Academic Years')
             ->assertJsonPath('template.semester', 'All Semesters')
             ->assertJsonPath('template.validation_status', 'valid')
@@ -38,6 +40,12 @@ class ReportTemplateManagementTest extends TestCase
             ->assertJsonFragment(['message' => 'Official template uploaded and is now active for all reports.']);
 
         $template = ReportTemplate::findOrFail($response->json('template.id'));
+        $this->assertSame([], $template->detected_placeholders);
+        $this->assertDatabaseHas('report_templates', [
+            'id' => $template->id,
+            'period_scope' => ReportTemplate::SCOPE_ALL_PERIODS,
+            'academic_period_id' => null,
+        ]);
         Storage::disk('local')->assertExists($template->file_path);
 
         $preview = $this->getJson("/api/report-templates/{$template->id}/preview")

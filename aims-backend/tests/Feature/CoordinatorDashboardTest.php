@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademicSection;
 use App\Models\Attendance;
 use App\Models\College;
 use App\Models\HTE;
 use App\Models\HteDepartment;
 use App\Models\InternshipRequirement;
 use App\Models\MOA;
+use App\Models\OjtEnrollment;
 use App\Models\Program;
 use App\Models\Student;
 use App\Models\Supervisor;
@@ -29,8 +31,6 @@ class CoordinatorDashboardTest extends TestCase
         $program = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
         $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
         $hte = HTE::create([
-            'college_id' => $college->id,
-            'program_id' => $program->id,
             'name' => 'Partner Company',
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Supervisor',
@@ -38,10 +38,18 @@ class CoordinatorDashboardTest extends TestCase
             'contact_number' => '09170000000',
             'is_active' => true,
         ]);
+        $hte->programs()->attach($program->id, [
+            'linked_by' => $coordinator->id,
+            'is_active' => true,
+        ]);
         $department = HteDepartment::create([
             'hte_id' => $hte->id,
             'department_name' => 'Learning Resource Center',
             'normalized_name' => 'learning resource center',
+        ]);
+        $department->programs()->attach($program->id, [
+            'linked_by' => $coordinator->id,
+            'is_active' => true,
         ]);
         $supervisor = Supervisor::create([
             'hte_department_id' => $department->id,
@@ -49,6 +57,7 @@ class CoordinatorDashboardTest extends TestCase
             'normalized_name' => 'maria saint',
         ]);
 
+        $period = $this->academicPeriod('2026-2027', '1st Semester');
         $student = Student::create([
             'user_id' => $studentUser->id,
             'student_id' => '2026-0001',
@@ -60,6 +69,7 @@ class CoordinatorDashboardTest extends TestCase
             'contact_number' => '09171111111',
             'college_id' => $college->id,
             'program_id' => $program->id,
+            'academic_period_id' => $period->id,
             'year_level' => 4,
             'section' => 'A',
             'parent_name' => 'Test Parent',
@@ -120,12 +130,39 @@ class CoordinatorDashboardTest extends TestCase
         ]);
         $travel->participants()->attach($student->id);
 
+        $otherProgram = Program::create(['college_id' => $college->id, 'name' => 'Computer Science', 'code' => 'BSCS', 'is_active' => true]);
+        foreach ([
+            ['2026-UNREGISTERED', $program->id, null],
+            ['2026-REGISTERED', $program->id, now()],
+            ['2026-OTHER-PROGRAM', $otherProgram->id, null],
+        ] as [$schoolId, $programId, $registeredAt]) {
+            $section = AcademicSection::where('program_id', $programId)->first()
+                ?? AcademicSection::create([
+                    'program_id' => $programId,
+                    'academic_period_id' => $period->id,
+                    'name' => 'A',
+                    'year_level' => 4,
+                    'academic_year' => '2026-2027',
+                    'is_active' => true,
+                ]);
+            OjtEnrollment::create([
+                'school_id' => $schoolId,
+                'full_name' => 'Official Eligible Student',
+                'academic_section_id' => $section->id,
+                'source' => 'manual',
+                'added_by' => $coordinator->id,
+                'registered_at' => $registeredAt,
+            ]);
+        }
+
         Sanctum::actingAs($coordinator);
 
         $this->getJson('/api/coordinator/dashboard')
             ->assertOk()
             ->assertJsonPath('overview.total_students', 1)
             ->assertJsonPath('overview.active', 1)
+            ->assertJsonPath('overview.awaiting_registration', 1)
+            ->assertJsonMissingPath('overview.pending_registrations')
             ->assertJsonPath('attendance.present', 1)
             ->assertJsonPath('attendance.rate', 100)
             ->assertJsonPath('attendance.total_hours', 8)

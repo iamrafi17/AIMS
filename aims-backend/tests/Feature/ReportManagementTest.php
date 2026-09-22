@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use OpenSpout\Reader\XLSX\Reader;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Tests\TestCase;
 
 class ReportManagementTest extends TestCase
@@ -92,12 +93,12 @@ class ReportManagementTest extends TestCase
                 ->assertOk();
             $this->assertStringContainsString($extension, (string) $response->headers->get('content-disposition'));
 
-            if ($response->baseResponse instanceof \Symfony\Component\HttpFoundation\BinaryFileResponse) {
+            if ($response->baseResponse instanceof BinaryFileResponse) {
                 $path = $response->baseResponse->getFile()->getPathname();
                 $content = file_get_contents($path);
 
                 if ($format === 'xlsx') {
-                    $reader = new Reader();
+                    $reader = new Reader;
                     $reader->open($path);
                     $rows = [];
 
@@ -162,6 +163,7 @@ class ReportManagementTest extends TestCase
     private function student(College $college, Program $program, string $schoolId): Student
     {
         $user = User::factory()->create(['role' => 'student']);
+        $period = $this->academicPeriod();
 
         return Student::create([
             'user_id' => $user->id,
@@ -174,6 +176,7 @@ class ReportManagementTest extends TestCase
             'contact_number' => '09170000000',
             'college_id' => $college->id,
             'program_id' => $program->id,
+            'academic_period_id' => $period->id,
             'year_level' => 4,
             'section' => 'A',
             'parent_name' => 'Parent',

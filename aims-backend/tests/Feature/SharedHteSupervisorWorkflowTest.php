@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -52,6 +53,30 @@ class SharedHteSupervisorWorkflowTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('message', 'Existing department and supervisor reused.');
 
+        Sanctum::actingAs($firstCoordinator);
+        $this->postJson("/api/coordinator/htes/{$hteId}/departments", [
+            'department_name' => 'CICS Development Office',
+            'supervisor_full_name' => 'CICS Supervisor',
+        ])->assertCreated();
+        $restrictedDepartmentId = (int) $this->app['db']->table('hte_departments')
+            ->where('department_name', 'CICS Development Office')
+            ->value('id');
+        $this->assertDatabaseHas('hte_department_programs', [
+            'hte_department_id' => $restrictedDepartmentId,
+            'program_id' => $firstCoordinator->program_id,
+            'is_active' => true,
+        ]);
+        $this->assertDatabaseMissing('hte_department_programs', [
+            'hte_department_id' => $restrictedDepartmentId,
+            'program_id' => $secondCoordinator->program_id,
+        ]);
+
+        Sanctum::actingAs($secondCoordinator);
+        $this->getJson("/api/coordinator/htes/{$hteId}")
+            ->assertOk()
+            ->assertJsonCount(1, 'departments')
+            ->assertJsonPath('departments.0.department_name', 'Learning Resources Center');
+
         $this->postJson('/api/coordinator/htes', [
             ...$this->htePayload(),
             'name' => '  MARINDUQUE   STATE UNIVERSITY ',
@@ -59,8 +84,8 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             ->assertJsonValidationErrors('name');
 
         $this->assertDatabaseCount('htes', 1);
-        $this->assertDatabaseCount('hte_departments', 1);
-        $this->assertDatabaseCount('supervisors', 1);
+        $this->assertDatabaseCount('hte_departments', 2);
+        $this->assertDatabaseCount('supervisors', 2);
         $this->assertDatabaseHas('hte_programs', [
             'hte_id' => $hteId,
             'program_id' => $firstCoordinator->program_id,
@@ -71,6 +96,22 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             'program_id' => $secondCoordinator->program_id,
             'is_active' => true,
         ]);
+        $departmentId = (int) $this->app['db']->table('hte_departments')
+            ->where('department_name', 'Learning Resources Center')
+            ->value('id');
+        $this->assertDatabaseHas('hte_department_programs', [
+            'hte_department_id' => $departmentId,
+            'program_id' => $firstCoordinator->program_id,
+            'is_active' => true,
+        ]);
+        $this->assertDatabaseHas('hte_department_programs', [
+            'hte_department_id' => $departmentId,
+            'program_id' => $secondCoordinator->program_id,
+            'is_active' => true,
+        ]);
+        $this->assertFalse(Schema::hasColumn('htes', 'college_id'));
+        $this->assertFalse(Schema::hasColumn('htes', 'program_id'));
+        $this->assertFalse(Schema::hasColumn('hte_programs', 'college_id'));
 
         $this->getJson('/api/coordinator/htes')
             ->assertOk()
@@ -102,6 +143,7 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             ->assertJsonPath('supervisors.0.has_account', false);
 
         $created = $this->postJson('/api/admin/users', [
+            'email' => 'maria.saint@example.com',
             'role' => 'supervisor',
             'supervisor_record_id' => $supervisor->id,
             'is_active' => true,
@@ -114,6 +156,7 @@ class SharedHteSupervisorWorkflowTest extends TestCase
         $this->assertDatabaseHas('supervisors', ['id' => $supervisor->id, 'user_id' => $userId]);
 
         $this->postJson('/api/admin/users', [
+            'email' => 'another.supervisor@example.com',
             'role' => 'supervisor',
             'supervisor_record_id' => $supervisor->id,
         ])->assertUnprocessable()
@@ -181,6 +224,7 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             'contact_number' => '09170000001',
             'college_id' => $coordinator->college_id,
             'program_id' => $coordinator->program_id,
+            'academic_period_id' => $this->academicPeriod()->id,
             'year_level' => 4,
             'section' => 'A',
             'parent_name' => 'Parent Name',
@@ -233,6 +277,7 @@ class SharedHteSupervisorWorkflowTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
         Sanctum::actingAs($admin);
         $created = $this->postJson('/api/admin/users', [
+            'email' => 'maria.saint@example.com',
             'role' => 'supervisor',
             'supervisor_record_id' => $supervisor->id,
         ])->assertCreated();
@@ -261,8 +306,8 @@ class SharedHteSupervisorWorkflowTest extends TestCase
 
         $questions = SecurityQuestion::query()->take(3)->get();
         $this->withToken($token)->postJson('/api/staff/security-setup', [
-            'password' => 'PersonalPass123!',
-            'password_confirmation' => 'PersonalPass123!',
+            'password' => 'Personal123!',
+            'password_confirmation' => 'Personal123!',
             'security_questions' => $questions->values()->map(fn (SecurityQuestion $question, int $index) => [
                 'security_question_id' => $question->id,
                 'answer' => 'Supervisor answer '.($index + 1),
@@ -272,7 +317,7 @@ class SharedHteSupervisorWorkflowTest extends TestCase
         $this->app['auth']->forgetGuards();
         $this->postJson('/api/login', [
             'login' => $userId,
-            'password' => 'PersonalPass123!',
+            'password' => 'Personal123!',
             'device_name' => 'Supervisor second login',
         ])->assertOk()
             ->assertJsonPath('user.onboarding_step', null)

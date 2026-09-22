@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicPeriod;
 use App\Models\AcademicSection;
 use App\Models\Attendance;
 use App\Models\College;
@@ -23,13 +24,18 @@ class AdminSystemController extends Controller
     public function academic()
     {
         return response()->json([
-            'colleges' => College::withCount(['programs', 'students'])->orderBy('name')->get(),
-            'programs' => Program::with('college:id,name,code')->withCount('students')->orderBy('name')->get(),
-            'sections' => AcademicSection::with('program:id,college_id,name,code')->orderByDesc('academic_year')->orderBy('name')->get(),
+            'colleges' => College::withCount('programs')->orderBy('name')->get()
+                ->each(fn (College $college) => $college->setAttribute('students_count', Student::forCollege($college->id)->count())),
+            'programs' => Program::with('college:id,name,code')
+                ->withCount(['enrollments as students_count' => fn ($query) => $query->whereNotNull('student_record_id')])
+                ->orderBy('name')->get(),
+            'sections' => AcademicSection::with(['program:id,college_id,name,code', 'academicPeriod:id,academic_year,semester,status'])->newestPeriodFirst()->orderBy('name')->get(),
+            'academic_periods' => AcademicPeriod::orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
+                ->orderByDesc('start_date')->get(['id', 'academic_year', 'semester', 'status']),
             'overview' => [
-                'colleges' => College::where('is_active', true)->count(),
-                'programs' => Program::where('is_active', true)->count(),
-                'sections' => AcademicSection::where('is_active', true)->count(),
+                'colleges' => College::count(),
+                'programs' => Program::count(),
+                'sections' => AcademicSection::count(),
                 'enrolled_students' => Student::count(),
             ],
         ]);
@@ -41,7 +47,6 @@ class AdminSystemController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:10', 'unique:colleges,code'],
             'required_ojt_hours' => ['required', 'numeric', 'between:1,2000'],
-            'is_active' => ['nullable', 'boolean'],
         ]);
 
         return response()->json([
@@ -56,7 +61,6 @@ class AdminSystemController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:10', Rule::unique('colleges', 'code')->ignore($college)],
             'required_ojt_hours' => ['required', 'numeric', 'between:1,2000'],
-            'is_active' => ['required', 'boolean'],
         ]);
         $college->update($data);
 
@@ -65,20 +69,13 @@ class AdminSystemController extends Controller
 
     public function destroyCollege(College $college)
     {
-        $college->update(['is_active' => false]);
-
-        return response()->json(['message' => 'College deactivated. Connected records were preserved.']);
-    }
-
-    public function permanentDestroyCollege(College $college)
-    {
         $this->ensureNoConnectedRecords($college->name, 'college_id', $college->id, [
             'programs', 'students', 'users', 'ojt_enrollments', 'htes', 'holidays', 'moas',
         ]);
 
-        $this->permanentlyDelete($college, 'college');
+        $this->deleteAcademicRecord($college, 'college');
 
-        return response()->json(['message' => 'College permanently deleted.']);
+        return response()->json(['message' => 'College deleted successfully.']);
     }
 
     public function storeProgram(Request $request)
@@ -87,7 +84,6 @@ class AdminSystemController extends Controller
             'college_id' => ['required', 'exists:colleges,id'],
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:20', 'unique:programs,code'],
-            'is_active' => ['nullable', 'boolean'],
         ]);
 
         return response()->json(['message' => 'Program created successfully.', 'program' => Program::create($data)], 201);
@@ -99,7 +95,6 @@ class AdminSystemController extends Controller
             'college_id' => ['required', 'exists:colleges,id'],
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:20', Rule::unique('programs', 'code')->ignore($program)],
-            'is_active' => ['required', 'boolean'],
         ]);
         $program->update($data);
 
@@ -108,21 +103,14 @@ class AdminSystemController extends Controller
 
     public function destroyProgram(Program $program)
     {
-        $program->update(['is_active' => false]);
-
-        return response()->json(['message' => 'Program deactivated. Connected records were preserved.']);
-    }
-
-    public function permanentDestroyProgram(Program $program)
-    {
         $this->ensureNoConnectedRecords($program->name, 'program_id', $program->id, [
             'students', 'users', 'ojt_enrollments', 'htes', 'holidays', 'moas',
             'academic_sections', 'program_requirements', 'report_templates', 'generated_reports',
         ]);
 
-        $this->permanentlyDelete($program, 'program');
+        $this->deleteAcademicRecord($program, 'program');
 
-        return response()->json(['message' => 'Program permanently deleted.']);
+        return response()->json(['message' => 'Program deleted successfully.']);
     }
 
     public function storeSection(Request $request)
@@ -141,20 +129,13 @@ class AdminSystemController extends Controller
 
     public function destroySection(AcademicSection $section)
     {
-        $section->update(['is_active' => false]);
-
-        return response()->json(['message' => 'Section deactivated. Historical enrollment context was preserved.']);
-    }
-
-    public function permanentDestroySection(AcademicSection $section)
-    {
         $this->ensureNoConnectedRecords($section->name, 'academic_section_id', $section->id, [
             'students', 'ojt_enrollments', 'hte_batch_schedules',
         ]);
 
-        $this->permanentlyDelete($section, 'section');
+        $this->deleteAcademicRecord($section, 'section');
 
-        return response()->json(['message' => 'Section permanently deleted.']);
+        return response()->json(['message' => 'Section deleted successfully.']);
     }
 
     public function settings()
@@ -181,7 +162,9 @@ class AdminSystemController extends Controller
     {
         $attendanceByStatus = Attendance::selectRaw('status, COUNT(*) as total')
             ->groupBy('status')->pluck('total', 'status');
-        $studentsByProgram = Program::withCount('students')
+        $studentsByProgram = Program::withCount([
+            'enrollments as students_count' => fn ($query) => $query->whereNotNull('student_record_id'),
+        ])
             ->orderByDesc('students_count')->limit(8)->get(['id', 'name', 'code']);
         $requirements = InternshipRequirement::selectRaw('status, COUNT(*) as total')
             ->groupBy('status')->pluck('total', 'status');
@@ -191,7 +174,7 @@ class AdminSystemController extends Controller
             'overview' => [
                 'users' => User::count(),
                 'students' => Student::count(),
-                'active_interns' => Student::where('internship_status', 'active')->count(),
+                'active_interns' => Student::forInternshipStatus('active')->count(),
                 'partner_htes' => HTE::where('is_active', true)->count(),
                 'approved_moas' => MOA::where('status', 'approved')->count(),
                 'attendance_records' => Attendance::count(),
@@ -213,7 +196,18 @@ class AdminSystemController extends Controller
 
     private function sectionData(Request $request, ?AcademicSection $section = null): array
     {
-        return $request->validate([
+        $periodData = $request->validate([
+            'academic_period_id' => ['required', 'integer', Rule::exists('academic_periods', 'id')],
+        ]);
+        $period = AcademicPeriod::findOrFail($periodData['academic_period_id']);
+        if ($section && (int) $section->academic_period_id !== $period->id) {
+            abort_if(Student::forAcademicSection($section->id)->exists()
+                || DB::table('ojt_enrollments')->where('academic_section_id', $section->id)->exists()
+                || DB::table('hte_batch_schedules')->where('academic_section_id', $section->id)->exists(),
+                422, 'This section has linked records and cannot be moved to another academic period.');
+        }
+
+        $data = $request->validate([
             'program_id' => ['required', 'exists:programs,id'],
             'name' => [
                 'required',
@@ -221,30 +215,30 @@ class AdminSystemController extends Controller
                 'max:60',
                 Rule::unique('academic_sections')->where(fn ($query) => $query
                     ->where('program_id', $request->input('program_id'))
-                    ->where('academic_year', $request->input('academic_year')))
+                    ->where('academic_period_id', $period->id))
                     ->ignore($section),
             ],
             'year_level' => ['required', 'integer', 'between:1,6'],
-            'academic_year' => ['required', 'regex:/^\d{4}-\d{4}$/'],
-            'is_active' => ['required', 'boolean'],
         ]);
+
+        return [...$data, 'academic_period_id' => $period->id];
     }
 
     private function ensureNoConnectedRecords(string $name, string $foreignKey, int $id, array $tables): void
     {
         foreach ($tables as $table) {
             if (DB::table($table)->where($foreignKey, $id)->exists()) {
-                abort(422, "{$name} has connected records and cannot be permanently deleted. Deactivate it instead.");
+                abort(422, "{$name} has connected records and cannot be deleted.");
             }
         }
     }
 
-    private function permanentlyDelete(College|Program|AcademicSection $record, string $type): void
+    private function deleteAcademicRecord(College|Program|AcademicSection $record, string $type): void
     {
         try {
             $record->delete();
         } catch (QueryException) {
-            abort(422, "This {$type} is referenced by another record and cannot be permanently deleted. Deactivate it instead.");
+            abort(422, "This {$type} is referenced by another record and cannot be deleted.");
         }
     }
 

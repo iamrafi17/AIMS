@@ -68,7 +68,7 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'maroon' }) {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <div className="portal-metric-card rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="flex items-start justify-between gap-3">
         <div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p><p className="mt-2 text-3xl font-black text-[#690016] dark:text-white">{value}</p><p className="mt-1 text-xs text-slate-400">{note}</p></div>
         <div className={`grid h-11 w-11 place-items-center rounded-2xl text-xl ${tones[tone]}`}><Icon /></div>
@@ -278,7 +278,7 @@ function DocumentReview() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="program-document-review portal-card-tables space-y-6">
       <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#690016] via-[#690d0d] to-[#8d1717] p-6 text-white shadow-lg sm:p-8">
         <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border-[44px] border-white/5" />
         <div className="absolute bottom-0 right-28 h-28 w-28 rounded-full bg-[#f1c54c]/10 blur-2xl" />
@@ -292,7 +292,7 @@ function DocumentReview() {
         </div>
       </header>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Pending requirements" value={summary.pending_requirements} note="Awaiting academic review" icon={FiClock} tone="amber" />
         <MetricCard label="Approved requirements" value={summary.approved_requirements} note={`${requirementApprovalRate}% decision approval rate`} icon={FiCheckCircle} tone="green" />
         <MetricCard label="Pending MOAs" value={summary.pending_moas} note={`${summary.total_moas} agreements monitored`} icon={FiBriefcase} tone="blue" />
@@ -300,7 +300,7 @@ function DocumentReview() {
       </section>
 
       <nav className="overflow-x-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-800" aria-label="Document review sections">
-        <div className="flex min-w-max gap-1">
+        <div className="portal-mobile-tabs flex min-w-max gap-1">
           {tabs.map((tab) => (
             <button key={tab.id} type="button" onClick={() => { setActiveTab(tab.id); setStatusFilter('all'); setTypeFilter('all'); }} className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-xs font-black transition ${activeTab === tab.id ? 'bg-[#7D001D] text-white shadow-md shadow-[#7D001D]/15' : 'text-slate-500 hover:bg-slate-50 hover:text-[#7D001D] dark:text-gray-300 dark:hover:bg-gray-700'}`}>
               <tab.icon className="text-base" /> {tab.label}
@@ -312,10 +312,10 @@ function DocumentReview() {
       </nav>
 
       {activeTab !== 'monitoring' && (
-        <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 md:flex-row">
-          <label className="relative flex-1"><FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={activeTab === 'requirements' ? 'Search student, ID, program, or requirement...' : 'Search HTE, college, or status...'} className={`${inputClass} pl-10`} /></label>
+        <div className="portal-filter-panel flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 md:flex-row">
+          <label className="portal-filter-search relative flex-1"><FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={activeTab === 'requirements' ? 'Search student, ID, program, or requirement...' : 'Search HTE, college, or status...'} className={`${inputClass} pl-10`} /></label>
           <div className="flex gap-2">
-            <label className="relative flex-1 md:w-44"><FiFilter className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={`${inputClass} appearance-none pl-9`}><option value="all">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option>{activeTab === 'moas' && <option value="expired">Expired</option>}</select></label>
+            <label className="portal-filter-field--icon relative flex-1 md:w-44"><FiFilter className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={`${inputClass} appearance-none pl-9`}><option value="all">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option>{activeTab === 'moas' && <option value="expired">Expired</option>}</select></label>
             {activeTab === 'requirements' && <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className={`${inputClass} flex-1 md:w-40`}><option value="all">All file types</option><option value="pdf">PDF</option><option value="image">Image</option><option value="document">Document</option></select>}
           </div>
         </div>
@@ -324,7 +324,7 @@ function DocumentReview() {
       {activeTab === 'requirements' && (
         <Panel title="Requirement Review" subtitle={`${filteredRequirements.length} submitted requirement records shown`} icon={FiFileText}>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left">
+            <table className="portal-card-table portal-card-table--document-review w-full min-w-[980px] text-left">
               <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700"><th className="pb-3 font-black">Student</th><th className="pb-3 font-black">Requirement</th><th className="pb-3 font-black">File</th><th className="pb-3 font-black">Submitted</th><th className="pb-3 font-black">Review Status</th><th className="pb-3 font-black">Reviewer</th><th className="pb-3 text-right font-black">Actions</th></tr></thead>
               <tbody>{filteredRequirements.map((requirement) => (
                 <tr key={requirement.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 dark:border-gray-700 dark:hover:bg-gray-900/40">

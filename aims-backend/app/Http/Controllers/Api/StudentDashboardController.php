@@ -8,6 +8,8 @@ use App\Models\Attendance;
 use App\Models\InternshipRequirement;
 use App\Models\Student;
 use App\Support\AttendanceHours;
+use App\Support\EffectiveSchedule;
+use App\Support\HolidayCalendar;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -23,21 +25,10 @@ class StudentDashboardController extends Controller
 
         $today = now()->toDateString();
 
-        $attendanceRecords = Attendance::where('student_id', $student->id)
+        $attendanceRecords = Attendance::forStudent($student->id)
             ->orderBy('date')
-            ->get([
-                'date',
-                'status',
-                'time_in',
-                'time_out',
-                'am_time_in',
-                'am_time_out',
-                'pm_time_in',
-                'pm_time_out',
-                'overtime_hours',
-                'am_activity',
-                'pm_activity',
-            ]);
+            ->with(['events', 'scheduleSnapshots', 'journals'])
+            ->get();
 
         $monthlyAttendance = $attendanceRecords->filter(fn (Attendance $attendance) => $attendance->date->month === now()->month
             && $attendance->date->year === now()->year
@@ -75,12 +66,18 @@ class StudentDashboardController extends Controller
             : 0;
 
         $schedule = $this->scheduleProgress($student);
+        $dailyScheduledHours = $this->dailyScheduledHours($student);
+        $workingDaysLeft = $hoursLeft > 0 ? (int) ceil($hoursLeft / $dailyScheduledHours) : 0;
+        $holidayForecast = HolidayCalendar::forecastForStudent($student);
 
-        // Get pending requirements
-        $pendingRequirements = InternshipRequirement::where('student_id', $student->id)
+        $requirements = InternshipRequirement::where('student_id', $student->id)
             ->activeDefinitionOrLegacy()
-            ->where('status', 'pending')
-            ->count();
+            ->get(['id', 'status']);
+        $requirementTotal = $requirements->count();
+        $approvedRequirements = $requirements->where('status', 'approved')->count();
+        $requirementPercent = $requirementTotal > 0
+            ? min(($approvedRequirements / $requirementTotal) * 100, 100)
+            : 0;
 
         // Get recent announcements
         $announcements = Announcement::where('is_published', true)
@@ -90,7 +87,7 @@ class StudentDashboardController extends Controller
             ->get();
 
         // Check if student has clocked in today
-        $todayAttendance = Attendance::where('student_id', $student->id)
+        $todayAttendance = Attendance::forStudent($student->id)
             ->whereDate('date', $today)
             ->first();
         $tasks = $student->tasks()
@@ -127,7 +124,11 @@ class StudentDashboardController extends Controller
                 'hours_left' => round($hoursLeft, 2),
                 'percent_complete' => round($progressPercent, 1),
                 'entries' => $activityEntries,
-                'days_left' => $schedule['days_left'],
+                'days_left' => $workingDaysLeft,
+                'working_days_left' => $workingDaysLeft,
+                'calendar_days_left' => $schedule['days_left'],
+                'daily_scheduled_hours' => round($dailyScheduledHours, 2),
+                'projected_completion_date' => HolidayCalendar::projectedCompletion($student, $workingDaysLeft),
                 'semester_elapsed_percent' => $schedule['elapsed_percent'],
                 'start_date' => $student->ojt_start_date?->toDateString(),
                 'end_date' => $student->ojt_end_date?->toDateString(),
@@ -137,7 +138,14 @@ class StudentDashboardController extends Controller
                 'weekly_hours' => $weeklyHours,
             ],
             'rendered_hours' => round($renderedHours, 2),
-            'pending_requirements' => $pendingRequirements,
+            'requirements_progress' => [
+                'approved' => $approvedRequirements,
+                'total' => $requirementTotal,
+                'pending' => $requirements->where('status', 'pending')->count(),
+                'percent_complete' => round($requirementPercent, 1),
+            ],
+            'pending_requirements' => $requirements->where('status', 'pending')->count(),
+            'holiday_forecast' => $holidayForecast,
             'announcements' => $announcements,
             'tasks' => $tasks,
             'today_attendance' => $todayAttendance ? [
@@ -153,6 +161,37 @@ class StudentDashboardController extends Controller
     private function attendanceHours(Attendance $attendance, Student $student): float
     {
         return AttendanceHours::total($attendance, $student);
+    }
+
+    private function dailyScheduledHours(Student $student): float
+    {
+        $dailyHours = collect(EffectiveSchedule::week($student))
+            ->where('is_working', true)
+            ->map(fn (array $schedule) => $this->scheduledMinutes([
+                [$schedule['am_start'], $schedule['am_end']],
+                [$schedule['pm_start'], $schedule['pm_end']],
+            ]) / 60)
+            ->filter(fn (float $hours) => $hours > 0);
+
+        return $dailyHours->isNotEmpty() ? (float) $dailyHours->average() : 8.0;
+    }
+
+    private function scheduledMinutes(array $periods): int
+    {
+        $minutes = 0;
+        foreach ($periods as [$startValue, $endValue]) {
+            if (! $startValue || ! $endValue) {
+                continue;
+            }
+
+            $start = Carbon::parse($startValue);
+            $end = Carbon::parse($endValue);
+            if ($end->gt($start)) {
+                $minutes += $start->diffInMinutes($end);
+            }
+        }
+
+        return $minutes;
     }
 
     private function scheduleProgress(Student $student): array

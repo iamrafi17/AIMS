@@ -29,7 +29,7 @@ class CoordinatorAttendanceController extends Controller
         // attendance record becomes expensive as a program accumulates history.
         $query = $this->applyFilters(
             Attendance::query()
-                ->whereHas('student', fn (Builder $student) => $student->where('program_id', ProgramAccess::programId($request->user()))),
+                ->whereHas('student', fn (Builder $student) => $student->forProgram(ProgramAccess::programId($request->user()))),
             $request
         );
 
@@ -73,16 +73,20 @@ class CoordinatorAttendanceController extends Controller
         $programId = ProgramAccess::programId($request->user());
 
         $locations = StudentLiveLocation::query()
-            ->whereHas('student', fn (Builder $student) => $student->where('program_id', $programId))
+            ->whereHas('student', fn (Builder $student) => $student->forProgram($programId))
             ->whereHas('student.user', fn (Builder $user) => $user->where('is_active', true))
             ->whereHas('student.attendance', fn (Builder $attendance) => $attendance
-                ->whereDate('date', now()->toDateString())
-                ->where('status', 'present')
+                ->whereDate('attendance.date', now()->toDateString())
+                ->whereIn('attendance.status', ['present', 'late'])
                 ->where(fn (Builder $session) => $session
-                    ->where(fn (Builder $am) => $am->whereNotNull('am_time_in')->whereNull('am_time_out'))
-                    ->orWhere(fn (Builder $pm) => $pm->whereNotNull('pm_time_in')->whereNull('pm_time_out'))))
+                    ->where(fn (Builder $am) => $am
+                        ->whereHas('events', fn (Builder $events) => $events->where('event_type', 'am_in'))
+                        ->whereDoesntHave('events', fn (Builder $events) => $events->where('event_type', 'am_out')))
+                    ->orWhere(fn (Builder $pm) => $pm
+                        ->whereHas('events', fn (Builder $events) => $events->where('event_type', 'pm_in'))
+                        ->whereDoesntHave('events', fn (Builder $events) => $events->where('event_type', 'pm_out')))))
             ->with([
-                'student:id,user_id,student_id,first_name,last_name,program_id,hte_id',
+                'student:id,user_id,student_id,first_name,last_name',
                 'student.program:id,name,code',
                 'student.hte:id,name,address,latitude,longitude,geofence_radius,geofence_enabled',
             ])
@@ -141,14 +145,12 @@ class CoordinatorAttendanceController extends Controller
             ->when($request->date_to, fn (Builder $builder, string $date) => $builder->whereDate('date', '<=', $date))
             ->when($request->journal, function (Builder $builder, string $journal) {
                 if (in_array($journal, ['pending', 'reviewed'], true)) {
-                    $builder->where('journal_status', $journal)
-                        ->where(fn (Builder $nested) => $nested->whereNotNull('am_activity')->orWhereNotNull('pm_activity'));
+                    $builder->withJournalStatus($journal)->hasJournals();
                 } elseif ($journal === 'submitted') {
-                    $builder->where(fn (Builder $nested) => $nested->whereNotNull('am_activity')->orWhereNotNull('pm_activity'));
+                    $builder->hasJournals();
                 } else {
                     $builder->whereIn('status', ['present', 'late'])
-                        ->whereNull('am_activity')
-                        ->whereNull('pm_activity');
+                        ->withoutJournals();
                 }
             });
     }

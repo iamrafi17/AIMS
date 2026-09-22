@@ -15,15 +15,23 @@ class UserSecurityQuestion extends Model
         'security_question_id',
         'position',
         'answer_hash',
+        'answer_case_sensitive',
     ];
 
     protected $hidden = [
         'answer_hash',
     ];
 
-    public static function normalizeAnswer(string $answer): string
+    protected function casts(): array
     {
-        return Str::of($answer)->squish()->lower()->toString();
+        return ['answer_case_sensitive' => 'boolean'];
+    }
+
+    public static function normalizeAnswer(string $answer, bool $caseSensitive = false): string
+    {
+        $normalized = Str::of($answer)->squish();
+
+        return ($caseSensitive ? $normalized : $normalized->lower())->toString();
     }
 
     public function user()

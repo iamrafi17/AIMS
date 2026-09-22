@@ -116,9 +116,9 @@ class VPAAApprovalManagementTest extends TestCase
             ->where('subject_id', $student->id)
             ->firstOrFail();
 
-        $this->assertDatabaseHas('students', [
-            'id' => $student->id,
-            'schedule_status' => 'pending',
+        $this->assertDatabaseHas('student_internships', [
+            'student_id' => $student->id,
+            'deployment_status' => 'pending',
         ]);
 
         Sanctum::actingAs($vpaa);
@@ -157,9 +157,9 @@ class VPAAApprovalManagementTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('approval.status', 'approved');
 
-        $this->assertDatabaseHas('students', [
-            'id' => $student->id,
-            'schedule_status' => 'approved',
+        $this->assertDatabaseHas('student_internships', [
+            'student_id' => $student->id,
+            'deployment_status' => 'approved',
         ]);
         $this->assertDatabaseHas('approval_records', [
             'id' => $vpaaApproval->id,
@@ -179,8 +179,6 @@ class VPAAApprovalManagementTest extends TestCase
             'is_active' => true,
         ]);
         $hte = HTE::create([
-            'college_id' => $college->id,
-            'program_id' => $program->id,
             'name' => 'Marinduque Technology Partner',
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'HTE Supervisor',
@@ -195,6 +193,7 @@ class VPAAApprovalManagementTest extends TestCase
             'work_days' => ['mon', 'tue', 'wed', 'thu', 'fri'],
             'is_active' => true,
         ]);
+        $hte->programs()->attach($program->id, ['is_active' => true]);
         $student = Student::create([
             'user_id' => $studentUser->id,
             'student_id' => '2026-5001',
@@ -207,6 +206,7 @@ class VPAAApprovalManagementTest extends TestCase
             'contact_number' => '09171111111',
             'college_id' => $college->id,
             'program_id' => $program->id,
+            'academic_period_id' => $this->academicPeriod()->id,
             'year_level' => 4,
             'section' => 'A',
             'parent_name' => 'Test Parent',

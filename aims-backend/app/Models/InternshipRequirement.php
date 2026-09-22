@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class InternshipRequirement extends Model
 {
@@ -25,6 +26,7 @@ class InternshipRequirement extends Model
 
     protected $fillable = [
         'student_id',
+        'student_internship_id',
         'program_requirement_id',
         'requirement_name',
         'file_path',
@@ -40,6 +42,35 @@ class InternshipRequirement extends Model
         return [
             'reviewed_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (InternshipRequirement $requirement): void {
+            $requirement->syncStudentInternshipReference();
+        });
+    }
+
+    private function syncStudentInternshipReference(): void
+    {
+        if (! $this->student_internship_id && $this->student_id) {
+            $this->student_internship_id = StudentInternship::query()
+                ->where('student_id', $this->student_id)
+                ->where('is_current', true)
+                ->latest('id')
+                ->value('id');
+        }
+
+        if (! $this->student_id && $this->student_internship_id) {
+            $this->student_id = StudentInternship::query()
+                ->whereKey($this->student_internship_id)
+                ->value('student_id');
+        }
+    }
+
+    public function internship(): BelongsTo
+    {
+        return $this->belongsTo(StudentInternship::class, 'student_internship_id');
     }
 
     public function student()
@@ -79,8 +110,10 @@ class InternshipRequirement extends Model
 
         $students = Student::query()
             ->whereIn('id', $studentIds)
-            ->get(['id', 'program_id'])
-            ->groupBy('program_id');
+            ->with('currentInternship.academicSection:id,program_id')
+            ->get(['id'])
+            ->filter(fn (Student $student) => $student->program_id)
+            ->groupBy(fn (Student $student) => (int) $student->program_id);
 
         foreach ($students as $programId => $programStudents) {
             ProgramRequirement::ensureDefaultsForProgram((int) $programId);

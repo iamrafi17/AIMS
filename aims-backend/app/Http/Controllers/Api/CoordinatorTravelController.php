@@ -140,6 +140,6 @@ class CoordinatorTravelController extends Controller
 
         return TravelLog::query()
             ->where('coordinator_id', $request->user()->id)
-            ->whereHas('participants', fn ($query) => $query->where('program_id', $programId));
+            ->whereHas('participants', fn ($query) => $query->forProgram($programId));
     }
 }

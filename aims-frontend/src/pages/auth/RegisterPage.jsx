@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   FiArrowLeft,
@@ -19,6 +19,7 @@ import api from '../../services/api';
 import useAuth from '../../context/useAuth';
 import marsuLogo from '../../assets/marsu-logo.png';
 import ContactNumberInput from '../../components/forms/ContactNumberInput';
+import { getPasswordStrength } from '../../utils/passwordStrength';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500';
 
@@ -31,11 +32,11 @@ const steps = [
   { number: 6, title: 'Account', description: 'Create your credentials', icon: FiKey },
 ];
 
-function Field({ label, hint, className = '', children }) {
+function Field({ label, hint, htmlFor, className = '', children }) {
   return (
     <div className={className}>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <label className="block text-sm font-extrabold text-slate-700">{label}</label>
+        <label htmlFor={htmlFor} className="block text-sm font-extrabold text-slate-700">{label}</label>
         {hint && <span className="text-xs font-medium text-slate-400">{hint}</span>}
       </div>
       {children}
@@ -60,17 +61,13 @@ function RegisterPage() {
   const [enrollmentVerified, setEnrollmentVerified] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
   const [colleges, setColleges] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [htes, setHtes] = useState([]);
   const [securityQuestions, setSecurityQuestions] = useState([]);
   const { register } = useAuth();
   const navigate = useNavigate();
-
-  const schoolYears = useMemo(() => {
-    const year = new Date().getFullYear();
-    return [`${year}-${year + 1}`, `${year + 1}-${year + 2}`];
-  }, []);
 
   const [formData, setFormData] = useState({
     student_id: '',
@@ -141,7 +138,7 @@ function RegisterPage() {
     setFormData((current) => ({
       ...current,
       ...(name === 'college_id' ? { program_id: '', hte_id: '' } : {}),
-      ...(name === 'student_id' ? { first_name: '', middle_name: '', last_name: '', section: '', college_id: '', program_id: '', hte_id: '' } : {}),
+      ...(name === 'student_id' ? { first_name: '', middle_name: '', last_name: '', year_level: '', section: '', college_id: '', program_id: '', hte_id: '', internship_semester: '', internship_year: '' } : {}),
       [name]: type === 'checkbox' ? checked : value,
     }));
     if (name === 'student_id') setEnrollmentVerified(false);
@@ -169,15 +166,18 @@ function RegisterPage() {
         student_id: response.data.student_id,
         first_name: response.data.first_name,
         last_name: response.data.last_name,
+        year_level: response.data.academic_section?.year_level || '',
         section: response.data.section,
         college_id: response.data.college?.id || '',
         program_id: response.data.program?.id || '',
+        internship_semester: response.data.internship_semester || '',
+        internship_year: response.data.internship_year || '',
         hte_id: '',
       }));
       setEnrollmentVerified(true);
       toast.success('Student found in the official student list.');
     } catch (error) {
-      setFormData((current) => ({ ...current, first_name: '', middle_name: '', last_name: '', section: '', college_id: '', program_id: '', hte_id: '' }));
+      setFormData((current) => ({ ...current, first_name: '', middle_name: '', last_name: '', year_level: '', section: '', college_id: '', program_id: '', hte_id: '', internship_semester: '', internship_year: '' }));
       toast.error(error.response?.data?.message || 'Your School No. was not found in the official student list.');
     } finally {
       setEnrollmentLoading(false);
@@ -202,6 +202,11 @@ function RegisterPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
+    if (formData.password.length < 8 || formData.password.length > 12) {
+      toast.error('Your password must be 8–12 characters.');
+      return;
+    }
+
     if (formData.password !== formData.password_confirmation) {
       toast.error('Your password confirmation does not match.');
       return;
@@ -225,7 +230,7 @@ function RegisterPage() {
 
     try {
       await register(formData);
-      toast.success('Registration submitted for coordinator review.');
+      toast.success('Registration successful. You can now log in.');
       navigate('/login', { replace: true });
     } catch (error) {
       const validationErrors = error.response?.data?.errors;
@@ -239,6 +244,11 @@ function RegisterPage() {
   const selectedCollege = colleges.find((college) => String(college.id) === String(formData.college_id));
   const selectedProgram = programs.find((program) => String(program.id) === String(formData.program_id));
   const selectedHte = htes.find((hte) => String(hte.id) === String(formData.hte_id));
+  const passwordStrength = getPasswordStrength(formData.password);
+  const passwordRequirements = [
+    { label: '8–12 characters', met: formData.password.length >= 8 && formData.password.length <= 12 },
+    { label: 'Matches Confirm Password', met: Boolean(formData.password) && formData.password === formData.password_confirmation },
+  ];
 
   const renderStep = () => {
     switch (step) {
@@ -291,7 +301,7 @@ function RegisterPage() {
       case 2:
         return (
           <>
-            <StepHeader eyebrow="Step 2 of 6" title="Academic information" description="Your official college, program, and section are loaded from the coordinator's OJT enrollment list." />
+            <StepHeader eyebrow="Step 2 of 6" title="Academic information" description="Your official college, program, year level, and section are loaded from the coordinator's OJT enrollment list." />
             <div className="grid gap-5 sm:grid-cols-2">
               <Field label="Department / College" className="sm:col-span-2">
                 <select name="college_id" value={formData.college_id} onChange={handleChange} required className={inputClass} disabled>
@@ -305,12 +315,8 @@ function RegisterPage() {
                   {programs.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
                 </select>
               </Field>
-              <Field label="Year Level">
-                <select name="year_level" value={formData.year_level} onChange={handleChange} required className={inputClass}>
-                  <option value="">Select year level</option>
-                  <option value="4">4th Year</option>
-                  <option value="5">5th Year</option>
-                </select>
+              <Field label="Year Level" hint="Verified">
+                <input value={formData.year_level ? `Year ${formData.year_level}` : ''} readOnly required className={inputClass} placeholder="Loaded from your OJT enrollment" />
               </Field>
               <Field label="Section">
                 <input name="section" value={formData.section} readOnly required className={inputClass} placeholder="Loaded from your OJT enrollment" />
@@ -347,21 +353,13 @@ function RegisterPage() {
       case 4:
         return (
           <>
-            <StepHeader eyebrow="Step 4 of 6" title="Internship information" description="Indicate your preferred placement and intended internship term." />
+            <StepHeader eyebrow="Step 4 of 6" title="Internship information" description="Your semester and school year come from your official academic period. You may indicate your preferred placement below." />
             <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Internship Semester">
-                <select name="internship_semester" value={formData.internship_semester} onChange={handleChange} required className={inputClass}>
-                  <option value="">Select semester</option>
-                  <option value="First Semester">First Semester</option>
-                  <option value="Second Semester">Second Semester</option>
-                  <option value="Midyear / Summer">Midyear / Summer</option>
-                </select>
+              <Field label="Internship Semester" hint="From academic period">
+                <input type="text" name="internship_semester" aria-label="Internship Semester" value={formData.internship_semester} readOnly className={`${inputClass} bg-slate-50`} />
               </Field>
-              <Field label="Internship School Year">
-                <select name="internship_year" value={formData.internship_year} onChange={handleChange} required className={inputClass}>
-                  <option value="">Select school year</option>
-                  {schoolYears.map((year) => <option key={year} value={year}>{year}</option>)}
-                </select>
+              <Field label="Internship School Year" hint="From academic period">
+                <input type="text" name="internship_year" aria-label="Internship School Year" value={formData.internship_year} readOnly className={`${inputClass} bg-slate-50`} />
               </Field>
               <Field label="Preferred Host Training Establishment" hint="Optional" className="sm:col-span-2">
                 <select name="hte_id" value={formData.hte_id} onChange={handleChange} className={inputClass} disabled={!formData.college_id}>
@@ -400,19 +398,41 @@ function RegisterPage() {
       case 6:
         return (
           <>
-            <StepHeader eyebrow="Step 6 of 6" title="Account credentials" description="Your Student ID will be your AIMS username after coordinator approval." />
+            <StepHeader eyebrow="Step 6 of 6" title="Account credentials" description="Your Student ID will be your AIMS username once registration is complete." />
             <div className="grid gap-5 sm:grid-cols-2">
               <Field label="Username" hint="Student ID" className="sm:col-span-2">
                 <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600"><FiUser /> {formData.student_id || 'Complete Step 1'}</div>
               </Field>
-              <Field label="Password" hint="Minimum 8 characters">
+              <Field label="Password" hint="8–12 characters" htmlFor="student-registration-password">
                 <div className="relative">
-                  <input type={showPassword ? 'text' : 'password'} name="password" value={formData.password} onChange={handleChange} required minLength={8} className={`${inputClass} pr-11`} autoComplete="new-password" />
-                  <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" aria-label={showPassword ? 'Hide passwords' : 'Show passwords'}>{showPassword ? <FiEyeOff /> : <FiEye />}</button>
+                  <input id="student-registration-password" type={showPassword ? 'text' : 'password'} name="password" value={formData.password} onChange={handleChange} required minLength={8} maxLength={12} className={`${inputClass} pr-11`} autoComplete="new-password" aria-describedby="student-password-strength student-password-requirements" />
+                  <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#7D001D]" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>{showPassword ? <FiEyeOff /> : <FiEye />}</button>
+                </div>
+                <div id="student-password-strength" role="status" aria-live="polite" aria-atomic="true" className="mt-2">
+                  {passwordStrength && <>
+                    <div aria-hidden="true" className="flex gap-1.5">
+                      {[1, 2, 3].map((segment) => <span key={segment} className={`h-1.5 flex-1 rounded-full ${segment <= passwordStrength.segments ? passwordStrength.barClass : 'bg-slate-200'}`} />)}
+                    </div>
+                    <span className={`mt-1 block text-xs font-bold ${passwordStrength.textClass}`}>Password strength: {passwordStrength.label}</span>
+                  </>}
+                </div>
+                <div id="student-password-requirements" className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-5">
+                  <p className="font-bold text-slate-700">Password requirements</p>
+                  <ul className="mt-1 space-y-1">
+                    {passwordRequirements.map((requirement) => <li key={requirement.label} className={`flex items-start gap-2 ${requirement.met ? 'text-green-600' : 'text-slate-500'}`}>
+                      {requirement.met ? <FiCheckCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /> : <span aria-hidden="true" className="mt-1 h-3 w-3 shrink-0 rounded-full border border-current" />}
+                      <span><span className="sr-only">{requirement.met ? 'Met: ' : 'Not yet met: '}</span>{requirement.label}</span>
+                    </li>)}
+                  </ul>
+                  <p className="mt-2 text-slate-500">Passwords are case-sensitive.</p>
+                  <p className="mt-2 text-slate-500">For a stronger password, use 12 characters with uppercase and lowercase letters, numbers, and symbols.</p>
                 </div>
               </Field>
-              <Field label="Confirm Password">
-                <input type={showPassword ? 'text' : 'password'} name="password_confirmation" value={formData.password_confirmation} onChange={handleChange} required minLength={8} className={inputClass} autoComplete="new-password" />
+              <Field label="Confirm Password" htmlFor="student-registration-password-confirmation">
+                <div className="relative">
+                  <input id="student-registration-password-confirmation" type={showPasswordConfirmation ? 'text' : 'password'} name="password_confirmation" value={formData.password_confirmation} onChange={handleChange} required minLength={8} maxLength={12} className={`${inputClass} pr-11`} autoComplete="new-password" />
+                  <button type="button" onClick={() => setShowPasswordConfirmation((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#7D001D]" aria-label={showPasswordConfirmation ? 'Hide confirm password' : 'Show confirm password'} aria-pressed={showPasswordConfirmation}>{showPasswordConfirmation ? <FiEyeOff /> : <FiEye />}</button>
+                </div>
               </Field>
             </div>
             <div className="mt-7 rounded-xl border border-[#7D001D]/15 bg-[#7D001D]/[0.025] p-5 sm:p-6">
@@ -420,7 +440,7 @@ function RegisterPage() {
                 <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#7D001D]/10 text-[#7D001D]"><FiShield /></div>
                 <div>
                   <h3 className="font-black text-[#690016]">Security questions</h3>
-                  <p className="mt-1 text-sm leading-6 text-slate-500">Select three different questions. Your answers will be securely hashed and used only if you need to reset your password.</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">Select three different questions. Answers are case-sensitive, so remember the uppercase and lowercase letters you use. Your answers will be securely hashed and used only if you need to reset your password.</p>
                 </div>
               </div>
               <div className="mt-5 space-y-5">
@@ -491,7 +511,7 @@ function RegisterPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.14),transparent_28%),linear-gradient(135deg,#fbfaf8,#f6eeee)]">
+    <main className="auth-shell registration-shell min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.14),transparent_28%),linear-gradient(135deg,#fbfaf8,#f6eeee)]">
       <header className="border-b border-black/5 bg-white/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-5 lg:px-8">
           <Link to="/" className="flex min-w-0 items-center gap-2.5 sm:gap-3">
@@ -502,14 +522,14 @@ function RegisterPage() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-3 py-5 sm:px-5 sm:py-8 lg:grid-cols-[300px_1fr] lg:items-start lg:gap-7 lg:px-8 lg:py-12">
-        <aside className="min-w-0 overflow-hidden rounded-xl bg-[#650707] p-5 text-white shadow-sm shadow-[#650707]/10 lg:sticky lg:top-6 lg:p-6">
+      <div className="registration-layout mx-auto grid max-w-7xl gap-5 px-3 py-5 sm:px-5 sm:py-8 lg:grid-cols-[300px_1fr] lg:items-start lg:gap-7 lg:px-8 lg:py-12">
+        <aside className="registration-steps min-w-0 overflow-hidden rounded-xl bg-[#650707] p-5 text-white shadow-sm shadow-[#650707]/10 lg:sticky lg:top-6 lg:p-6">
           <Link to="/" className="mb-6 inline-flex items-center gap-2 text-xs font-bold text-white/55 hover:text-white"><FiArrowLeft /> Back to AIMS home</Link>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#e4c65e]">Student application</p>
           <h1 className="mt-2 text-2xl font-black tracking-tight">Join the AIMS community</h1>
           <p className="mt-3 text-sm leading-6 text-white/60">Complete all six steps. You can review previous steps before submission.</p>
 
-          <div className="mt-7 flex max-w-full gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible">
+          <div className="registration-step-list mt-7 flex max-w-full gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible">
             {steps.map((item) => {
               const Icon = item.icon;
               const active = step === item.number;
@@ -527,11 +547,11 @@ function RegisterPage() {
 
           <div className="mt-7 hidden rounded-xl border border-white/10 bg-white/[0.055] p-4 text-xs leading-5 text-white/55 lg:block">
             <strong className="mb-1 block text-white">What happens next?</strong>
-            Your coordinator reviews the application. You’ll be able to log in after approval.
+            Your official eligible list entry allows you to register. You can log in once your account is complete.
           </div>
         </aside>
 
-        <section className="min-w-0 overflow-hidden rounded-xl border border-black/[0.055] bg-white shadow-sm shadow-slate-900/5">
+        <section className="registration-form min-w-0 overflow-hidden rounded-xl border border-black/[0.055] bg-white shadow-sm shadow-slate-900/5">
           <div className="h-1.5 bg-slate-100"><div className="h-full bg-gradient-to-r from-[#7D001D] to-[#d4af37] transition-all duration-500" style={{ width: `${(step / steps.length) * 100}%` }} /></div>
           <form onSubmit={step === steps.length ? handleSubmit : nextStep} className="p-4 sm:p-7 lg:p-10">
             {renderStep()}

@@ -8,6 +8,7 @@ use App\Models\Attendance;
 use App\Models\HTE;
 use App\Models\InternshipRequirement;
 use App\Models\MOA;
+use App\Models\OjtEnrollment;
 use App\Models\Student;
 use App\Models\TravelLog;
 use App\Support\AttendanceHours;
@@ -19,10 +20,10 @@ class CoordinatorDashboardController extends Controller
     public function index(Request $request)
     {
         $programId = ProgramAccess::programId($request->user());
-        $students = Student::where('program_id', $programId)->get();
+        $students = Student::forProgram($programId)->get();
         $monthAttendance = Attendance::whereMonth('date', now()->month)
             ->whereYear('date', now()->year)
-            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('student', fn ($query) => $query->forProgram($programId))
             ->get();
 
         $present = $monthAttendance->where('status', 'present')->count();
@@ -44,7 +45,7 @@ class CoordinatorDashboardController extends Controller
         });
 
         $requirements = InternshipRequirement::activeDefinitionOrLegacy()
-            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('student', fn ($query) => $query->forProgram($programId))
             ->get();
         $approvedRequirements = $requirements->where('status', 'approved')->count();
         $requirementTotal = $requirements->count();
@@ -56,15 +57,15 @@ class CoordinatorDashboardController extends Controller
 
         $monthTravel = TravelLog::whereMonth('start_time', now()->month)
             ->whereYear('start_time', now()->year)
-            ->whereHas('participants', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('participants', fn ($query) => $query->forProgram($programId))
             ->get();
         $activeTravel = TravelLog::whereIn('status', ['active', 'traveling', 'arrived'])
-            ->whereHas('participants', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('participants', fn ($query) => $query->forProgram($programId))
             ->count();
 
         $activeInterns = Student::with(['college', 'program', 'hte', 'attendance', 'requirements.definition'])
-            ->where('internship_status', 'active')
-            ->where('program_id', $programId)
+            ->forInternshipStatus('active')
+            ->forProgram($programId)
             ->orderBy('last_name')
             ->limit(8)
             ->get()
@@ -93,16 +94,16 @@ class CoordinatorDashboardController extends Controller
                 ];
             })->values();
 
-        $pendingRegistrations = $students->where('registration_status', 'pending')->count();
+        $awaitingRegistration = OjtEnrollment::forProgram($programId)->whereNull('registered_at')->count();
         $missingJournals = max($expectedJournals - $submittedJournals, 0);
         $pendingRequirements = $requirements->where('status', 'pending')->count();
         $todayAbsent = Attendance::whereDate('date', now()->toDateString())
             ->where('status', 'absent')
-            ->whereHas('student', fn ($query) => $query->where('program_id', $programId))
+            ->whereHas('student', fn ($query) => $query->forProgram($programId))
             ->count();
 
         $alerts = collect([
-            $pendingRegistrations > 0 ? ['type' => 'warning', 'title' => 'Pending registrations', 'message' => $pendingRegistrations.' student registration(s) need review.', 'count' => $pendingRegistrations, 'link' => '/coordinator/students'] : null,
+            $awaitingRegistration > 0 ? ['type' => 'warning', 'title' => 'Awaiting student registration', 'message' => $awaitingRegistration.' eligible student(s) have not completed their accounts.', 'count' => $awaitingRegistration, 'link' => '/coordinator/students'] : null,
             $pendingRequirements > 0 ? ['type' => 'info', 'title' => 'Requirements awaiting review', 'message' => $pendingRequirements.' submitted requirement(s) are pending.', 'count' => $pendingRequirements, 'link' => '/coordinator/students'] : null,
             $missingJournals > 0 ? ['type' => 'danger', 'title' => 'Missing journal entries', 'message' => $missingJournals.' expected accomplishment report(s) are missing this month.', 'count' => $missingJournals, 'link' => '/coordinator/attendance'] : null,
             $expiringMoas->count() > 0 ? ['type' => 'warning', 'title' => 'MOAs expiring soon', 'message' => $expiringMoas->count().' approved MOA(s) expire within 30 days.', 'count' => $expiringMoas->count(), 'link' => '/coordinator/htes'] : null,
@@ -128,7 +129,7 @@ class CoordinatorDashboardController extends Controller
                 'completed' => $students->where('internship_status', 'completed')->count(),
                 'pending' => $students->where('internship_status', 'pending')->count(),
                 'dropped' => $students->where('internship_status', 'dropped')->count(),
-                'pending_registrations' => $pendingRegistrations,
+                'awaiting_registration' => $awaitingRegistration,
             ],
             'active_interns' => $activeInterns,
             'attendance' => [

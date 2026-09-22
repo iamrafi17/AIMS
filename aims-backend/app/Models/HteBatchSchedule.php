@@ -11,6 +11,7 @@ class HteBatchSchedule extends Model
         'academic_section_id',
         'day_of_week',
         'is_working',
+        'grace_period_minutes',
         'am_start',
         'am_end',
         'pm_start',
@@ -21,6 +22,7 @@ class HteBatchSchedule extends Model
     {
         return [
             'is_working' => 'boolean',
+            'grace_period_minutes' => 'integer',
         ];
     }
 

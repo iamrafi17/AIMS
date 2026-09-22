@@ -178,7 +178,7 @@ function LandingPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#fbfaf8] text-slate-900">
+    <div className="public-shell landing-shell min-h-screen bg-[#fbfaf8] text-slate-900">
       <div className="bg-[#5c0000] px-3 py-2 text-center text-[10px] font-semibold leading-4 tracking-wide text-white sm:px-4 sm:py-2.5 sm:text-sm">
         Official Internship Portal of Marinduque State University — Santa Cruz Campus
       </div>

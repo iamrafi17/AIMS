@@ -20,44 +20,58 @@ class CoordinatorStudentManagementTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_coordinator_can_update_review_and_deactivate_a_registered_student_without_deleting_history(): void
+    public function test_coordinator_can_update_and_delete_without_registration_review(): void
     {
         [$coordinator, $college, $program, $hte] = $this->managementContext();
         Sanctum::actingAs($coordinator);
 
         $payload = $this->studentPayload($college, $program, $hte);
         $student = $this->createStudent($college, $program, $hte);
+        $student->update(['registration_status' => 'approved', 'internship_status' => 'pending']);
 
         $payload['first_name'] = 'Updated';
+        $payload['middle_name'] = 'Middle';
         $payload['email'] = 'updated.intern@example.com';
+        $payload['contact_number'] = '09179999999';
+        $payload['address'] = 'Updated Address';
+        $payload['registration_status'] = 'rejected';
 
         $this->putJson('/api/coordinator/students/'.$student->id, $payload)
             ->assertOk()
             ->assertJsonPath('student.first_name', 'Updated')
             ->assertJsonPath('student.user.email', 'updated.intern@example.com');
 
-        $this->postJson('/api/coordinator/students/'.$student->id.'/approve')
-            ->assertOk();
+        $this->assertDatabaseHas('users', [
+            'id' => $student->user_id,
+            'name' => 'Updated Middle Intern',
+            'email' => 'updated.intern@example.com',
+            'contact_number' => '09179999999',
+            'address' => 'Updated Address',
+        ]);
 
-        $this->assertDatabaseHas('students', [
-            'id' => $student->id,
+        $this->postJson('/api/coordinator/students/'.$student->id.'/approve')
+            ->assertNotFound();
+        $this->postJson('/api/coordinator/students/'.$student->id.'/reject', ['reason' => 'Former workflow'])
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('ojt_enrollments', [
+            'student_record_id' => $student->id,
             'registration_status' => 'approved',
-            'internship_status' => 'active',
-            'registration_reviewed_by' => $coordinator->id,
+            'registration_reviewed_by' => null,
+        ]);
+        $this->assertDatabaseHas('student_internships', [
+            'student_id' => $student->id,
+            'status' => 'pending',
+            'is_current' => true,
         ]);
 
         $userId = $student->user_id;
         $this->deleteJson('/api/coordinator/students/'.$student->id)
-            ->assertOk();
+            ->assertOk()
+            ->assertJsonPath('message', 'Student record deleted successfully.');
 
-        $this->assertDatabaseHas('students', [
-            'id' => $student->id,
-            'internship_status' => 'dropped',
-        ]);
-        $this->assertDatabaseHas('users', [
-            'id' => $userId,
-            'is_active' => false,
-        ]);
+        $this->assertDatabaseMissing('students', ['id' => $student->id]);
+        $this->assertDatabaseMissing('users', ['id' => $userId]);
     }
 
     public function test_coordinator_can_manually_add_an_ojt_enrollment_without_credentials(): void
@@ -78,7 +92,6 @@ class CoordinatorStudentManagementTest extends TestCase
         $this->assertDatabaseHas('ojt_enrollments', [
             'school_id' => '2026-QUICK-01',
             'full_name' => 'Juan Dela Cruz',
-            'section' => '4A',
             'academic_section_id' => $section->id,
             'source' => 'manual',
         ]);
@@ -88,16 +101,14 @@ class CoordinatorStudentManagementTest extends TestCase
 
     public function test_coordinator_can_choose_the_ojt_enrollment_page_size(): void
     {
-        [$coordinator, $college, $program] = $this->managementContext();
+        [$coordinator, $college, $program, , $section] = $this->managementContext();
         Sanctum::actingAs($coordinator);
 
         foreach (range(1, 11) as $number) {
             OjtEnrollment::create([
                 'school_id' => '2026-PAGE-'.str_pad((string) $number, 2, '0', STR_PAD_LEFT),
                 'full_name' => 'Enrollment Student '.$number,
-                'section' => 'BSIT 4A',
-                'college_id' => $college->id,
-                'program_id' => $program->id,
+                'academic_section_id' => $section->id,
                 'source' => 'manual',
                 'added_by' => $coordinator->id,
             ]);
@@ -114,7 +125,7 @@ class CoordinatorStudentManagementTest extends TestCase
 
     public function test_coordinator_can_choose_the_student_list_page_size(): void
     {
-        [$coordinator, $college, $program] = $this->managementContext();
+        [$coordinator, $college, $program, , $section] = $this->managementContext();
         Sanctum::actingAs($coordinator);
 
         foreach (range(1, 11) as $number) {
@@ -130,6 +141,7 @@ class CoordinatorStudentManagementTest extends TestCase
                 'contact_number' => '09170000000',
                 'college_id' => $college->id,
                 'program_id' => $program->id,
+                'academic_section_id' => $section->id,
                 'year_level' => 4,
                 'section' => 'A',
                 'parent_name' => 'Test Parent',
@@ -346,9 +358,6 @@ class CoordinatorStudentManagementTest extends TestCase
         $this->assertDatabaseHas('ojt_enrollments', [
             'school_id' => '23S0160',
             'full_name' => 'BRIONES, Terrence C',
-            'section' => '4A',
-            'college_id' => $college->id,
-            'program_id' => $program->id,
             'academic_section_id' => $section->id,
             'source' => 'csv',
         ]);
@@ -370,6 +379,7 @@ class CoordinatorStudentManagementTest extends TestCase
         ]);
         $otherSection = AcademicSection::create([
             'program_id' => $otherProgram->id,
+            'academic_period_id' => $this->academicPeriod()->id,
             'name' => '4B',
             'year_level' => 4,
             'academic_year' => '2026-2027',
@@ -465,8 +475,10 @@ class CoordinatorStudentManagementTest extends TestCase
         $coordinator = User::factory()->create(['role' => 'coordinator']);
         $college = College::create(['name' => 'Computing', 'code' => 'CICS', 'is_active' => true]);
         $program = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
+        $period = $this->academicPeriod();
         $section = AcademicSection::create([
             'program_id' => $program->id,
+            'academic_period_id' => $period->id,
             'name' => '4A',
             'year_level' => 4,
             'academic_year' => '2026-2027',
@@ -474,13 +486,15 @@ class CoordinatorStudentManagementTest extends TestCase
         ]);
         $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
         $hte = HTE::create([
-            'college_id' => $college->id,
-            'program_id' => $program->id,
             'name' => 'Partner HTE',
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Supervisor',
             'contact_email' => 'supervisor@example.com',
             'contact_number' => '09171111111',
+            'is_active' => true,
+        ]);
+        $hte->programs()->attach($program->id, [
+            'linked_by' => $coordinator->id,
             'is_active' => true,
         ]);
 
@@ -545,6 +559,10 @@ class CoordinatorStudentManagementTest extends TestCase
 
         unset($payload['email']);
 
-        return Student::create(['user_id' => $user->id, ...$payload]);
+        return Student::create([
+            'user_id' => $user->id,
+            ...$payload,
+            'academic_section_id' => AcademicSection::where('program_id', $program->id)->firstOrFail()->id,
+        ]);
     }
 }
