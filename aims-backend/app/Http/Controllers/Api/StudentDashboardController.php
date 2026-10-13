@@ -8,8 +8,8 @@ use App\Models\Attendance;
 use App\Models\InternshipRequirement;
 use App\Models\Student;
 use App\Support\AttendanceHours;
-use App\Support\EffectiveSchedule;
 use App\Support\HolidayCalendar;
+use App\Support\OjtCompletion;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -59,16 +59,27 @@ class StudentDashboardController extends Controller
             ];
         })->values();
 
+        $completion = OjtCompletion::forStudent($student);
+        $progressHours = $completion['completed_hours'] ?? $renderedHours;
         $requiredHours = max((float) $student->required_ojt_hours, 0);
-        $hoursLeft = max($requiredHours - $renderedHours, 0);
+        $hoursLeft = max($requiredHours - $progressHours, 0);
         $progressPercent = $requiredHours > 0
-            ? min(($renderedHours / $requiredHours) * 100, 100)
+            ? min(($progressHours / $requiredHours) * 100, 100)
             : 0;
 
         $schedule = $this->scheduleProgress($student);
-        $dailyScheduledHours = $this->dailyScheduledHours($student);
+        $dailyScheduledHours = 8.0;
         $workingDaysLeft = $hoursLeft > 0 ? (int) ceil($hoursLeft / $dailyScheduledHours) : 0;
+        $projectedCompletionDate = $completion !== null
+            ? $completion['estimated_end_date']
+            : HolidayCalendar::projectedCompletion($student, $workingDaysLeft);
+        $projectedDaysLate = $hoursLeft > 0 && $student->ojt_end_date && $projectedCompletionDate
+            && Carbon::parse($projectedCompletionDate)->gt($student->ojt_end_date)
+                ? (int) $student->ojt_end_date->diffInDays(Carbon::parse($projectedCompletionDate))
+                : 0;
         $holidayForecast = HolidayCalendar::forecastForStudent($student);
+        $holidayForecast['month'] = now()->format('Y-m');
+        $holidayForecast['this_month'] = HolidayCalendar::monthForStudent($student, now());
 
         $requirements = InternshipRequirement::where('student_id', $student->id)
             ->activeDefinitionOrLegacy()
@@ -119,7 +130,11 @@ class StudentDashboardController extends Controller
                 'attendance_days' => $attendanceDays,
             ],
             'ojt_progress' => [
-                'rendered_hours' => round($renderedHours, 2),
+                'rendered_hours' => round($progressHours, 2),
+                'completed_hours' => $completion['completed_hours'] ?? null,
+                'actual_completion_date' => $completion['actual_completion_date'] ?? null,
+                'automatic_end_date' => $completion !== null,
+                'schedule_error' => $completion['schedule_error'] ?? false,
                 'required_hours' => round($requiredHours, 2),
                 'hours_left' => round($hoursLeft, 2),
                 'percent_complete' => round($progressPercent, 1),
@@ -128,12 +143,17 @@ class StudentDashboardController extends Controller
                 'working_days_left' => $workingDaysLeft,
                 'calendar_days_left' => $schedule['days_left'],
                 'daily_scheduled_hours' => round($dailyScheduledHours, 2),
-                'projected_completion_date' => HolidayCalendar::projectedCompletion($student, $workingDaysLeft),
+                'projected_completion_date' => $projectedCompletionDate,
+                'projected_days_late' => $projectedDaysLate,
                 'semester_elapsed_percent' => $schedule['elapsed_percent'],
                 'start_date' => $student->ojt_start_date?->toDateString(),
-                'end_date' => $student->ojt_end_date?->toDateString(),
-                'period_state' => $schedule['state'],
-                'period_message' => $schedule['message'],
+                'end_date' => $completion !== null
+                    ? $completion['estimated_end_date']
+                    : $student->ojt_end_date?->toDateString(),
+                'period_state' => $completion ? ($completion['actual_completion_date'] ? 'completed' : 'active') : $schedule['state'],
+                'period_message' => $completion
+                    ? ($completion['actual_completion_date'] ? 'Required OJT hours completed.' : ($completion['schedule_error'] ? 'Correct the overlapping work schedule to calculate an estimated end.' : 'Estimated end updates as completed attendance and workdays change.'))
+                    : $schedule['message'],
                 'this_week_hours' => round($weeklyHours->sum('hours'), 2),
                 'weekly_hours' => $weeklyHours,
             ],
@@ -161,37 +181,6 @@ class StudentDashboardController extends Controller
     private function attendanceHours(Attendance $attendance, Student $student): float
     {
         return AttendanceHours::total($attendance, $student);
-    }
-
-    private function dailyScheduledHours(Student $student): float
-    {
-        $dailyHours = collect(EffectiveSchedule::week($student))
-            ->where('is_working', true)
-            ->map(fn (array $schedule) => $this->scheduledMinutes([
-                [$schedule['am_start'], $schedule['am_end']],
-                [$schedule['pm_start'], $schedule['pm_end']],
-            ]) / 60)
-            ->filter(fn (float $hours) => $hours > 0);
-
-        return $dailyHours->isNotEmpty() ? (float) $dailyHours->average() : 8.0;
-    }
-
-    private function scheduledMinutes(array $periods): int
-    {
-        $minutes = 0;
-        foreach ($periods as [$startValue, $endValue]) {
-            if (! $startValue || ! $endValue) {
-                continue;
-            }
-
-            $start = Carbon::parse($startValue);
-            $end = Carbon::parse($endValue);
-            if ($end->gt($start)) {
-                $minutes += $start->diffInMinutes($end);
-            }
-        }
-
-        return $minutes;
     }
 
     private function scheduleProgress(Student $student): array

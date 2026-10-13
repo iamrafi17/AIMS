@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\AcademicPeriod;
 use App\Models\AcademicSection;
 use App\Models\College;
+use App\Models\HTE;
+use App\Models\HteDepartment;
 use App\Models\OjtEnrollment;
 use App\Models\Program;
 use App\Models\SecurityQuestion;
@@ -12,6 +14,7 @@ use App\Models\Student;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -19,6 +22,77 @@ use Tests\TestCase;
 class RegistrationEnrollmentTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_hte_and_department_choices_are_saved_as_preferences_without_deploying_the_student(): void
+    {
+        /** @var User $coordinator */
+        $coordinator = User::factory()->create(['role' => 'coordinator']);
+        $college = College::create(['name' => 'Computing', 'code' => 'CICS', 'is_active' => true]);
+        $program = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
+        $period = AcademicPeriod::create([
+            'academic_year' => '2026-2027', 'semester' => '1st Semester',
+            'start_date' => '2026-08-01', 'end_date' => '2026-12-31', 'status' => 'active',
+        ]);
+        $section = AcademicSection::create([
+            'academic_period_id' => $period->id, 'program_id' => $program->id,
+            'name' => '4A', 'year_level' => 4, 'academic_year' => $period->academic_year, 'is_active' => true,
+        ]);
+        OjtEnrollment::create([
+            'school_id' => '2026-PREF-001', 'full_name' => 'SANTOS, Maria Dela',
+            'section' => 'BSIT 4A', 'college_id' => $college->id,
+            'program_id' => $program->id, 'academic_section_id' => $section->id,
+            'source' => 'manual', 'added_by' => $coordinator->id,
+        ]);
+        $hte = HTE::create([
+            'name' => 'Partner Company', 'address' => 'Santa Cruz',
+            'contact_person' => 'Supervisor', 'contact_email' => 'supervisor@example.com',
+            'contact_number' => '09170000000', 'is_active' => true,
+        ]);
+        $hte->programs()->attach($program->id, ['linked_by' => $coordinator->id, 'is_active' => true]);
+        $department = HteDepartment::create(['hte_id' => $hte->id, 'department_name' => 'IT Office', 'normalized_name' => 'it office']);
+        $department->programs()->attach($program->id, ['linked_by' => $coordinator->id, 'is_active' => true]);
+        $unavailableDepartment = HteDepartment::create(['hte_id' => $hte->id, 'department_name' => 'Finance Office', 'normalized_name' => 'finance office']);
+        $unavailableDepartment->programs()->attach($program->id, ['linked_by' => $coordinator->id, 'is_active' => false]);
+
+        $this->getJson("/api/colleges/{$college->id}/htes?program_id={$program->id}")
+            ->assertOk()
+            ->assertJsonPath('0.departments.0.id', $department->id)
+            ->assertJsonMissing(['department_name' => 'Finance Office']);
+
+        $payload = [
+            ...$this->registrationPayload('2026-PREF-001'),
+            'hte_id' => $hte->id,
+            'hte_department_id' => $unavailableDepartment->id,
+        ];
+        $this->postJson('/api/register', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('hte_department_id');
+
+        $response = $this->postJson('/api/register', [
+            ...$payload,
+            'hte_department_id' => $department->id,
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('student_internships', [
+            'student_id' => $response->json('student.id'),
+            'preferred_hte_id' => $hte->id,
+            'preferred_hte_department_id' => $department->id,
+        ]);
+        $this->assertDatabaseMissing('students', ['id' => $response->json('student.id'), 'hte_id' => $hte->id]);
+        $this->assertDatabaseCount('student_internship_placements', 0);
+
+        $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
+        DB::table('coordinator_section_assignments')->insert([
+            'academic_section_id' => $section->id,
+            'coordinator_id' => $coordinator->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->actingAs($coordinator)->getJson('/api/coordinator/htes')
+            ->assertOk()
+            ->assertJsonPath('deployments.0.current_internship.preferred_hte.name', $hte->name)
+            ->assertJsonPath('deployments.0.current_internship.preferred_department.department_name', $department->department_name);
+    }
 
     #[DataProvider('registrationYearLevels')]
     public function test_enrolled_student_creates_their_own_credentials_during_registration(int $yearLevel, ?int $submittedYearLevel, string $source): void

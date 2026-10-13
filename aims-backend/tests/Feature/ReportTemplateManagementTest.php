@@ -7,6 +7,7 @@ use App\Models\GeneratedReport;
 use App\Models\Program;
 use App\Models\ReportTemplate;
 use App\Models\User;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -20,7 +21,8 @@ class ReportTemplateManagementTest extends TestCase
 
     public function test_coordinator_can_upload_validate_and_preview_a_scoped_docx_template(): void
     {
-        Storage::fake('local');
+        /** @var FilesystemAdapter $privateDisk */
+        $privateDisk = Storage::fake('local');
         [$program, $coordinator] = $this->programUser('CC', 'BSIS', 'coordinator');
         Sanctum::actingAs($coordinator);
 
@@ -46,7 +48,7 @@ class ReportTemplateManagementTest extends TestCase
             'period_scope' => ReportTemplate::SCOPE_ALL_PERIODS,
             'academic_period_id' => null,
         ]);
-        Storage::disk('local')->assertExists($template->file_path);
+        $privateDisk->assertExists($template->file_path);
 
         $preview = $this->getJson("/api/report-templates/{$template->id}/preview")
             ->assertOk()
@@ -116,18 +118,21 @@ class ReportTemplateManagementTest extends TestCase
 
     public function test_active_template_populates_current_data_generates_pdf_and_preserves_history_after_template_deletion(): void
     {
-        Storage::fake('local');
+        /** @var FilesystemAdapter $privateDisk */
+        $privateDisk = Storage::fake('local');
         [$program, $coordinator] = $this->programUser('CC', 'BSIS', 'coordinator');
         Sanctum::actingAs($coordinator);
         $templateId = $this->post('/api/report-templates', $this->payload($this->docx([]), ['activate' => true]))
             ->assertCreated()->json('template.id');
 
         foreach (['student_internship', 'hte_deployment', 'travel_monitoring'] as $reportType) {
-            $this->getJson('/api/report-templates/active/preview?'.http_build_query(['report_type' => $reportType]))
+            $preview = $this->getJson('/api/report-templates/active/preview?'.http_build_query(['report_type' => $reportType]))
                 ->assertOk()
                 ->assertJsonPath('sample_only', false)
                 ->assertJsonPath('template.id', $templateId)
                 ->assertJsonPath('template.report_type', 'all_reports');
+            $this->assertStringNotContainsString('Report Summary', $preview->json('html'));
+            $this->assertStringContainsString('Report Records', $preview->json('html'));
         }
         $this->assertDatabaseCount('report_templates', 1);
 
@@ -137,13 +142,13 @@ class ReportTemplateManagementTest extends TestCase
         $generated = GeneratedReport::firstOrFail();
         $this->assertSame($templateId, $generated->report_template_id);
         $this->assertSame($program->id, $generated->program_id);
-        Storage::disk('local')->assertExists($generated->file_path);
+        $privateDisk->assertExists($generated->file_path);
 
         $this->postJson("/api/report-templates/{$templateId}/deactivate")->assertOk();
         $this->deleteJson("/api/report-templates/{$templateId}")->assertOk();
         $this->assertSoftDeleted('report_templates', ['id' => $templateId]);
         $this->assertDatabaseHas('generated_reports', ['id' => $generated->id, 'report_template_id' => $templateId]);
-        Storage::disk('local')->assertExists($generated->file_path);
+        $privateDisk->assertExists($generated->file_path);
     }
 
     public function test_program_scope_and_role_specific_upload_permissions_are_enforced(): void

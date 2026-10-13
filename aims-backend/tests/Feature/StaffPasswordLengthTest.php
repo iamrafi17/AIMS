@@ -22,7 +22,7 @@ class StaffPasswordLengthTest extends TestCase
             'requires_security_setup' => $endpoint === 'security-setup',
         ]);
         $token = $this->postJson('/api/login', [
-            'login' => $user->user_id, 'password' => 'TempPass123!', 'device_name' => 'Password length test',
+            'login' => $user->username, 'password' => 'TempPass123!', 'device_name' => 'Password length test',
         ])->assertOk()->json('token');
         $payload = ['password' => $password, 'password_confirmation' => $password];
         if ($endpoint === 'security-setup') {

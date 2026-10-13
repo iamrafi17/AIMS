@@ -28,8 +28,10 @@ const StudentProfile = lazy(() => import('./pages/student/Profile'));
 // Coordinator Pages
 const CoordinatorDashboard = lazy(() => import('./pages/coordinator/Dashboard'));
 const CoordinatorStudents = lazy(() => import('./pages/coordinator/StudentManagement'));
+const CoordinatorInternshipRequirements = lazy(() => import('./pages/coordinator/InternshipRequirements'));
 const CoordinatorAttendance = lazy(() => import('./pages/coordinator/AttendanceManagement'));
 const CoordinatorHTE = lazy(() => import('./pages/coordinator/HTEManagement'));
+const CoordinatorMOA = lazy(() => import('./pages/coordinator/MOAManagement'));
 const CoordinatorTravel = lazy(() => import('./pages/coordinator/TravelMonitoring'));
 const CoordinatorReports = lazy(() => import('./pages/coordinator/Reports'));
 const CoordinatorAnnouncements = lazy(() => import('./pages/coordinator/Announcements'));
@@ -42,6 +44,8 @@ const ProgramHeadTravel = lazy(() => import('./pages/program-head/TravelMonitori
 const ProgramHeadReports = lazy(() => import('./pages/program-head/Reports'));
 const ProgramHeadAnnouncements = lazy(() => import('./pages/program-head/Announcements'));
 const ProgramHeadStudentMonitoring = lazy(() => import('./pages/program-head/StudentMonitoring'));
+const ProgramHeadCoordinatorAssignments = lazy(() => import('./pages/program-head/CoordinatorAssignments'));
+const ProgramHeadOjtSetup = lazy(() => import('./pages/program-head/OjtSetup'));
 
 // VPAA Pages
 const VPAADashboard = lazy(() => import('./pages/vpaa/Dashboard'));
@@ -49,6 +53,10 @@ const VPAAApprovals = lazy(() => import('./pages/vpaa/Approvals'));
 const VPAAMOA = lazy(() => import('./pages/vpaa/MOAApproval'));
 const VPAAAnnouncements = lazy(() => import('./pages/vpaa/Announcements'));
 const VPAAReports = lazy(() => import('./pages/vpaa/Reports'));
+const DeanDashboard = lazy(() => import('./pages/dean/Dashboard'));
+const DeanLiveMap = lazy(() => import('./pages/dean/LiveMap'));
+const DeanApprovals = lazy(() => import('./pages/dean/Approvals'));
+const DeanDocuments = lazy(() => import('./pages/dean/Documents'));
 
 // Admin Pages
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
@@ -127,8 +135,10 @@ function App() {
                 <Route element={<RoleBasedRoute allowedRoles={['coordinator']} />}>
                   <Route path="/coordinator/dashboard" element={<CoordinatorDashboard />} />
                   <Route path="/coordinator/students" element={<CoordinatorStudents />} />
+                  <Route path="/coordinator/internship-requirements" element={<CoordinatorInternshipRequirements />} />
                   <Route path="/coordinator/attendance" element={<CoordinatorAttendance />} />
                   <Route path="/coordinator/htes" element={<CoordinatorHTE />} />
+                  <Route path="/coordinator/moas" element={<CoordinatorMOA />} />
                   <Route path="/coordinator/travel" element={<CoordinatorTravel />} />
                   <Route path="/coordinator/reports" element={<CoordinatorReports />} />
                   <Route path="/coordinator/announcements" element={<CoordinatorAnnouncements />} />
@@ -138,14 +148,28 @@ function App() {
 
                 {/* Program Head Routes */}
                 <Route element={<RoleBasedRoute allowedRoles={['program_head']} />}>
+                  <Route path="/program-head/ojt-setup" element={<ProgramHeadOjtSetup />} />
                   <Route path="/program-head/dashboard" element={<ProgramHeadDashboard />} />
                   <Route path="/program-head/documents" element={<ProgramHeadDocuments />} />
                   <Route path="/program-head/students" element={<ProgramHeadStudentMonitoring />} />
+                  <Route path="/program-head/coordinator-assignments" element={<ProgramHeadCoordinatorAssignments />} />
                   <Route path="/program-head/travel" element={<ProgramHeadTravel />} />
                   <Route path="/program-head/reports" element={<ProgramHeadReports />} />
                   <Route path="/program-head/announcements" element={<ProgramHeadAnnouncements />} />
                   <Route path="/program-head/profile" element={<CoordinatorProfile />} />
                   <Route path="/program-head/notifications" element={<Notifications />} />
+                </Route>
+
+                {/* Dean Routes */}
+                <Route element={<RoleBasedRoute allowedRoles={['dean']} />}>
+                  <Route path="/dean/dashboard" element={<DeanDashboard />} />
+                  <Route path="/dean/live-map" element={<DeanLiveMap />} />
+                  <Route path="/dean/approvals" element={<DeanApprovals />} />
+                  <Route path="/dean/documents" element={<DeanDocuments />} />
+                  <Route path="/dean/moas" element={<VPAAMOA apiBase="/dean/moas" />} />
+                  <Route path="/dean/travel" element={<ProgramHeadTravel apiBase="/dean/travel" />} />
+                  <Route path="/dean/profile" element={<CoordinatorProfile />} />
+                  <Route path="/dean/notifications" element={<Notifications />} />
                 </Route>
 
                 {/* VPAA Routes */}

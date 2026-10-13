@@ -11,6 +11,7 @@ use App\Models\InternshipRequirement;
 use App\Models\Program;
 use App\Models\Student;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -18,6 +19,65 @@ use Tests\TestCase;
 class ProgramScopedAccessTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_program_head_attention_uses_internship_timeline_and_searches_full_names(): void
+    {
+        $this->travelTo(Carbon::parse('2026-09-28 12:00:00'));
+        [$college, $program] = $this->academicContext();
+        $programHead = User::factory()->create([
+            'role' => 'program_head', 'college_id' => $college->id, 'program_id' => $program->id,
+        ]);
+        $newIntern = $this->student($college, $program, 'NEW-001');
+        $newIntern->update(['first_name' => 'Ralph Joseph', 'middle_name' => 'Paralejas', 'last_name' => 'Grimaldo']);
+        $newIntern->currentInternship()->first()->update([
+            'start_date' => '2026-09-27', 'end_date' => '2026-12-01',
+        ]);
+        $delayedIntern = $this->student($college, $program, 'LATE-001');
+        $delayedIntern->currentInternship()->first()->update([
+            'start_date' => '2026-08-01', 'end_date' => '2026-10-01',
+        ]);
+
+        Sanctum::actingAs($programHead);
+
+        $this->getJson('/api/program-head/students')
+            ->assertOk()
+            ->assertJsonPath('summary.needs_attention', 1);
+        $this->getJson('/api/program-head/students?search=Ralph%20Paralejas%20Grimaldo')
+            ->assertOk()
+            ->assertJsonPath('summary.total', 1)
+            ->assertJsonPath('summary.needs_attention', 0)
+            ->assertJsonPath('students.0.student_id', 'NEW-001');
+    }
+
+    public function test_program_head_near_completion_only_counts_active_interns(): void
+    {
+        [$college, $program] = $this->academicContext();
+        $programHead = User::factory()->create([
+            'role' => 'program_head', 'college_id' => $college->id, 'program_id' => $program->id,
+        ]);
+        foreach (['active', 'dropped'] as $status) {
+            $student = $this->student($college, $program, strtoupper($status).'-001');
+            $student->currentInternship()->first()->update(['required_hours' => 10, 'status' => $status]);
+            Attendance::create([
+                'student_id' => $student->id,
+                'date' => '2026-09-25',
+                'status' => 'present',
+                'work_mode' => 'wfo',
+                'session_type' => 'full_day',
+                'am_time_in' => '2026-09-25 08:00:00',
+                'am_time_out' => '2026-09-25 12:00:00',
+                'pm_time_in' => '2026-09-25 13:00:00',
+                'pm_time_out' => '2026-09-25 17:00:00',
+            ]);
+        }
+
+        Sanctum::actingAs($programHead);
+
+        $this->getJson('/api/program-head/students')
+            ->assertOk()
+            ->assertJsonPath('summary.total', 2)
+            ->assertJsonPath('summary.near_completion', 1);
+    }
 
     public function test_coordinator_only_sees_and_manages_students_in_the_assigned_program(): void
     {
@@ -28,6 +88,7 @@ class ProgramScopedAccessTest extends TestCase
             'program_id' => $bsis->id,
         ]);
         $ownStudent = $this->student($college, $bsis, '2026-BSIS-01');
+        $this->assignSection($coordinator, $ownStudent->academic_section_id);
         $otherStudent = $this->student($college, $bsit, '2026-BSIT-01');
         $ownAttendance = Attendance::create([
             'student_id' => $ownStudent->id,
@@ -71,6 +132,7 @@ class ProgramScopedAccessTest extends TestCase
             'program_id' => $bsis->id,
         ]);
         $student = $this->student($college, $bsis, '2026-BSIS-03');
+        $this->assignSection($coordinator, $student->academic_section_id);
         $otherHte = HTE::create([
             'name' => 'BSIT Partner',
             'address' => 'Santa Cruz, Marinduque',
@@ -113,6 +175,7 @@ class ProgramScopedAccessTest extends TestCase
             'program_id' => $bsis->id,
         ]);
         $ownStudent = $this->student($college, $bsis, '2026-BSIS-REPORT');
+        $this->assignSection($coordinator, $ownStudent->academic_section_id);
         $otherStudent = $this->student($college, $bsit, '2026-BSIT-REPORT');
 
         Attendance::create([
@@ -185,6 +248,8 @@ class ProgramScopedAccessTest extends TestCase
             'college_id' => $college->id,
             'program_id' => $bsis->id,
         ]);
+        $this->assignSection($coordinator, $sectionA->id);
+        $this->assignSection($coordinator, $sectionB->id);
 
         Sanctum::actingAs($coordinator);
         $this->getJson("/api/coordinator/reports?academic_section_id={$sectionA->id}")
@@ -223,13 +288,11 @@ class ProgramScopedAccessTest extends TestCase
             'student_id' => $ownStudent->id,
             'requirement_name' => 'Curriculum Vitae',
             'file_path' => 'requirements/own.pdf',
-            'file_type' => 'pdf',
         ]);
         $otherRequirement = InternshipRequirement::create([
             'student_id' => $otherStudent->id,
             'requirement_name' => 'Curriculum Vitae',
             'file_path' => 'requirements/other.pdf',
-            'file_type' => 'pdf',
         ]);
 
         Sanctum::actingAs($programHead);
@@ -293,6 +356,14 @@ class ProgramScopedAccessTest extends TestCase
         $bsit = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
 
         return [$college, $bsis, $bsit];
+    }
+
+    private function assignSection(User $coordinator, int $sectionId): void
+    {
+        \Illuminate\Support\Facades\DB::table('coordinator_section_assignments')->insert([
+            'academic_section_id' => $sectionId, 'coordinator_id' => $coordinator->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
     }
 
     private function student(College $college, Program $program, string $schoolId): Student

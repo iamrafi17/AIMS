@@ -7,14 +7,16 @@ use App\Models\ApprovalRecord;
 use App\Models\InternshipRequirement;
 use App\Models\Student;
 use App\Models\SystemNotification;
+use App\Support\DeanAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class VPAAApprovalController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $collegeId = $request->user()->role === 'dean' ? DeanAccess::collegeId($request->user()) : null;
         $pending = ApprovalRecord::with(['submitter'])
             ->where('status', 'pending')
             ->latest('updated_at')
@@ -22,6 +24,11 @@ class VPAAApprovalController extends Controller
         $pendingDeployments = $pending
             ->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)
             ->filter(fn (ApprovalRecord $approval) => $approval->submitter?->role === 'program_head');
+        if ($collegeId) {
+            $studentIds = Student::query()->forCollege($collegeId)->pluck('students.id');
+            $pendingDeployments = $pendingDeployments->whereIn('subject_id', $studentIds);
+            $pending = $pending->filter(fn (ApprovalRecord $approval) => $approval->subject_type === ApprovalRecord::TYPE_DEPLOYMENT && $studentIds->contains($approval->subject_id));
+        }
 
         $requirements = InternshipRequirement::with([
             'student.user',
@@ -53,6 +60,7 @@ class VPAAApprovalController extends Controller
 
         $history = ApprovalRecord::with(['submitter', 'decisionMaker'])
             ->whereIn('status', ['approved', 'rejected'])
+            ->when($collegeId, fn ($query) => $query->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)->whereIn('subject_id', $studentIds)->whereHas('submitter', fn ($submitter) => $submitter->forRole('program_head')))
             ->latest('decided_at')
             ->limit(200)
             ->get();
@@ -90,9 +98,12 @@ class VPAAApprovalController extends Controller
 
     public function review(Request $request, ApprovalRecord $approval)
     {
+        abort_unless($request->user()->role === 'dean', 403);
+        abort_if($approval->subject_type === ApprovalRecord::TYPE_DOCUMENT, 410, 'Individual document approvals are part of the legacy workflow.');
         if ($approval->subject_type === ApprovalRecord::TYPE_DEPLOYMENT) {
+            DeanAccess::student($request->user(), Student::findOrFail($approval->subject_id));
             $approval->loadMissing('submitter');
-            abort_unless($approval->submitter?->role === 'program_head', 403, 'Deployment requests require Program Head review before VPAA validation.');
+            abort_unless($approval->submitter?->role === 'program_head', 403, 'Deployment requests require Program Head review before Dean validation.');
         }
 
         if ($approval->status !== 'pending') {
@@ -107,6 +118,8 @@ class VPAAApprovalController extends Controller
         ]);
 
         DB::transaction(function () use ($approval, $request, $validated) {
+            $approval = ApprovalRecord::query()->lockForUpdate()->findOrFail($approval->id);
+            abort_unless($approval->status === 'pending', 422, 'This request has already been decided.');
             if ($approval->subject_type === ApprovalRecord::TYPE_DOCUMENT) {
                 $requirement = InternshipRequirement::findOrFail($approval->subject_id);
                 if (! $requirement->file_path) {
@@ -138,7 +151,7 @@ class VPAAApprovalController extends Controller
         });
         SystemNotification::sendToUser(
             $approval->submitted_by,
-            'VPAA decision recorded',
+            'Dean decision recorded',
             ucfirst($approval->subject_type).' request was '.$validated['decision'].'.',
             'approval',
             $approval->subject_type === ApprovalRecord::TYPE_DEPLOYMENT ? '/coordinator/htes' : '/program-head/documents',

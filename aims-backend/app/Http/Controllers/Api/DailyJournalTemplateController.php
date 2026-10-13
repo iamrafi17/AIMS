@@ -42,7 +42,7 @@ class DailyJournalTemplateController extends Controller
         ];
 
         return response()->json([
-            'template' => $this->resource($template->loadMissing('uploader:id,name')),
+            'template' => $this->resource($template->loadMissing(['uploader:id,role_id', 'uploader.employeeProfile:id,user_id,first_name,middle_name,last_name'])),
             'html' => $this->templates->renderDailyJournalHtml(Storage::disk('local')->path($template->file_path), $values),
         ]);
     }

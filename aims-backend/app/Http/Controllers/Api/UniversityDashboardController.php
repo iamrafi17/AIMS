@@ -61,7 +61,9 @@ class UniversityDashboardController extends Controller
             ->whereDate('date', '>=', $trendTo->copy()->subDays(6)->toDateString())
             ->whereDate('date', '<=', $trendTo->toDateString())
             ->get();
-        $requirements = InternshipRequirement::activeDefinitionOrLegacy()->whereIn('student_id', $studentIds)->get();
+        $requirements = InternshipRequirement::activeDefinitionOrLegacy()
+            ->whereIn('student_id', $studentIds)
+            ->get();
         $evaluations = Evaluation::whereIn('student_id', $studentIds)->get();
         $allTravel = TravelLog::query()
             ->whereHas('participants', fn ($query) => $query->whereIn('students.id', $studentIds))

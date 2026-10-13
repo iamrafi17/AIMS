@@ -40,7 +40,7 @@ class ProgramHeadDashboardController extends Controller
             ->orderBy('year_level')
             ->orderBy('name')
             ->get(['id', 'program_id', 'academic_period_id', 'name', 'year_level']);
-        $students = Student::with(['program', 'academicSection', 'hte', 'supervisor:id,name', 'attendance', 'requirements'])
+        $students = Student::with(['program', 'academicSection', 'hte', 'supervisor:id,role_id', 'attendance', 'requirements'])
             ->forProgram($programId)
             ->when($sectionId, fn ($query) => $query->forAcademicSection($sectionId))
             ->when($filters['academic_year'] ?? null, fn ($query, $value) => $query->forAcademicYear($value))
@@ -159,7 +159,14 @@ class ProgramHeadDashboardController extends Controller
         $deploymentApprovals = ApprovalRecord::query()
             ->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)
             ->whereIn('subject_id', $students->pluck('id'))
-            ->with(['submitter:id,name,role', 'decisionMaker:id,name,role'])
+            ->with([
+                'submitter:id,role_id',
+                'submitter.roleDefinition:id,code',
+                'submitter.employeeProfile:id,user_id,first_name,middle_name,last_name',
+                'decisionMaker:id,role_id',
+                'decisionMaker.roleDefinition:id,code',
+                'decisionMaker.employeeProfile:id,user_id,first_name,middle_name,last_name',
+            ])
             ->latest('created_at')
             ->get()
             ->groupBy('subject_id');

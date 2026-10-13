@@ -33,7 +33,7 @@ class AnnouncementController extends Controller
         };
 
         $query = Announcement::query()
-            ->with('author:id,name')
+            ->with('author:id,role_id')
             ->withExists([
                 'readers as is_read' => fn ($readerQuery) => $readerQuery->where('users.id', $user->id),
             ])
@@ -66,7 +66,7 @@ class AnnouncementController extends Controller
     public function manage(Request $request)
     {
         $query = Announcement::query()
-            ->with('author:id,name')
+            ->with('author:id,role_id')
             ->withCount('readers');
 
         if ($request->filled('search')) {
@@ -93,7 +93,7 @@ class AnnouncementController extends Controller
     public function show(Request $request, Announcement $announcement)
     {
         $this->authorizeVisible($request, $announcement);
-        $announcement->load('author:id,name');
+        $announcement->load('author:id,role_id');
         $announcement->setAttribute(
             'is_read',
             $announcement->readers()->where('users.id', $request->user()->id)->exists()
@@ -133,22 +133,26 @@ class AnnouncementController extends Controller
                 'all' => ['student', 'coordinator', 'program_head', 'vpaa', 'admin', 'supervisor'],
                 default => [$announcement->target_audience],
             };
-            User::whereIn('role', $roles)->where('is_active', true)->get(['id', 'role'])->each(
-                fn (User $recipient) => SystemNotification::sendToUser(
-                    $recipient->id,
-                    $announcement->title,
-                    'A new '.str_replace('_', ' ', $announcement->category).' announcement was published.',
-                    'announcement',
-                    '/'.($recipient->role === 'program_head' ? 'program-head' : $recipient->role).'/announcements',
-                )
-            );
+            User::forRoles($roles)
+                ->with('roleDefinition:id,code')
+                ->where('is_active', true)
+                ->get(['id', 'role_id'])
+                ->each(
+                    fn (User $recipient) => SystemNotification::sendToUser(
+                        $recipient->id,
+                        $announcement->title,
+                        'A new '.str_replace('_', ' ', $announcement->category).' announcement was published.',
+                        'announcement',
+                        '/'.($recipient->role === 'program_head' ? 'program-head' : $recipient->role).'/announcements',
+                    )
+                );
         }
 
         return response()->json([
             'message' => $announcement->is_published
                 ? 'Announcement published successfully.'
                 : 'Announcement saved as a draft.',
-            'announcement' => $announcement->load('author:id,name'),
+            'announcement' => $announcement->load('author:id,role_id'),
         ], 201);
     }
 
@@ -177,7 +181,7 @@ class AnnouncementController extends Controller
 
         return response()->json([
             'message' => 'Announcement updated successfully.',
-            'announcement' => $announcement->fresh()->load('author:id,name'),
+            'announcement' => $announcement->fresh()->load('author:id,role_id'),
         ]);
     }
 

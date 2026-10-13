@@ -3,14 +3,21 @@
 namespace Tests\Feature;
 
 use App\Models\Attendance;
+use App\Models\AttendanceReview;
+use App\Models\AcademicSection;
 use App\Models\College;
 use App\Models\HTE;
+use App\Models\MOA;
 use App\Models\Program;
+use App\Models\ReportTemplate;
 use App\Models\Student;
+use App\Models\StudentInternship;
 use App\Models\StudentLiveLocation;
 use App\Models\User;
+use App\Services\ReportTemplateService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 use ZipArchive;
@@ -61,6 +68,13 @@ class CoordinatorAttendanceManagementTest extends TestCase
             ->assertJsonPath('total', 1)
             ->assertJsonPath('data.0.journal_complete', true)
             ->assertJsonPath('data.0.total_hours', 8);
+
+        $this->getJson('/api/coordinator/attendance?search=2026-3001')
+            ->assertOk()
+            ->assertJsonPath('total', 2);
+        $this->getJson('/api/coordinator/attendance?search=Intern')
+            ->assertOk()
+            ->assertJsonPath('total', 2);
     }
 
     public function test_automatic_attendance_is_read_only_and_coordinator_can_mark_a_daily_journal_as_reviewed(): void
@@ -178,6 +192,133 @@ class CoordinatorAttendanceManagementTest extends TestCase
             ->assertJsonCount(0, 'locations');
     }
 
+    public function test_dean_live_map_is_limited_to_active_fresh_locations_in_assigned_college(): void
+    {
+        [, $student] = $this->context();
+        $dean = User::factory()->create(['role' => 'dean', 'college_id' => $student->college_id]);
+        $otherCollege = College::create(['name' => 'Education', 'code' => 'CED', 'is_active' => true]);
+        $otherDean = User::factory()->create(['role' => 'dean', 'college_id' => $otherCollege->id]);
+        Attendance::create([
+            'student_id' => $student->id, 'date' => now()->toDateString(),
+            'status' => 'present', 'work_mode' => 'wfo', 'session_type' => 'full_day', 'am_time_in' => now(),
+        ]);
+        $location = StudentLiveLocation::create([
+            'student_id' => $student->id, 'latitude' => 13.4753, 'longitude' => 122.0275,
+            'accuracy' => 9.5, 'captured_at' => now(),
+        ]);
+
+        Sanctum::actingAs($dean->fresh());
+        $this->getJson('/api/dean/live-locations')->assertOk()->assertJsonPath('sharing', 1)
+            ->assertJsonPath('locations.0.student_id', $student->id);
+        Sanctum::actingAs($otherDean->fresh());
+        $this->getJson('/api/dean/live-locations')->assertOk()->assertJsonPath('sharing', 0);
+
+        $location->update(['captured_at' => now()->subMinutes(2)]);
+        Sanctum::actingAs($dean->fresh());
+        $this->getJson('/api/dean/live-locations')->assertOk()->assertJsonPath('sharing', 0);
+        $location->update(['captured_at' => now()]);
+        Attendance::forStudent($student->id)->firstOrFail()->update(['am_time_out' => now()]);
+        $this->getJson('/api/dean/live-locations')->assertOk()->assertJsonPath('sharing', 0);
+    }
+
+    public function test_dean_dashboard_counts_current_internships_without_querying_removed_student_columns(): void
+    {
+        [, $student] = $this->context();
+        $dean = User::factory()->create(['role' => 'dean', 'college_id' => $student->college_id]);
+        Sanctum::actingAs($dean->fresh());
+
+        $this->getJson('/api/dean/dashboard')->assertOk()
+            ->assertJsonPath('college.code', 'CICS')
+            ->assertJsonPath('students', 1)
+            ->assertJsonPath('active_students', 1)
+            ->assertJsonPath('pending_deployments', 0)
+            ->assertJsonPath('pending_moas', 0)
+            ->assertJsonPath('pending_travel_reports', 0);
+    }
+
+    public function test_dean_dashboard_scopes_period_program_and_verified_attendance(): void
+    {
+        [, $student] = $this->context();
+        $current = $this->academicPeriod();
+        $current->update(['status' => 'active']);
+        $internship = $student->currentInternship()->firstOrFail();
+        $internship->update(['required_hours' => 8]);
+        $oldPeriod = $this->academicPeriod('2025-2026', '1st Semester');
+        $oldSection = AcademicSection::create([
+            'program_id' => $student->program_id, 'name' => 'Old OJT', 'year_level' => 4,
+            'academic_period_id' => $oldPeriod->id, 'is_active' => false,
+        ]);
+        StudentInternship::create([
+            'student_id' => $student->id, 'academic_section_id' => $oldSection->id,
+            'status' => 'completed', 'is_current' => false, 'required_hours' => 8,
+        ]);
+        $otherCollege = College::create(['name' => 'Education', 'code' => 'CED', 'is_active' => true]);
+        $otherProgram = Program::create(['college_id' => $otherCollege->id, 'name' => 'Education', 'code' => 'BSED', 'is_active' => true]);
+        $otherSection = AcademicSection::create([
+            'program_id' => $otherProgram->id, 'name' => 'Other OJT', 'year_level' => 4,
+            'academic_period_id' => $current->id, 'is_active' => true,
+        ]);
+        $otherStudent = Student::create([
+            'user_id' => User::factory()->create(['role' => 'student'])->id,
+            'student_id' => '2026-3002', 'first_name' => 'Other', 'last_name' => 'College',
+            'gender' => 'female', 'birth_date' => '2002-01-01', 'address' => 'Santa Cruz',
+            'contact_number' => '09171111112', 'college_id' => $otherCollege->id,
+            'program_id' => $otherProgram->id, 'academic_period_id' => $current->id,
+            'year_level' => 4, 'section' => 'A', 'registration_status' => 'approved',
+            'internship_status' => 'active',
+        ]);
+        $otherStudent->currentInternship()->firstOrFail()->update(['academic_section_id' => $otherSection->id]);
+        foreach (['2026-07-20', '2026-07-21'] as $date) {
+            $day = Attendance::create([
+                'student_id' => $student->id, 'student_internship_id' => $internship->id,
+                'date' => $date, 'status' => 'present', 'work_mode' => 'wfo', 'session_type' => 'full_day',
+                'am_time_in' => $date.' 08:00:00', 'am_time_out' => $date.' 12:00:00',
+                'pm_time_in' => $date.' 13:00:00', 'pm_time_out' => $date.' 17:00:00',
+            ]);
+            if ($date === '2026-07-20') {
+                AttendanceReview::create(['attendance_id' => $day->id, 'review_type' => 'verification',
+                    'decision' => 'approved']);
+            }
+        }
+        $dean = User::factory()->create(['role' => 'dean', 'college_id' => $student->college_id]);
+        Sanctum::actingAs($dean->fresh());
+        $this->getJson('/api/dean/dashboard')->assertOk()
+            ->assertJsonPath('summary.total_students', 1)
+            ->assertJsonPath('summary.active_interns', 1)
+            ->assertJsonPath('charts.program_progress.0.average_progress', 100)
+            ->assertJsonPath('charts.monthly_attendance.0.days', 1)
+            ->assertJsonCount(1, 'charts.internship_status');
+        $this->getJson('/api/dean/dashboard?academic_period_id='.$oldPeriod->id)->assertOk()
+            ->assertJsonPath('summary.total_students', 1)
+            ->assertJsonPath('summary.active_interns', 0)
+            ->assertJsonPath('filters.can_review', false)
+            ->assertJsonCount(0, 'charts.monthly_attendance');
+        $this->getJson('/api/dean/dashboard?program_id='.$otherProgram->id)->assertStatus(422);
+        Sanctum::actingAs(User::factory()->create(['role' => 'vpaa']));
+        $this->getJson('/api/dean/dashboard')->assertForbidden();
+    }
+
+    public function test_dean_dashboard_pending_moa_count_tracks_approval_and_program_filter(): void
+    {
+        [, $student] = $this->context();
+        $this->academicPeriod()->update(['status' => 'active']);
+        $program = Program::findOrFail($student->program_id);
+        $second = Program::create(['college_id' => $program->college_id, 'name' => 'Computer Science', 'code' => 'BSCS', 'is_active' => true]);
+        $otherCollege = College::create(['name' => 'Education', 'code' => 'CED', 'is_active' => true]);
+        $outside = Program::create(['college_id' => $otherCollege->id, 'name' => 'Education', 'code' => 'BSED', 'is_active' => true]);
+        foreach ([$program, $second, $outside] as $item) {
+            MOA::create(['hte_id' => $student->hte_id, 'program_id' => $item->id,
+                'file_path' => 'test.pdf', 'effective_date' => '2026-01-01',
+                'expiration_date' => '2027-12-31', 'status' => 'pending', 'program_status' => 'endorsed']);
+        }
+        Sanctum::actingAs(User::factory()->create(['role' => 'dean', 'college_id' => $program->college_id])->fresh());
+        $this->getJson('/api/dean/dashboard')->assertOk()->assertJsonPath('summary.pending_moas', 2);
+        $this->getJson('/api/dean/dashboard?program_id='.$program->id)->assertOk()
+            ->assertJsonPath('summary.pending_moas', 1);
+        MOA::query()->where('program_id', $program->id)->update(['status' => 'approved']);
+        $this->getJson('/api/dean/dashboard')->assertOk()->assertJsonPath('summary.pending_moas', 1);
+    }
+
     public function test_attendance_history_cannot_be_deleted(): void
     {
         [$coordinator, $student] = $this->context();
@@ -230,13 +371,30 @@ class CoordinatorAttendanceManagementTest extends TestCase
 
         $response = $this->getJson("/api/coordinator/attendance/{$attendance->id}/journal-preview")
             ->assertOk()
-            ->assertJsonPath('template.file_name', 'Official Daily Journal.docx');
+            ->assertJsonPath('template.file_name', 'Official Daily Journal.docx')
+            ->assertJsonPath('template.uploaded_by', $coordinator->name);
         $html = $response->json('html');
         $this->assertStringContainsString('OFFICIAL DAILY JOURNAL FORM', $html);
         $this->assertStringContainsString('8:00 AM', $html);
         $this->assertStringContainsString('12:00 PM', $html);
         $this->assertStringContainsString('Prepared the official morning report.', $html);
         $this->assertStringContainsString('Updated the afternoon internship records.', $html);
+        $this->assertSame(2, substr_count($html, '<img src="data:image/png;base64,'));
+        $this->assertStringContainsString('MARINDUQUE STATE UNIVERSITY', $html);
+        $this->assertStringContainsString('CICS GOAL', $html);
+        $this->assertTrue(strpos($html, '<header class="letterhead header">') < strpos($html, '<section class="docx-body">'));
+        $this->assertTrue(strpos($html, '<section class="docx-body">') < strpos($html, '<footer class="letterhead footer">'));
+
+        $template = ReportTemplate::query()->firstOrFail();
+        $reportHtml = app(ReportTemplateService::class)->renderHtml(
+            Storage::disk('local')->path($template->file_path),
+            ['report_title' => 'Student Internship Report'],
+            [],
+            ['Student Name'],
+        );
+        $this->assertSame(2, substr_count($reportHtml, '<img src="data:image/png;base64,'));
+        $this->assertStringContainsString('MARINDUQUE STATE UNIVERSITY', $reportHtml);
+        $this->assertStringContainsString('CICS GOAL', $reportHtml);
     }
 
     public function test_shared_official_template_upload_rejects_a_corrupted_docx(): void
@@ -294,6 +452,10 @@ class CoordinatorAttendanceManagementTest extends TestCase
             'registration_status' => 'approved',
             'internship_status' => 'active',
         ]);
+        \Illuminate\Support\Facades\DB::table('coordinator_section_assignments')->insert([
+            'academic_section_id' => $student->academic_section_id, 'coordinator_id' => $coordinator->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
 
         return [$coordinator, $student];
     }
@@ -305,6 +467,12 @@ class CoordinatorAttendanceManagementTest extends TestCase
         $zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE);
         $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
         $zip->addFromString('word/document.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>OFFICIAL DAILY JOURNAL FORM</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>AM Time In</w:t></w:r></w:p></w:tc><w:tc><w:p/></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t>AM Time Out</w:t></w:r></w:p></w:tc><w:tc><w:p/></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t>AM Accomplishments</w:t></w:r></w:p></w:tc><w:tc><w:p/></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t>PM Time In</w:t></w:r></w:p></w:tc><w:tc><w:p/></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t>PM Time Out</w:t></w:r></w:p></w:tc><w:tc><w:p/></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t>PM Accomplishments</w:t></w:r></w:p></w:tc><w:tc><w:p/></w:tc></w:tr></w:tbl><w:sectPr/></w:body></w:document>');
+        $zip->addFromString('word/header1.xml', '<?xml version="1.0" encoding="UTF-8"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:p><w:r><w:drawing><wp:anchor><wp:positionH><wp:posOffset>0</wp:posOffset></wp:positionH><a:blip r:embed="rId1"/></wp:anchor></w:drawing></w:r><w:r><w:drawing><wp:anchor><wp:positionH><wp:posOffset>1000000</wp:posOffset></wp:positionH><a:blip r:embed="rId2"/></wp:anchor></w:drawing></w:r><w:r><w:t>Republic of the Philippines</w:t></w:r></w:p><w:p><w:r><w:t>MARINDUQUE STATE UNIVERSITY</w:t></w:r></w:p></w:hdr>');
+        $zip->addFromString('word/_rels/header1.xml.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/logo1.png"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/logo2.png"/></Relationships>');
+        $logo = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZhpIAAAAASUVORK5CYII=');
+        $zip->addFromString('word/media/logo1.png', $logo);
+        $zip->addFromString('word/media/logo2.png', $logo);
+        $zip->addFromString('word/footer1.xml', '<?xml version="1.0" encoding="UTF-8"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>CICS GOAL</w:t></w:r></w:p><w:p><w:r><w:t>Empowering minds</w:t></w:r></w:p></w:ftr>');
         $zip->close();
 
         return new UploadedFile($path, 'Official Daily Journal.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', null, true);

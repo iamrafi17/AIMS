@@ -39,12 +39,14 @@ class HolidayCalendar
     public static function forecastForStudent(Student $student, int $limit = 5): array
     {
         $today = now()->startOfDay();
+        $automaticEnd = OjtCompletion::usesAutomaticEnd($student);
         $items = self::programHolidays((int) $student->program_id)
             ->filter(fn (Holiday $holiday) => self::appliesToStudent($holiday, $student))
-            ->map(function (Holiday $holiday) use ($student, $today) {
+            ->map(function (Holiday $holiday) use ($student, $today, $automaticEnd) {
                 $occurrence = self::nextOccurrence($holiday, $today);
 
-                if ($occurrence && $student->ojt_end_date && $occurrence->gt($student->ojt_end_date->copy()->endOfDay())) {
+                if ($occurrence && $student->ojt_end_date && ! $automaticEnd
+                    && $occurrence->gt($student->ojt_end_date->copy()->endOfDay())) {
                     return null;
                 }
 

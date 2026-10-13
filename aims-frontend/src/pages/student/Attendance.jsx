@@ -50,10 +50,12 @@ function StudentAttendance() {
   const selectedRecord = workspace?.selected_attendance;
   const selectedHoliday = workspace?.selected_holiday;
   const settings = workspace?.settings;
+  const showAmFields = form.session_type !== 'pm_half';
+  const showPmFields = form.session_type !== 'am_half';
   const workDays = settings?.work_days || ['mon', 'tue', 'wed', 'thu', 'fri'];
   const isSelectedWorkday = workDays.includes(dayToken(selectedDate));
   const manualDisabled = isPast && !settings?.allow_past_attendance;
-  const attendanceDisabled = manualDisabled || isFuture || Boolean(selectedHoliday);
+  const attendanceDisabled = manualDisabled || isFuture || (!isSelectedWorkday && !selectedRecord);
   const daysLeft = workspace?.week_summary?.days_left ?? 0;
 
   const syncForm = (record, config) => {
@@ -104,8 +106,43 @@ function StudentAttendance() {
   const maxCalendarMonth = settings?.ojt_end_date?.slice(0, 7) || `${now.getFullYear() + 1}-12`;
   const moveMonth = (direction) => { const [year, mon] = month.split('-').map(Number); const next = new Date(year, mon - 1 + direction, 1); setMonth(monthKey(next)); setSelectedDate(dateKey(next)); };
   const jumpToday = () => { const key = dateKey(new Date()); setMonth(key.slice(0, 7)); setSelectedDate(key); };
-  const chooseDate = (key) => { if (!key) return; if (key > today && !holidays[key]) return; if (settings?.ojt_start_date && key < settings.ojt_start_date) return; if (settings?.ojt_end_date && key > settings.ojt_end_date) return; setSelectedDate(key); setMobileSection(holidays[key] ? 'calendar' : 'attendance'); };
+  const chooseDate = (key) => { if (!key) return; if (key > today && !holidays[key]) return; if (settings?.ojt_start_date && key < settings.ojt_start_date) return; if (settings?.ojt_end_date && key > settings.ojt_end_date) return; setSelectedDate(key); setMobileSection('attendance'); };
   const change = (field) => (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
+  const changeSessionType = (event) => {
+    const sessionType = event.target.value;
+    const schedule = settings?.official_schedule || {};
+    const defaults = {
+      am_time_in: schedule.am_start || '08:00',
+      am_time_out: schedule.am_end || '12:00',
+      pm_time_in: schedule.pm_start || '13:00',
+      pm_time_out: schedule.pm_end || '17:00',
+    };
+
+    setForm((current) => {
+      const next = { ...current, session_type: sessionType };
+
+      if (sessionType === 'am_half') {
+        next.am_time_in = current.am_time_in || defaults.am_time_in;
+        next.am_time_out = current.am_time_out || defaults.am_time_out;
+        next.pm_time_in = '';
+        next.pm_time_out = '';
+        next.pm_activity = '';
+      } else if (sessionType === 'pm_half') {
+        next.am_time_in = '';
+        next.am_time_out = '';
+        next.am_activity = '';
+        next.pm_time_in = current.pm_time_in || defaults.pm_time_in;
+        next.pm_time_out = current.pm_time_out || defaults.pm_time_out;
+      } else {
+        next.am_time_in = current.am_time_in || defaults.am_time_in;
+        next.am_time_out = current.am_time_out || defaults.am_time_out;
+        next.pm_time_in = current.pm_time_in || defaults.pm_time_in;
+        next.pm_time_out = current.pm_time_out || defaults.pm_time_out;
+      }
+
+      return next;
+    });
+  };
 
   const saveEntry = async (overrides = {}) => {
     setBusy(true);
@@ -150,12 +187,12 @@ function StudentAttendance() {
         const offSchedule = !workDays.includes(dayToken(key));
         const unavailable = outside || (future && !holiday) || (offSchedule && !record && !holiday);
         const selected = key === selectedDate;
-        const color = holiday || record?.status === 'holiday' ? 'bg-violet-50 text-violet-700' : record?.status === 'absent' ? 'bg-rose-50 text-rose-700' : record ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-600';
+        const color = record?.status === 'present' || record?.status === 'late' ? 'bg-emerald-50 text-emerald-700' : holiday || record?.status === 'holiday' ? 'bg-violet-50 text-violet-700' : record?.status === 'absent' ? 'bg-rose-50 text-rose-700' : 'bg-slate-50 text-slate-600';
         const unavailableReason = outside ? 'Outside OJT period' : future && !holiday ? 'Future date' : offSchedule && !holiday ? 'Non-working day' : '';
-        return <button key={key} onClick={() => chooseDate(key)} disabled={unavailable} aria-label={`${prettyDate(key)}${holiday ? ` — ${holiday.name}` : unavailableReason ? ` — ${unavailableReason}` : ''}`} title={holiday?.name || unavailableReason} className={`min-h-16 rounded-xl border p-1.5 text-left transition sm:min-h-20 sm:p-2 ${selected ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100' : `border-transparent ${color}`} ${unavailable ? 'cursor-not-allowed opacity-50' : 'hover:border-slate-300'}`}><span className="text-xs font-black">{Number(key.slice(-2))}</span>{holiday ? <span className="mt-2 block line-clamp-2 text-[9px] font-extrabold sm:text-[11px]">{holiday.name}</span> : record && <span className="mt-2 block text-[9px] font-extrabold sm:text-[11px]">{record.status === 'present' || record.status === 'late' ? `${number(record.hours)}h` : record.status}</span>}</button>;
+        return <button key={key} onClick={() => chooseDate(key)} disabled={unavailable} aria-label={`${prettyDate(key)}${holiday ? ` — ${holiday.name}` : unavailableReason ? ` — ${unavailableReason}` : ''}`} title={holiday?.name || unavailableReason} className={`min-h-16 rounded-xl border p-1.5 text-left transition sm:min-h-20 sm:p-2 ${selected ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100' : `border-transparent ${color}`} ${unavailable ? 'cursor-not-allowed opacity-50' : 'hover:border-slate-300'}`}><span className="text-xs font-black">{Number(key.slice(-2))}</span>{record?.status === 'present' || record?.status === 'late' ? <span className="mt-2 block text-[9px] font-extrabold sm:text-[11px]">{number(record.hours)}h worked{holiday ? ` · ${holiday.name}` : ''}</span> : holiday ? <span className="mt-2 block line-clamp-2 text-[9px] font-extrabold sm:text-[11px]">{holiday.name}</span> : record && <span className="mt-2 block text-[9px] font-extrabold sm:text-[11px]">{record.status}</span>}</button>;
       })}</div>
       <div className="mt-4 flex flex-wrap gap-4 text-[11px] font-bold text-slate-500"><span>🟢 Present</span><span>🔴 Absent</span><span>🟣 Holiday</span><span>🔵 Selected</span><span>⚪ Unavailable</span></div>
-      {selectedHoliday && <div className="mt-5 flex gap-3 rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900"><FiCalendar className="mt-0.5 shrink-0 text-xl" /><div><p className="font-black">{selectedHoliday.name}</p><p className="mt-1 text-xs">{prettyDate(selectedHoliday.date)} · {selectedHoliday.type_label}</p><p className="mt-2 text-xs font-bold">No OJT attendance required. Smart Clock is unavailable on this date.</p>{selectedHoliday.official_reference && <p className="mt-1 text-[11px] text-violet-700">Reference: {selectedHoliday.official_reference}</p>}</div></div>}
+      {selectedHoliday && <div className="mt-5 flex gap-3 rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900"><FiCalendar className="mt-0.5 shrink-0 text-xl" /><div><p className="font-black">{selectedHoliday.name}</p><p className="mt-1 text-xs">{prettyDate(selectedHoliday.date)} · {selectedHoliday.type_label}</p><p className="mt-2 text-xs font-bold">If you worked at your HTE, record your actual attendance. Completed attendance hours count toward OJT. If you did not work, no OJT hours are added.</p>{selectedHoliday.official_reference && <p className="mt-1 text-[11px] text-violet-700">Reference: {selectedHoliday.official_reference}</p>}</div></div>}
     </section>
     <div data-touch-active={mobileSection !== 'calendar'} className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-extrabold uppercase tracking-widest text-[#a8750b]">Selected Date</p><h2 className="mt-1 text-xl font-black text-[#690016]">{isToday ? 'Today' : `Editing — ${prettyDate(selectedDate)}`}</h2></div>{isPast && <span className="inline-flex items-center gap-2 rounded-full bg-orange-100 px-4 py-2 text-xs font-black uppercase text-orange-700"><FiEdit3 /> Manual Entry</span>}</div>
 
@@ -163,13 +200,41 @@ function StudentAttendance() {
     {!isSelectedWorkday && !selectedHoliday && <div className="flex gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"><FiInfo className="mt-0.5 shrink-0 text-xl" /><div><p className="font-black">Non-working day</p><p className="mt-1 text-xs">This date is outside your configured {workDays.map((day) => day.toUpperCase()).join(' · ')} work schedule.</p></div></div>}
     {manualDisabled && <div className="flex gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800"><FiAlertCircle className="mt-0.5 shrink-0 text-xl" /><div><p className="font-black">Past attendance logging is disabled</p><p className="mt-1 text-xs">Ask your administrator to enable manual past-date entries.</p></div></div>}
 
-    <section data-touch-active={mobileSection === 'attendance'} className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm lg:p-7"><h2 className="text-lg font-black text-[#690016]">Attendance Type</h2><div className="mt-5 grid gap-4 md:grid-cols-3"><label><span className="mb-1.5 block text-xs font-black uppercase text-slate-400">Status</span><select value={form.status} onChange={change('status')} disabled={isToday || attendanceDisabled} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 font-bold disabled:bg-slate-100"><option value="present">Present</option><option value="absent">Absent</option>{form.status === 'holiday' && <option value="holiday" disabled>Official Holiday</option>}</select></label><label><span className="mb-1.5 block text-xs font-black uppercase text-slate-400">Work Mode</span><select value={form.work_mode} onChange={change('work_mode')} disabled={form.status !== 'present' || isToday || attendanceDisabled} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 font-bold disabled:bg-slate-100"><option value="wfo">WFO</option><option value="wfh">WFH</option><option value="field">Field Work</option></select></label><label><span className="mb-1.5 block text-xs font-black uppercase text-slate-400">Session Type</span><select value={form.session_type} onChange={change('session_type')} disabled={form.status !== 'present' || isToday || attendanceDisabled} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 font-bold disabled:bg-slate-100"><option value="full_day">Full Day</option><option value="am_half">AM Half</option><option value="pm_half">PM Half</option></select></label></div></section>
+    <section data-touch-active={mobileSection === 'attendance'} className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm lg:p-7"><h2 className="text-lg font-black text-[#690016]">Attendance Type</h2><div className="mt-5 grid gap-4 md:grid-cols-3"><label><span className="mb-1.5 block text-xs font-black uppercase text-slate-400">Status</span><select value={form.status} onChange={change('status')} disabled={isToday || attendanceDisabled} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 font-bold disabled:bg-slate-100"><option value="present">Present</option><option value="absent">Absent</option>{form.status === 'holiday' && <option value="holiday" disabled>Official Holiday</option>}</select></label><label><span className="mb-1.5 block text-xs font-black uppercase text-slate-400">Work Mode</span><select value={form.work_mode} onChange={change('work_mode')} disabled={form.status !== 'present' || isToday || attendanceDisabled} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 font-bold disabled:bg-slate-100"><option value="wfo">WFO</option><option value="wfh">WFH</option><option value="field">Field Work</option></select></label><label><span className="mb-1.5 block text-xs font-black uppercase text-slate-400">Session Type</span><select value={form.session_type} onChange={changeSessionType} disabled={form.status !== 'present' || isToday || attendanceDisabled} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 font-bold disabled:bg-slate-100"><option value="full_day">Full Day</option><option value="am_half">AM Half</option><option value="pm_half">PM Half</option></select></label></div></section>
 
-    <section className={`${mobileSection === 'time' ? 'block' : 'hidden'} rounded-3xl border border-slate-100 bg-white p-6 shadow-sm lg:block lg:p-7`}><h2 className="text-lg font-black text-[#690016]">Time Record</h2><p className="mt-1 text-xs text-slate-400">{isToday ? 'Regular time fields are read-only and controlled by Smart Clock.' : 'Official schedule times are pre-filled and may be adjusted.'}</p><div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Field label="AM In" value={form.am_time_in} onChange={change('am_time_in')} disabled={isToday || attendanceDisabled || form.status !== 'present'} /><Field label="AM Out" value={form.am_time_out} onChange={change('am_time_out')} disabled={isToday || attendanceDisabled || form.status !== 'present'} /><Field label="PM In" value={form.pm_time_in} onChange={change('pm_time_in')} disabled={isToday || attendanceDisabled || form.status !== 'present'} /><Field label="PM Out" value={form.pm_time_out} onChange={change('pm_time_out')} disabled={isToday || attendanceDisabled || form.status !== 'present'} /></div><div id="overtime-section" className="mt-7 border-t border-slate-100 pt-6"><div className="flex items-center gap-2"><h3 className="font-black text-slate-700">Overtime</h3><span className="rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black uppercase text-violet-700">Optional</span></div><div className="mt-4 grid gap-4 sm:grid-cols-2"><Field label="OT Start" value={form.ot_start} onChange={change('ot_start')} disabled={attendanceDisabled || form.status !== 'present'} /><Field label="OT End" value={form.ot_end} onChange={change('ot_end')} disabled={isToday || attendanceDisabled || form.status !== 'present'} /></div>{isToday && <p className="mt-2 text-xs text-slate-400">Today’s OT End is fixed to your actual final time-out.</p>}{otOverlap && <div className="mt-4 flex gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-bold text-blue-800"><FiInfo className="shrink-0" /> OT range overlaps with the official schedule — only time outside the schedule counts. Lunch is excluded.</div>}</div></section>
+    <section className={`${mobileSection === 'time' ? 'block' : 'hidden'} rounded-3xl border border-slate-100 bg-white p-6 shadow-sm lg:block lg:p-7`}>
+      <h2 className="text-lg font-black text-[#690016]">Time Record</h2>
+      <p className="mt-1 text-xs text-slate-400">{isToday ? 'Regular time fields are read-only and controlled by Smart Clock.' : 'Official schedule times are pre-filled and may be adjusted.'}</p>
+      <div className={`mt-5 grid gap-4 sm:grid-cols-2 ${showAmFields && showPmFields ? 'lg:grid-cols-4' : ''}`}>
+        {showAmFields && <>
+          <Field label="AM In" value={form.am_time_in} onChange={change('am_time_in')} disabled={isToday || attendanceDisabled || form.status !== 'present'} />
+          <Field label="AM Out" value={form.am_time_out} onChange={change('am_time_out')} disabled={isToday || attendanceDisabled || form.status !== 'present'} />
+        </>}
+        {showPmFields && <>
+          <Field label="PM In" value={form.pm_time_in} onChange={change('pm_time_in')} disabled={isToday || attendanceDisabled || form.status !== 'present'} />
+          <Field label="PM Out" value={form.pm_time_out} onChange={change('pm_time_out')} disabled={isToday || attendanceDisabled || form.status !== 'present'} />
+        </>}
+      </div>
+      <div id="overtime-section" className="mt-7 border-t border-slate-100 pt-6">
+        <div className="flex items-center gap-2"><h3 className="font-black text-slate-700">Overtime</h3><span className="rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black uppercase text-violet-700">Optional</span></div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Field label="OT Start" value={form.ot_start} onChange={change('ot_start')} disabled={attendanceDisabled || form.status !== 'present'} />
+          <Field label="OT End" value={form.ot_end} onChange={change('ot_end')} disabled={isToday || attendanceDisabled || form.status !== 'present'} />
+        </div>
+        {isToday && <p className="mt-2 text-xs text-slate-400">Today’s OT End is fixed to your actual final time-out.</p>}
+        {otOverlap && <div className="mt-4 flex gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-bold text-blue-800"><FiInfo className="shrink-0" /> OT range overlaps with the official schedule — only time outside the schedule counts. Lunch is excluded.</div>}
+      </div>
+    </section>
 
-    <section data-touch-active={mobileSection === 'report'} className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm lg:p-7"><h2 className="text-lg font-black text-[#690016]">Accomplishment Report</h2><div className="mt-5 grid gap-5 lg:grid-cols-2"><label><span className="mb-1.5 block text-xs font-black uppercase text-slate-400">AM Activities</span><textarea rows={5} value={form.am_activity || ''} onChange={change('am_activity')} disabled={attendanceDisabled || form.status !== 'present'} className="w-full resize-none rounded-2xl border border-slate-200 p-4 text-sm outline-none focus:border-[#7D001D]/40 disabled:bg-slate-100" placeholder="Describe morning accomplishments..." /></label><label><span className="mb-1.5 block text-xs font-black uppercase text-slate-400">PM Activities</span><textarea rows={5} value={form.pm_activity || ''} onChange={change('pm_activity')} disabled={attendanceDisabled || form.status !== 'present'} className="w-full resize-none rounded-2xl border border-slate-200 p-4 text-sm outline-none focus:border-[#7D001D]/40 disabled:bg-slate-100" placeholder="Describe afternoon accomplishments..." /></label></div></section>
+    <section data-touch-active={mobileSection === 'report'} className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm lg:p-7">
+      <h2 className="text-lg font-black text-[#690016]">Accomplishment Report</h2>
+      <div className={`mt-5 grid gap-5 ${showAmFields && showPmFields ? 'lg:grid-cols-2' : ''}`}>
+        {showAmFields && <label><span className="mb-1.5 block text-xs font-black uppercase text-slate-400">AM Activities</span><textarea rows={5} value={form.am_activity || ''} onChange={change('am_activity')} disabled={attendanceDisabled || form.status !== 'present'} className="w-full resize-none rounded-2xl border border-slate-200 p-4 text-sm outline-none focus:border-[#7D001D]/40 disabled:bg-slate-100" placeholder="Describe morning accomplishments..." /></label>}
+        {showPmFields && <label><span className="mb-1.5 block text-xs font-black uppercase text-slate-400">PM Activities</span><textarea rows={5} value={form.pm_activity || ''} onChange={change('pm_activity')} disabled={attendanceDisabled || form.status !== 'present'} className="w-full resize-none rounded-2xl border border-slate-200 p-4 text-sm outline-none focus:border-[#7D001D]/40 disabled:bg-slate-100" placeholder="Describe afternoon accomplishments..." /></label>}
+      </div>
+    </section>
 
-    <button data-touch-active={mobileSection !== 'calendar'} onClick={() => saveEntry()} disabled={busy || attendanceDisabled || (isToday && !selectedRecord)} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#7D001D] px-6 py-4 font-black text-white shadow-xl shadow-[#7D001D]/15 disabled:cursor-not-allowed disabled:opacity-45"><FiSave />{busy ? 'Saving...' : selectedHoliday ? 'Official Holiday — No Attendance Required' : isToday ? 'Update Accomplishment & Overtime' : `Save Attendance for ${prettyDate(selectedDate)}`}</button>
+    <button data-touch-active={mobileSection !== 'calendar'} onClick={() => saveEntry()} disabled={busy || attendanceDisabled || (isToday && !selectedRecord)} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#7D001D] px-6 py-4 font-black text-white shadow-xl shadow-[#7D001D]/15 disabled:cursor-not-allowed disabled:opacity-45"><FiSave />{busy ? 'Saving...' : isToday ? 'Update Accomplishment & Overtime' : `Save Attendance for ${prettyDate(selectedDate)}`}</button>
 
   </div>;
 }

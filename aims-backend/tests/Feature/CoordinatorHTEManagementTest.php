@@ -351,6 +351,18 @@ class CoordinatorHTEManagementTest extends TestCase
             ->assertJsonPath('batch.days.sat.pm_end', '15:00');
 
         $this->assertDatabaseCount('hte_batch_schedules', 7);
+
+        $overlappingDays = $days;
+        $overlappingDays['mon']['am_end'] = '23:30';
+        $this->putJson("/api/coordinator/htes/{$hte->id}/batch-schedules/{$batch->id}", ['days' => $overlappingDays])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('days.mon.am_end');
+        $this->assertDatabaseHas('hte_batch_schedules', [
+            'hte_id' => $hte->id,
+            'academic_section_id' => $batch->id,
+            'day_of_week' => 'mon',
+            'am_end' => '12:00',
+        ]);
         $this->assertDatabaseHas('hte_batch_schedules', [
             'hte_id' => $hte->id,
             'academic_section_id' => $batch->id,
@@ -427,13 +439,14 @@ class CoordinatorHTEManagementTest extends TestCase
 
         $this->post('/api/coordinator/htes/moas', [
             'hte_id' => $hte->id,
+            'program_id' => $coordinator->program_id,
             'effective_date' => now()->subMonth()->toDateString(),
             'expiration_date' => now()->addYear()->toDateString(),
             'file' => UploadedFile::fake()->create('agreement.pdf', 100, 'application/pdf'),
         ], ['Accept' => 'application/json'])
             ->assertCreated()
             ->assertJsonPath('moa.status', 'pending')
-            ->assertJsonPath('moa.college_id', $college->id)
+            ->assertJsonPath('moa.college.id', $college->id)
             ->assertJsonPath('moa.program_id', $coordinator->program_id);
 
         $moa = MOA::firstOrFail();
@@ -460,7 +473,8 @@ class CoordinatorHTEManagementTest extends TestCase
             ->assertJsonPath('expiration_alerts.0.level', 'critical');
 
         $this->deleteJson("/api/coordinator/htes/moas/{$moa->id}")
-            ->assertStatus(405);
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Reviewed or approved MOAs cannot be deleted.');
         $this->assertDatabaseHas('moas', ['id' => $moa->id]);
         $privateDisk->assertExists($moa->file_path);
 
@@ -475,6 +489,78 @@ class CoordinatorHTEManagementTest extends TestCase
         $this->deleteJson("/api/coordinator/htes/holidays/{$holidayId}")
             ->assertOk();
         $this->assertDatabaseMissing('holidays', ['id' => $holidayId]);
+    }
+
+    public function test_coordinator_can_remove_unreviewed_pending_moa_without_erasing_its_record_or_file(): void
+    {
+        Storage::fake('local');
+        [$coordinator, , $hte] = $this->context();
+        Sanctum::actingAs($coordinator);
+
+        $moaId = $this->post('/api/coordinator/htes/moas', [
+            'hte_id' => $hte->id,
+            'program_id' => $coordinator->program_id,
+            'effective_date' => now()->subDay()->toDateString(),
+            'expiration_date' => now()->addYear()->toDateString(),
+            'file' => UploadedFile::fake()->create('agreement.pdf', 100, 'application/pdf'),
+        ], ['Accept' => 'application/json'])->assertCreated()->json('moa.id');
+        $path = MOA::findOrFail($moaId)->file_path;
+
+        $this->deleteJson("/api/coordinator/htes/moas/{$moaId}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Pending MOA deleted.');
+
+        $this->assertSoftDeleted('moas', ['id' => $moaId]);
+        /** @var FilesystemAdapter $privateDisk */
+        $privateDisk = Storage::disk('local');
+        $privateDisk->assertExists($path);
+        $this->getJson('/api/coordinator/htes')->assertOk()->assertJsonCount(0, 'moas');
+        $this->getJson("/api/coordinator/htes/moas/{$moaId}/download")->assertNotFound();
+    }
+
+    public function test_coordinator_can_edit_pending_moa_dates_but_not_after_program_head_review(): void
+    {
+        Storage::fake('local');
+        [$coordinator, , $hte] = $this->context();
+        Sanctum::actingAs($coordinator);
+
+        $moaId = $this->post('/api/coordinator/htes/moas', [
+            'hte_id' => $hte->id,
+            'program_id' => $coordinator->program_id,
+            'effective_date' => now()->subDay()->toDateString(),
+            'expiration_date' => now()->addYear()->toDateString(),
+            'file' => UploadedFile::fake()->create('agreement.pdf', 100, 'application/pdf'),
+        ], ['Accept' => 'application/json'])->assertCreated()->json('moa.id');
+
+        $newEffectiveDate = today()->toDateString();
+        $newExpirationDate = today()->addMonths(6)->toDateString();
+        $this->putJson("/api/coordinator/htes/moas/{$moaId}", [
+            'effective_date' => $newEffectiveDate,
+            'expiration_date' => $newExpirationDate,
+        ])->assertOk()->assertJsonPath('message', 'MOA details updated and returned to pending approval.');
+
+        $moa = MOA::findOrFail($moaId);
+        $this->assertSame($newEffectiveDate, $moa->effective_date->toDateString());
+        $this->assertSame($newExpirationDate, $moa->expiration_date->toDateString());
+
+        $moa->update(['program_status' => 'endorsed', 'program_reviewed_at' => now()]);
+        $this->putJson("/api/coordinator/htes/moas/{$moaId}", [
+            'effective_date' => today()->addDay()->toDateString(),
+            'expiration_date' => today()->addYear()->toDateString(),
+        ])->assertUnprocessable();
+        $this->deleteJson("/api/coordinator/htes/moas/{$moaId}")->assertUnprocessable();
+
+        $moa->update(['program_status' => 'returned', 'program_feedback' => 'Please revise.', 'status' => 'pending']);
+        $this->putJson("/api/coordinator/htes/moas/{$moaId}", [
+            'effective_date' => today()->toDateString(),
+            'expiration_date' => today()->addYear()->toDateString(),
+        ])->assertOk()->assertJsonPath('moa.program_status', 'pending');
+        $this->assertDatabaseHas('moas', [
+            'id' => $moaId,
+            'program_status' => 'pending',
+            'program_feedback' => null,
+            'program_reviewed_at' => null,
+        ]);
     }
 
     private function context(): array
@@ -517,6 +603,10 @@ class CoordinatorHTEManagementTest extends TestCase
             'year_level' => 4,
             'academic_year' => '2026-2027',
             'is_active' => true,
+        ]);
+        DB::table('coordinator_section_assignments')->insert([
+            'academic_section_id' => $batch->id, 'coordinator_id' => $coordinator->id,
+            'created_at' => now(), 'updated_at' => now(),
         ]);
         $student = Student::create([
             'user_id' => $studentUser->id,

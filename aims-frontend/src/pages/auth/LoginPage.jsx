@@ -33,6 +33,7 @@ function LoginPage() {
         coordinator: '/coordinator/dashboard',
         program_head: '/program-head/dashboard',
         vpaa: '/vpaa/dashboard',
+        dean: '/dean/dashboard',
         admin: '/admin/dashboard',
         supervisor: '/supervisor/dashboard',
       };
@@ -45,9 +46,12 @@ function LoginPage() {
         navigate(roleRoutes[data.user.role] || '/');
       }
     } catch (error) {
-      const message = error.response?.data?.errors?.login?.[0]
-        || error.response?.data?.message
-        || 'We could not sign you in. Please check your credentials.';
+      const retryAfter = Number(error.response?.headers?.['retry-after']);
+      const message = error.response?.status === 429
+        ? `Too many login attempts. Please try again in ${Number.isFinite(retryAfter) && retryAfter > 0 ? Math.ceil(retryAfter) : 60} seconds.`
+        : error.response?.data?.errors?.login?.[0]
+          || error.response?.data?.message
+          || 'We could not sign you in. Please check your credentials.';
       toast.error(message);
     } finally {
       setLoading(false);
@@ -95,7 +99,7 @@ function LoginPage() {
           <div>
             <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-[#a8750b]">Secure portal access</p>
             <h2 className="mt-2 text-3xl font-black text-[#690016]">Welcome back</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">Enter your university email, User ID, or Student ID to continue to AIMS.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Enter your university email, Username, or Student ID to continue to AIMS.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -112,7 +116,7 @@ function LoginPage() {
                   onChange={(event) => setIdentifier(event.target.value)}
                   required
                   className="login-input w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8"
-                  placeholder="Email, User ID, or Student ID"
+                  placeholder="Email, Username, or Student ID"
                 />
               </div>
             </div>

@@ -36,6 +36,17 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             ->assertJsonPath('hte.departments.0.supervisors.0.full_name', 'Maria Saint')
             ->json('hte.id');
 
+        $supervisor = Supervisor::whereHas('supervisorProfile', fn ($profile) => $profile->where('full_name', 'Maria Saint'))->firstOrFail();
+        $this->assertDatabaseHas('supervisor_profiles', [
+            'id' => $supervisor->supervisor_profile_id,
+            'full_name' => 'Maria Saint',
+        ]);
+        $this->assertDatabaseHas('hte_supervisor_assignments', [
+            'supervisor_profile_id' => $supervisor->supervisor_profile_id,
+            'hte_department_id' => $supervisor->hte_department_id,
+            'is_active' => true,
+        ]);
+
         Sanctum::actingAs($secondCoordinator);
         $this->getJson('/api/coordinator/htes/search?search=Marinduque%20State')
             ->assertOk()
@@ -85,7 +96,9 @@ class SharedHteSupervisorWorkflowTest extends TestCase
 
         $this->assertDatabaseCount('htes', 1);
         $this->assertDatabaseCount('hte_departments', 2);
-        $this->assertDatabaseCount('supervisors', 2);
+        $this->assertFalse(Schema::hasTable('supervisors'));
+        $this->assertDatabaseCount('supervisor_profiles', 2);
+        $this->assertDatabaseCount('hte_supervisor_assignments', 2);
         $this->assertDatabaseHas('hte_programs', [
             'hte_id' => $hteId,
             'program_id' => $firstCoordinator->program_id,
@@ -153,7 +166,7 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             ->assertJsonPath('user.supervisor_profile.id', $supervisor->id);
 
         $userId = $created->json('user.id');
-        $this->assertDatabaseHas('supervisors', ['id' => $supervisor->id, 'user_id' => $userId]);
+        $this->assertDatabaseHas('supervisor_profiles', ['id' => $supervisor->supervisor_profile_id, 'user_id' => $userId]);
 
         $this->postJson('/api/admin/users', [
             'email' => 'another.supervisor@example.com',
@@ -182,6 +195,7 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             Sanctum::actingAs($coordinator);
             $this->post('/api/coordinator/htes/moas', [
                 'hte_id' => $hteId,
+                'program_id' => $coordinator->program_id,
                 'effective_date' => '2026-08-01',
                 'expiration_date' => '2027-08-01',
                 'file' => UploadedFile::fake()->create('agreement-'.($index + 1).'.pdf', 100, 'application/pdf'),
@@ -210,8 +224,8 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             'supervisor_full_name' => 'Pedro Reyes',
         ])->assertCreated();
 
-        $learningSupervisor = Supervisor::where('full_name', 'Maria Saint')->firstOrFail();
-        $accountingSupervisor = Supervisor::where('full_name', 'Pedro Reyes')->firstOrFail();
+        $learningSupervisor = Supervisor::whereHas('supervisorProfile', fn ($profile) => $profile->where('full_name', 'Maria Saint'))->firstOrFail();
+        $accountingSupervisor = Supervisor::whereHas('supervisorProfile', fn ($profile) => $profile->where('full_name', 'Pedro Reyes'))->firstOrFail();
         $studentUser = User::factory()->create(['role' => 'student']);
         $student = Student::create([
             'user_id' => $studentUser->id,
@@ -231,6 +245,10 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             'parent_address' => 'Boac, Marinduque',
             'parent_contact_number' => '09170000002',
             'registration_status' => 'approved',
+        ]);
+        \Illuminate\Support\Facades\DB::table('coordinator_section_assignments')->insert([
+            'academic_section_id' => $student->academic_section_id, 'coordinator_id' => $coordinator->id,
+            'created_at' => now(), 'updated_at' => now(),
         ]);
 
         $payload = [
@@ -282,7 +300,7 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             'supervisor_record_id' => $supervisor->id,
         ])->assertCreated();
 
-        $userId = $created->json('user.user_id');
+        $userId = $created->json('user.username');
         $temporaryPassword = $created->json('temporary_password');
         $this->app['auth']->forgetGuards();
 

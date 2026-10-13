@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\InternshipRequirement;
 use App\Models\ProgramRequirement;
-use App\Models\Student;
+use App\Models\User;
 use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +18,7 @@ class CoordinatorRequirementController extends Controller
     {
         $programId = ProgramAccess::programId($request->user());
         ProgramRequirement::ensureDefaultsForProgram($programId);
-        $this->syncStudents($programId);
+        $this->syncStudents($request->user());
 
         return response()->json([
             'program' => $request->user()->program,
@@ -43,7 +43,7 @@ class CoordinatorRequirementController extends Controller
         ]);
 
         if ($definition->is_active) {
-            $this->syncStudents($programId);
+            $this->syncStudents($request->user());
         }
 
         return response()->json([
@@ -70,7 +70,7 @@ class CoordinatorRequirementController extends Controller
         });
 
         if ($programRequirement->is_active) {
-            $this->syncStudents($programId);
+            $this->syncStudents($request->user());
         }
 
         return response()->json([
@@ -141,10 +141,10 @@ class CoordinatorRequirementController extends Controller
         return $programId;
     }
 
-    private function syncStudents(int $programId): void
+    private function syncStudents(User $user): void
     {
         InternshipRequirement::ensureForStudents(
-            Student::forProgram($programId)->pluck('id')
+            ProgramAccess::studentQuery($user)->pluck('id')
         );
     }
 

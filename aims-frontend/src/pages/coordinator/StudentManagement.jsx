@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FiAlertTriangle, FiCheck, FiChevronLeft, FiChevronRight, FiDownload, FiEdit2, FiEye, FiFileText, FiPlus, FiSearch, FiSettings, FiTrash2, FiUpload, FiUserCheck, FiUsers, FiX } from 'react-icons/fi';
+import { FiAlertTriangle, FiCheck, FiChevronLeft, FiChevronRight, FiEdit2, FiEye, FiFileText, FiPlus, FiSearch, FiSettings, FiTrash2, FiUpload, FiUserCheck, FiUsers, FiX } from 'react-icons/fi';
 import toast from 'react-hot-toast';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import RequirementManagerModal from './RequirementManagerModal';
 import ContactNumberInput from '../../components/forms/ContactNumberInput';
@@ -40,6 +41,18 @@ const emptyForm = {
 
 const enrollmentPageSizes = [10, 25, 50, 100];
 
+function studentAcademicLabel(student) {
+  const program = String(student.program?.code || '').trim();
+  const section = String(student.section || '').trim();
+  const fullSection = program && section
+    && section.toLowerCase() !== program.toLowerCase()
+    && !section.toLowerCase().startsWith(`${program.toLowerCase()} `)
+    ? `${program} ${section}`
+    : section || program;
+  return [student.year_level ? `Year ${student.year_level}` : null, fullSection]
+    .filter(Boolean).join(' · ');
+}
+
 const badge = {
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
   approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
@@ -55,8 +68,8 @@ function StatusBadge({ value }) {
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${badge[value] || badge.pending}`}>{value || 'pending'}</span>;
 }
 
-function Modal({ title, subtitle, onClose, children, size = 'default' }) {
-  const maxWidths = { confirm: '30rem', default: '42rem', form: '56rem', wide: '56rem' };
+function Modal({ title, subtitle, onClose, children, size = 'default', height, footer }) {
+  const maxWidths = { confirm: '30rem', default: '42rem', form: '40rem', wide: '56rem', detail: '36rem' };
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -68,7 +81,7 @@ function Modal({ title, subtitle, onClose, children, size = 'default' }) {
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-hidden bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5">
-      <div role="dialog" aria-modal="true" aria-label={title} style={{ maxWidth: maxWidths[size] || maxWidths.default }} className="flex max-h-[calc(100dvh-1.5rem)] w-full flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800 sm:max-h-[calc(100dvh-2.5rem)]">
+      <div role="dialog" aria-modal="true" aria-label={title} style={{ maxWidth: maxWidths[size] || maxWidths.default, ...(height ? { height } : {}) }} className="flex max-h-[calc(100dvh-1.5rem)] w-full flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800 sm:max-h-[calc(100dvh-2.5rem)]">
         <div className="flex shrink-0 items-start justify-between border-b border-slate-100 bg-white px-4 py-4 dark:border-gray-700 dark:bg-gray-800 sm:px-5">
           <div className="min-w-0 pr-4">
             <h2 className="truncate text-lg font-black text-[#690016] dark:text-white">{title}</h2>
@@ -79,6 +92,7 @@ function Modal({ title, subtitle, onClose, children, size = 'default' }) {
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+        {footer && <div className="flex shrink-0 justify-end gap-3 border-t border-slate-200 bg-white px-5 py-4 dark:border-gray-700 dark:bg-gray-800">{footer}</div>}
       </div>
     </div>
   );
@@ -125,102 +139,22 @@ function Progress({ value, color = 'bg-[#7D001D]' }) {
   );
 }
 
-function RequirementChecklist({ requirements = [], busy, onDownload, onReview }) {
-  const counts = requirements.reduce(
-    (total, requirement) => {
-      const status = requirement.file_path ? requirement.status : 'missing';
-      total[status] = (total[status] || 0) + 1;
-      return total;
-    },
-    { missing: 0, pending: 0, approved: 0, rejected: 0 },
-  );
-  const completion = requirements.length ? Math.round((counts.approved / requirements.length) * 100) : 0;
-
-  return (
-    <div>
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
-          <h3 className="font-black text-[#690016] dark:text-white">Official OJT Requirements</h3>
-          <p className="mt-1 text-xs text-slate-400">Review the student&apos;s ten required documents.</p>
-        </div>
-        <span className="text-sm font-black text-[#7D001D] dark:text-rose-300">
-          {counts.approved}/{requirements.length || 10} approved
-        </span>
-      </div>
-
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-gray-700 dark:bg-gray-900/60">
-        <div className="mb-2 flex items-center justify-between text-xs">
-          <span className="font-bold text-slate-500 dark:text-gray-300">Completion</span>
-          <span className="font-black text-[#7D001D] dark:text-rose-300">{completion}%</span>
-        </div>
-        <Progress value={completion} color="bg-gradient-to-r from-[#7D001D] to-[#d4af37]" />
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            ['Missing', counts.missing, 'text-slate-500'],
-            ['Pending', counts.pending, 'text-amber-600'],
-            ['Approved', counts.approved, 'text-emerald-600'],
-            ['Rejected', counts.rejected, 'text-rose-600'],
-          ].map(([label, value, color]) => (
-            <div key={label} className="rounded-xl bg-white px-3 py-2 text-center shadow-sm dark:bg-gray-800">
-              <p className={`text-lg font-black ${color}`}>{value}</p>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        {requirements.map((requirement, index) => {
-          const status = requirement.file_path ? requirement.status : 'missing';
-          return (
-            <article key={requirement.id} className="flex min-h-44 flex-col rounded-2xl border border-slate-200 p-4 dark:border-gray-700 dark:bg-gray-900/30">
-              <div className="flex items-start gap-3">
-                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#7D001D]/8 text-sm font-black text-[#7D001D] dark:bg-rose-950 dark:text-rose-300">{index + 1}</div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-black leading-5 text-slate-800 dark:text-white">{requirement.requirement_name}</p>
-                  <div className="mt-2">
-                    <StatusBadge value={status} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 flex-1">
-                {requirement.file_path ? (
-                  <p className="text-[11px] text-slate-400">
-                    {requirement.file_type?.toUpperCase() || 'FILE'} · Submitted {new Date(requirement.updated_at || requirement.created_at).toLocaleDateString()}
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-slate-400">Waiting for the student to upload this document.</p>
-                )}
-                {requirement.feedback && <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">Feedback: {requirement.feedback}</p>}
-              </div>
-
-              {requirement.file_path && (
-                <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3 dark:border-gray-700">
-                  <button onClick={() => onDownload(requirement)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold dark:border-gray-600">
-                    <FiDownload /> Download
-                  </button>
-                  {status !== 'approved' && (
-                    <button onClick={() => onReview(requirement, 'approved')} disabled={busy} className="rounded-lg bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-700 disabled:opacity-50">
-                      Approve
-                    </button>
-                  )}
-                  {status !== 'rejected' && (
-                    <button onClick={() => onReview(requirement, 'rejected')} disabled={busy} className="rounded-lg bg-rose-100 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-50">
-                      Reject
-                    </button>
-                  )}
-                </div>
-              )}
-            </article>
-          );
-        })}
-      </div>
-    </div>
-  );
+function RequirementSummary({ requirements = [], studentId }) {
+  const counts = requirements.reduce((result, item) => {
+    const status = item.file_path ? item.status : 'missing';
+    result[status] = (result[status] || 0) + 1;
+    return result;
+  }, { missing: 0, pending: 0, approved: 0, rejected: 0 });
+  const percent = requirements.length ? Math.round(counts.approved / requirements.length * 100) : 0;
+  return <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+    <div className="flex justify-between gap-3"><h3 className="font-black text-[#690016] dark:text-white">Internship Requirements</h3><b>{counts.approved}/{requirements.length} approved · {percent}%</b></div>
+    <Progress value={percent} />
+    <p className="mt-3 text-xs text-slate-500">Missing {counts.missing} · For review {counts.pending} · Approved {counts.approved} · Rejected {counts.rejected}</p>
+    <Link to={`/coordinator/internship-requirements?student=${studentId}`} className="mt-4 inline-block rounded-lg bg-[#7D001D] px-4 py-2 text-sm font-bold text-white">View Requirements →</Link>
+  </section>;
 }
-
 function StudentManagement() {
+  const [urlParams] = useSearchParams();
   const [students, setStudents] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
   const [enrollmentSummary, setEnrollmentSummary] = useState({});
@@ -231,7 +165,8 @@ function StudentManagement() {
   const [options, setOptions] = useState({ colleges: [], htes: [], sections: [] });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [internshipStatus, setInternshipStatus] = useState('');
+  const [internshipStatus, setInternshipStatus] = useState(urlParams.get('internship_status') || '');
+  const [registrationFilter, setRegistrationFilter] = useState(urlParams.get('registration') || '');
   const [sectionFilter, setSectionFilter] = useState('');
   const [page, setPage] = useState(1);
   const [studentPerPage, setStudentPerPage] = useState(10);
@@ -247,8 +182,10 @@ function StudentManagement() {
   const [importFile, setImportFile] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const [importSectionId, setImportSectionId] = useState('');
+  const [importFilePreview, setImportFilePreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const importInput = useRef(null);
+  const importPreviewTrigger = useRef(null);
 
   const fetchStudents = useCallback(async () => {
     setLoading(true);
@@ -268,7 +205,7 @@ function StudentManagement() {
   const fetchEnrollments = useCallback(async () => {
     try {
       const response = await api.get('/coordinator/students/enrollments', {
-        params: { search, academic_section_id: sectionFilter || undefined, page: enrollmentPage, per_page: enrollmentPerPage },
+        params: { search, academic_section_id: sectionFilter || undefined, registration: registrationFilter || undefined, page: enrollmentPage, per_page: enrollmentPerPage },
       });
       setEnrollments(response.data.data || []);
       setEnrollmentSummary(response.data.summary || {});
@@ -282,7 +219,7 @@ function StudentManagement() {
     } catch (error) {
       toast.error(errorMessage(error, 'Unable to load the OJT enrollment list.'));
     }
-  }, [enrollmentPage, enrollmentPerPage, search, sectionFilter]);
+  }, [enrollmentPage, enrollmentPerPage, search, sectionFilter, registrationFilter]);
 
   useEffect(() => {
     api
@@ -310,14 +247,13 @@ function StudentManagement() {
     const errors = error.response?.data?.errors;
     return errors ? Object.values(errors)[0]?.[0] : error.response?.data?.message || fallback;
   };
-
   const openCreate = () => {
     setForm(emptyForm);
     setEditorStep(0);
     setEditor({ mode: 'create' });
   };
   const openEdit = (student) => {
-    setForm({ ...emptyForm, ...student, email: student.user?.email || '', password: '', college_id: student.college_id || student.college?.id || '', program_id: student.program_id || student.program?.id || '', hte_id: student.hte_id || student.hte?.id || '', birth_date: student.birth_date?.slice(0, 10) || '', ojt_start_date: student.ojt_start_date?.slice(0, 10) || '', ojt_end_date: student.ojt_end_date?.slice(0, 10) || '' });
+    setForm({ ...emptyForm, ...student, email: student.user?.email || '', password: '', college_id: student.college_id || student.college?.id || '', program_id: student.program_id || student.program?.id || '', hte_id: student.hte_id || student.hte?.id || '', birth_date: student.birth_date?.slice(0, 10) || '', required_ojt_hours: student.official_ojt_setting?.required_hours ?? student.required_ojt_hours ?? '', ojt_start_date: student.official_ojt_setting?.ojt_start_date?.slice(0, 10) || student.ojt_start_date?.slice(0, 10) || '', ojt_end_date: student.ojt_end_date?.slice(0, 10) || '' });
     setSelected(null);
     setEditorStep(0);
     setEditor({ mode: 'edit', student });
@@ -368,39 +304,6 @@ function StudentManagement() {
       setSelected(response.data);
     } catch (error) {
       toast.error(errorMessage(error, 'Unable to load student details.'));
-    }
-  };
-
-  const reviewRequirement = async (requirement, decision) => {
-    let feedback = '';
-    if (decision === 'rejected') {
-      feedback = window.prompt('Feedback required for rejection:') || '';
-      if (!feedback.trim()) return;
-    }
-    setBusy(true);
-    try {
-      const response = await api.post(`/coordinator/students/${selected.id}/requirements/${requirement.id}/review`, { decision, feedback: feedback || null });
-      toast.success(response.data.message);
-      viewStudent(selected.id);
-      fetchStudents();
-    } catch (error) {
-      toast.error(errorMessage(error, 'Unable to review requirement.'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const downloadRequirement = async (requirement) => {
-    try {
-      const response = await api.get(`/coordinator/students/${selected.id}/requirements/${requirement.id}/download`, { responseType: 'blob' });
-      const url = URL.createObjectURL(response.data);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = requirement.file_path?.split('/').pop() || `${requirement.requirement_name}.file`;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast.error('Unable to download the requirement file.');
     }
   };
 
@@ -457,11 +360,27 @@ function StudentManagement() {
     }
   };
 
+  const viewSelectedCsv = async (trigger) => {
+    if (!importFile) return;
+    importPreviewTrigger.current = trigger;
+    try {
+      setImportFilePreview({ name: importFile.name, content: await importFile.text() });
+    } catch {
+      toast.error('Unable to open the selected CSV file.');
+    }
+  };
+
+  const closeImportFilePreview = () => {
+    setImportFilePreview(null);
+    importPreviewTrigger.current?.focus();
+  };
+
   const closeImport = () => {
     setImportOpen(false);
     setImportFile(null);
     setImportResult(null);
     setImportSectionId('');
+    setImportFilePreview(null);
     if (importInput.current) importInput.current.value = '';
   };
 
@@ -515,13 +434,14 @@ function StudentManagement() {
         ))}
       </div>
 
-      <section className="portal-table-panel overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <section id="ojt-enrollments" className="portal-table-panel overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-gray-700">
           <div>
             <h2 className="font-black text-[#690016] dark:text-white">OJT Enrollment List</h2>
             <p className="mt-1 text-xs text-slate-400">Students uploaded through CSV or added manually. They create their own account during registration.</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <select aria-label="Registration status" value={registrationFilter} onChange={(event) => { setRegistrationFilter(event.target.value); setEnrollmentPage(1); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:bg-gray-900"><option value="">All registration</option><option value="pending">Pending</option><option value="registered">Registered</option></select>
             <label className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-gray-300">
               <span>Entries per page</span>
               <select
@@ -609,7 +529,6 @@ function StudentManagement() {
             <option value="pending">Pending</option>
             <option value="active">Active</option>
             <option value="completed">Completed</option>
-            <option value="dropped">Dropped</option>
           </select>
           <select value={sectionFilter} onChange={(event) => setSectionFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 text-sm dark:border-gray-600 dark:bg-gray-900">
             <option value="">All sections</option>
@@ -647,7 +566,7 @@ function StudentManagement() {
                   <tr key={student.id} className="border-t border-slate-100 hover:bg-slate-50/60 dark:border-gray-700 dark:hover:bg-gray-900/50">
                     <td className="px-5 py-4">
                       <p className="text-sm font-black text-slate-800 dark:text-white">
-                        {student.last_name}, {student.first_name}
+                        {student.first_name} {student.last_name}
                       </p>
                       <p className="mt-1 text-xs text-slate-400">
                         {student.student_id} · {student.user?.email}
@@ -655,7 +574,7 @@ function StudentManagement() {
                     </td>
                     <td className="px-4 py-4">
                       <p className="text-xs font-bold text-slate-700 dark:text-gray-200">
-                        {student.program?.code} · Year {student.year_level}-{student.section}
+                        {studentAcademicLabel(student)}
                       </p>
                       <p className="mt-1 max-w-48 truncate text-[11px] text-slate-400">{student.hte?.name || 'No HTE assigned'}</p>
                     </td>
@@ -674,7 +593,7 @@ function StudentManagement() {
                       </div>
                       <Progress value={student.progress?.percent} />
                       <p className="mt-1.5 text-[10px] text-slate-400">
-                        {student.progress?.attendance_days || 0} days · {student.progress?.journal_entries || 0} journals
+                        {student.progress?.attendance_days || 0} {(student.progress?.attendance_days || 0) === 1 ? 'day' : 'days'} · {student.progress?.journal_entries || 0} activity entries
                       </p>
                     </td>
                     <td className="w-40 px-4 py-4 align-top">
@@ -775,9 +694,9 @@ function StudentManagement() {
       )}
 
       {editor?.mode === 'edit' && (
-        <Modal title="Update Student Record" subtitle="Complete the three short steps below. No browser zooming needed." onClose={() => setEditor(null)} size="form">
-          <form onSubmit={(event) => event.preventDefault()}>
-            <div className="border-b border-slate-100 bg-slate-50/80 px-5 py-3 dark:border-gray-700 dark:bg-gray-900/50">
+        <Modal title="Update Student Record" subtitle="Complete the three short steps below. No browser zooming needed." onClose={() => setEditor(null)} size="form" height="min(32rem, calc(100dvh - 2rem))">
+          <form onSubmit={(event) => event.preventDefault()} className="flex h-full min-h-0 flex-col">
+            <div className="shrink-0 border-b border-slate-100 bg-slate-50/80 px-4 py-2 dark:border-gray-700 dark:bg-gray-900/50">
               <div className="mx-auto flex max-w-2xl items-center">
                 {['Personal & Account', 'Academic & OJT', 'Guardian & Status'].map((label, index) => (
                   <div key={label} className="flex min-w-0 flex-1 items-center last:flex-none">
@@ -791,7 +710,7 @@ function StudentManagement() {
               </div>
             </div>
 
-            <div className="p-5 sm:p-6">
+            <div key={editorStep} className="min-h-0 flex-1 overflow-y-auto p-4">
               {editorStep === 0 && (
                 <>
                   <h3 className="mb-4 text-sm font-black text-[#7D001D] dark:text-rose-300">Personal & Account Information</h3>
@@ -862,12 +781,18 @@ function StudentManagement() {
                       ))}
                     </Select>
                     <Input label="Section" name="section" form={form} setForm={setForm} required />
-                    <Input label="Required OJT Hours" name="required_ojt_hours" type="number" min="1" form={form} setForm={setForm} required />
+                    {editor.student?.official_ojt_setting
+                      ? <label className="block text-sm font-bold">Required OJT Hours <input className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-gray-600 dark:bg-gray-900" value={editor.student.official_ojt_setting.required_hours} readOnly /><span className="text-xs text-slate-500">Published by Program Head</span></label>
+                      : <Input label="Required OJT Hours" name="required_ojt_hours" type="number" min="1" form={form} setForm={setForm} required />}
                     <Input label="Semester" name="internship_semester" form={form} setForm={setForm} />
                     <Input label="Academic Year" name="internship_year" placeholder="2026-2027" form={form} setForm={setForm} />
                     <div className="hidden md:block" />
-                    <Input label="OJT Start Date" name="ojt_start_date" type="date" form={form} setForm={setForm} />
-                    <Input label="OJT End Date" name="ojt_end_date" type="date" form={form} setForm={setForm} />
+                    {editor.student?.official_ojt_setting
+                      ? <label className="block text-sm font-bold">OJT Start Date <input className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-gray-600 dark:bg-gray-900" type="date" value={editor.student.official_ojt_setting.ojt_start_date.slice(0, 10)} readOnly /><span className="text-xs text-slate-500">Published by Program Head</span></label>
+                      : <Input label="OJT Start Date" name="ojt_start_date" type="date" form={form} setForm={setForm} />}
+                    {editor.student?.official_ojt_setting
+                      ? <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-gray-600 dark:bg-gray-900">Estimated OJT end date is calculated automatically after deployment from the work schedule and completed attendance hours.</p>
+                      : <Input label="OJT End Date" name="ojt_end_date" type="date" form={form} setForm={setForm} />}
                   </div>
                 </>
               )}
@@ -920,7 +845,7 @@ function StudentManagement() {
               )}
             </div>
 
-            <div className="flex shrink-0 items-center justify-between border-t border-slate-100 bg-white px-5 py-4 dark:border-gray-700 dark:bg-gray-800">
+            <div className="flex shrink-0 items-center justify-between border-t border-slate-100 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
               <button type="button" onClick={() => (editorStep === 0 ? setEditor(null) : setEditorStep((current) => current - 1))} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold dark:border-gray-600">
                 {editorStep === 0 ? 'Cancel' : 'Previous'}
               </button>
@@ -940,36 +865,57 @@ function StudentManagement() {
       )}
 
       {selected && (
-        <Modal title={`${selected.first_name} ${selected.last_name}`} subtitle={`${selected.student_id} · ${selected.user?.email}`} onClose={() => setSelected(null)} size="wide">
-          <div className="grid gap-6 p-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
-            <aside className="space-y-5">
-              <div className="rounded-2xl bg-slate-50 p-5 dark:bg-gray-900">
+        <Modal title={`${selected.first_name} ${selected.last_name}`} subtitle={`${selected.student_id} · ${selected.user?.email}`} onClose={() => setSelected(null)} size="detail" height="min(32rem, calc(100dvh - 2rem))">
+          <div className="space-y-3 p-3 sm:p-4">
+            <aside className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="rounded-xl bg-slate-50 p-3 dark:bg-gray-900">
                 <div className="flex flex-wrap gap-2">
                   <StatusBadge value="registered" />
                   <StatusBadge value={selected.internship_status} />
                 </div>
               </div>
-              <div>
+              <div className="min-w-0 sm:col-span-2 sm:row-start-2">
                 <div className="mb-2 flex justify-between text-xs">
                   <span>OJT Progress</span>
                   <b>{selected.progress?.percent || 0}%</b>
                 </div>
                 <Progress value={selected.progress?.percent} />
                 <p className="mt-2 text-xs text-slate-400">
-                  {selected.progress?.rendered_hours || 0} / {selected.progress?.required_hours || 486} hours · {selected.progress?.attendance_days || 0} attendance days
+                  {selected.progress?.rendered_hours || 0} / {selected.progress?.required_hours || 486} hours · {selected.progress?.attendance_days || 0} attendance {(selected.progress?.attendance_days || 0) === 1 ? 'day' : 'days'}
                 </p>
               </div>
-              <button onClick={() => openEdit(selected)} className="w-full rounded-xl border border-slate-200 py-3 text-sm font-black text-[#7D001D] dark:border-gray-600 dark:text-rose-300">
+              <button onClick={() => openEdit(selected)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-[#7D001D] dark:border-gray-600 dark:text-rose-300 sm:col-start-2 sm:row-start-1">
                 Edit Student Record
               </button>
             </aside>
-            <RequirementChecklist requirements={selected.requirements} busy={busy} onDownload={downloadRequirement} onReview={reviewRequirement} />
+            <RequirementSummary requirements={selected.requirements} studentId={selected.id} />
           </div>
         </Modal>
       )}
 
       {importOpen && (
-        <Modal title="Import Student List" subtitle="Preview the official school CSV before saving eligible students." onClose={closeImport}>
+        <Modal
+          title="Import Student List"
+          subtitle="Preview the official school CSV before saving eligible students."
+          onClose={closeImport}
+          size={importResult && !importResult.completed ? 'wide' : 'default'}
+          height={importResult && !importResult.completed ? 'min(84dvh, 780px)' : undefined}
+          footer={<>
+            <button onClick={closeImport} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold dark:border-gray-600">
+              {importResult?.completed ? 'Done' : 'Cancel'}
+            </button>
+            {!importResult && (
+              <button onClick={previewCsvImport} disabled={busy || !importFile || !importSectionId} className="rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-50">
+                {busy ? 'Reading CSV...' : 'Preview Import'}
+              </button>
+            )}
+            {importResult && !importResult.completed && (
+              <button onClick={confirmCsvImport} disabled={busy || !importResult.summary?.ready} className="rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-50">
+                {busy ? 'Importing...' : `Confirm Import (${importResult.summary?.ready || 0})`}
+              </button>
+            )}
+          </>}
+        >
           <div className="p-5">
             <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
               Upload the existing predefined school CSV without changing its layout. AIMS reads only <b>Column E (School No.)</b> and <b>Column F (Full Name)</b> from numbered student rows.
@@ -1008,8 +954,12 @@ function StudentManagement() {
                   onChange={(event) => {
                     setImportFile(event.target.files?.[0] || null);
                     setImportResult(null);
+                    setImportFilePreview(null);
                   }}
                 />
+                <button type="button" onClick={(event) => viewSelectedCsv(event.currentTarget)} disabled={!importFile || busy} className="mt-3 text-sm font-semibold text-[#7D001D] underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:text-rose-300">
+                  View selected file
+                </button>
               </>
             )}
 
@@ -1074,21 +1024,13 @@ function StudentManagement() {
               </div>
             )}
 
-            <div className="mt-6 flex justify-end gap-3">
-              <button onClick={closeImport} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold dark:border-gray-600">
-                {importResult?.completed ? 'Done' : 'Cancel'}
-              </button>
-              {!importResult && (
-                <button onClick={previewCsvImport} disabled={busy || !importFile || !importSectionId} className="rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-50">
-                  {busy ? 'Reading CSV...' : 'Preview Import'}
-                </button>
-              )}
-              {importResult && !importResult.completed && (
-                <button onClick={confirmCsvImport} disabled={busy || !importResult.summary?.ready} className="rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-50">
-                  {busy ? 'Importing...' : `Confirm Import (${importResult.summary?.ready || 0})`}
-                </button>
-              )}
-            </div>
+          </div>
+        </Modal>
+      )}
+      {importFilePreview && (
+        <Modal title={`Selected CSV: ${importFilePreview.name}`} subtitle="Review the selected file before previewing the import." onClose={closeImportFilePreview}>
+          <div className="p-4 sm:p-5">
+            <pre className="max-h-[60dvh] overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs leading-5 text-slate-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">{importFilePreview.content}</pre>
           </div>
         </Modal>
       )}

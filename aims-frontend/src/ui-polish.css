@@ -1,0 +1,124 @@
+/* Shared presentation refinements. Keep page actions and layout structure in their components. */
+.dashboard-shell,
+.auth-shell,
+.public-shell {
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+.dashboard-shell main {
+  scroll-margin-top: 5rem;
+}
+
+.portal-header {
+  border-bottom-color: var(--ui-border);
+}
+
+.portal-sidebar nav a {
+  position: relative;
+  min-height: 44px;
+  outline-offset: 2px;
+}
+
+.portal-sidebar nav a[aria-current='page']::before {
+  position: absolute;
+  inset-block: 0.65rem;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--primary-maroon);
+  content: '';
+}
+
+.dark .portal-sidebar nav a[aria-current='page']::before {
+  background: #e7a0b0;
+}
+
+.dashboard-shell :where(button, a, input, select, textarea, summary):focus-visible,
+.auth-shell :where(button, a, input, select, textarea, summary):focus-visible,
+.public-shell :where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--primary-maroon);
+  outline-offset: 2px;
+}
+
+.dark .dashboard-shell :where(button, a, input, select, textarea, summary):focus-visible {
+  outline-color: #e7a0b0;
+}
+
+.dashboard-shell :where(input, textarea)::placeholder,
+.auth-shell :where(input, textarea)::placeholder {
+  color: #8792a2;
+  opacity: 1;
+}
+
+.dark .dashboard-shell :where(input, textarea)::placeholder {
+  color: #9ba8ba;
+}
+
+.dashboard-shell main table tbody tr {
+  transition: background-color 140ms ease;
+}
+
+.dashboard-shell main table tbody tr:focus-within {
+  background: var(--ui-primary-soft);
+}
+
+.dashboard-shell main .overflow-x-auto:has(> table) {
+  scrollbar-color: var(--ui-border-strong) transparent;
+}
+
+.dashboard-shell main :where(button, a):disabled {
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-shell main table tbody tr,
+  .portal-sidebar nav a,
+  .portal-header button {
+    transition-duration: 0.01ms;
+  }
+}
+.dashboard-shell [role='dialog'].moa-preview-dialog {
+  width: min(615px, calc(100vw - 1rem));
+  max-width: min(615px, calc(100vw - 1rem));
+  height: min(850px, calc(100dvh - 1rem));
+}
+
+.dashboard-shell .moa-preview-dialog .document-preview-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 210px;
+  overflow: hidden;
+}
+
+.dashboard-shell .moa-preview-dialog .document-preview-file,
+.dashboard-shell .moa-preview-dialog .document-preview-details {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dashboard-shell .moa-preview-dialog .document-preview-details {
+  border-left: 1px solid var(--ui-border);
+  border-top: 0;
+}
+
+@media (max-width: 639px) {
+  .dashboard-shell [role='dialog'].moa-preview-dialog {
+    width: 100%;
+    max-width: 100%;
+    height: min(850px, calc(100dvh - 1rem));
+  }
+
+  .dashboard-shell .moa-preview-dialog .document-preview-body {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+
+  .dashboard-shell .moa-preview-dialog .document-preview-file,
+  .dashboard-shell .moa-preview-dialog .document-preview-details {
+    overflow: visible;
+  }
+
+  .dashboard-shell .moa-preview-dialog .document-preview-details {
+    border-left: 0;
+    border-top: 1px solid var(--ui-border);
+  }
+}

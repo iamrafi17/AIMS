@@ -97,7 +97,10 @@ function Donut({ value, label, color = '#7D001D' }) {
 }
 
 function CoordinatorReports() {
-  const [activeReport, setActiveReport] = useState('student_internship');
+  const [activeReport, setActiveReport] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get('report');
+    return reportModules.some((module) => module.id === requested) ? requested : 'student_internship';
+  });
   const [mobileView, setMobileView] = useState('analysis');
   const [records, setRecords] = useState({ program: null, sections: [], selected_section: null, attendance: [], journals: [], requirements: [], students: [], deployments: [], travel: [] });
 

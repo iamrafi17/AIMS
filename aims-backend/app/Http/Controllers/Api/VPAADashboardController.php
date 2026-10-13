@@ -26,16 +26,24 @@ class VPAADashboardController extends UniversityDashboardController
             ->when($request->string('internship_status')->toString(), fn ($query, $value) => $query->forInternshipStatus($value))
             ->pluck('id');
         $moaQuery = MOA::query()
-            ->when($request->integer('college_id'), fn ($query, $value) => $query->where('college_id', $value))
+            ->when($request->integer('college_id'), fn ($query, $value) => $query->whereHas('program', fn ($program) => $program->where('college_id', $value)))
             ->when($request->integer('program_id'), fn ($query, $value) => $query->where('program_id', $value))
             ->when($request->integer('hte_id'), fn ($query, $value) => $query->where('hte_id', $value));
-        $pendingMoas = (clone $moaQuery)->where('status', 'pending')->count();
+        $pendingMoas = (clone $moaQuery)->where('status', 'approved')->whereNull('vpaa_reviewed_at')
+            ->whereHas('approver', fn ($query) => $query->forRole('dean'))->count();
         $approvedMoas = (clone $moaQuery)->where('status', 'approved')->count();
         $deploymentApprovals = ApprovalRecord::query()
             ->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)
             ->whereIn('subject_id', $studentIds)
-            ->whereHas('submitter', fn ($query) => $query->where('role', 'program_head'))
-            ->with(['submitter:id,name,role', 'decisionMaker:id,name,role'])
+            ->whereHas('submitter', fn ($query) => $query->forRole('program_head'))
+            ->with([
+                'submitter:id,role_id',
+                'submitter.roleDefinition:id,code',
+                'submitter.employeeProfile:id,user_id,first_name,middle_name,last_name',
+                'decisionMaker:id,role_id',
+                'decisionMaker.roleDefinition:id,code',
+                'decisionMaker.employeeProfile:id,user_id,first_name,middle_name,last_name',
+            ])
             ->latest('submitted_at')
             ->get();
         $travelReports = TravelReport::query()
@@ -97,7 +105,7 @@ class VPAADashboardController extends UniversityDashboardController
             $travel = $report->travelLog;
             $student = $travel?->participants->first();
             $programHead = $report->validations->where('reviewer_role', 'program_head')->sortByDesc('reviewed_at')->first();
-            $vpaa = $report->validations->where('reviewer_role', 'vpaa')->sortByDesc('reviewed_at')->first();
+            $vpaa = $report->validations->whereIn('reviewer_role', ['dean', 'vpaa'])->sortByDesc('reviewed_at')->first();
 
             return [
                 'report_id' => $report->id,

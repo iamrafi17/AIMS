@@ -10,6 +10,7 @@ final class UserId
         'admin' => 'AD',
         'coordinator' => 'CO',
         'program_head' => 'PH',
+        'dean' => 'DN',
         'vpaa' => 'VP',
         'supervisor' => 'SV',
     ];
@@ -39,8 +40,8 @@ final class UserId
         $pattern = $prefix.'-'.$year.'-';
 
         $lastSequence = User::query()
-            ->where('user_id', 'like', $pattern.'%')
-            ->pluck('user_id')
+            ->where('username', 'like', $pattern.'%')
+            ->pluck('username')
             ->map(function (string $userId) use ($pattern): int {
                 return (int) substr($userId, strlen($pattern));
             })
@@ -49,7 +50,7 @@ final class UserId
         do {
             $lastSequence++;
             $userId = sprintf('%s%03d', $pattern, $lastSequence);
-        } while (User::query()->where('user_id', $userId)->exists());
+        } while (User::query()->where('username', $userId)->exists());
 
         return $userId;
     }

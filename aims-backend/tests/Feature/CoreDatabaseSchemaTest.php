@@ -12,6 +12,9 @@ class CoreDatabaseSchemaTest extends TestCase
 
     private const CORE_TABLES = [
         'users',
+        'roles',
+        'employee_profiles',
+        'employee_program_assignments',
         'students',
         'student_guardians',
         'student_internships',
@@ -25,7 +28,8 @@ class CoreDatabaseSchemaTest extends TestCase
         'hte_programs',
         'hte_departments',
         'hte_department_programs',
-        'supervisors',
+        'supervisor_profiles',
+        'hte_supervisor_assignments',
         'hte_schedules',
         'hte_batch_schedules',
         'moas',
@@ -59,12 +63,17 @@ class CoreDatabaseSchemaTest extends TestCase
         foreach (self::CORE_TABLES as $table) {
             $this->assertTrue(Schema::hasTable($table), "Missing PRD core table: {$table}");
         }
+
+        $this->assertFalse(Schema::hasTable('supervisors'));
     }
 
     public function test_prd_relationship_columns_exist(): void
     {
         $relationships = [
-            'students' => ['user_id'],
+            'users' => ['role_id'],
+            'employee_profiles' => ['user_id', 'college_id', 'program_id'],
+            'employee_program_assignments' => ['employee_profile_id', 'program_id'],
+            'students' => ['user_id', 'college_id', 'program_id'],
             'student_guardians' => ['student_id'],
             'student_internships' => [
                 'student_id', 'ojt_enrollment_id', 'academic_section_id',
@@ -79,7 +88,8 @@ class CoreDatabaseSchemaTest extends TestCase
             'hte_programs' => ['hte_id', 'program_id', 'linked_by'],
             'hte_departments' => ['hte_id'],
             'hte_department_programs' => ['hte_department_id', 'program_id', 'linked_by'],
-            'supervisors' => ['hte_department_id', 'user_id'],
+            'supervisor_profiles' => ['user_id'],
+            'hte_supervisor_assignments' => ['supervisor_profile_id', 'hte_department_id'],
             'hte_schedules' => ['hte_id'],
             'hte_batch_schedules' => ['hte_id', 'academic_section_id'],
             'attendance' => ['student_internship_id', 'holiday_id'],
@@ -107,6 +117,9 @@ class CoreDatabaseSchemaTest extends TestCase
 
     public function test_prd_workflow_fields_exist(): void
     {
+        $this->assertTrue(Schema::hasColumn('internship_requirements', 'file_path'));
+        $this->assertFalse(Schema::hasColumn('internship_requirements', 'file_type'));
+
         $this->assertFalse(Schema::hasColumn('travel_logs', 'student_id'));
 
         $this->assertTrue(Schema::hasColumns('approval_records', [
@@ -175,7 +188,7 @@ class CoreDatabaseSchemaTest extends TestCase
         $this->assertIndex('report_templates', ['program_id', 'report_type', 'period_scope', 'academic_period_id']);
 
         foreach ([
-            'college_id', 'program_id', 'academic_section_id', 'academic_period_id',
+            'academic_section_id', 'academic_period_id',
             'year_level', 'section', 'parent_name', 'parent_relationship', 'parent_address',
             'parent_contact_number', 'hte_id', 'hte_department_id', 'supervisor_record_id',
             'supervisor_id', 'internship_semester', 'internship_year', 'internship_status',
@@ -211,12 +224,18 @@ class CoreDatabaseSchemaTest extends TestCase
 
     public function test_critical_prd_uniqueness_rules_are_enforced(): void
     {
+        $this->assertUniqueIndex('roles', ['code']);
+        $this->assertUniqueIndex('employee_profiles', ['user_id']);
+        $this->assertUniqueIndex('employee_program_assignments', ['employee_profile_id', 'program_id']);
+        $this->assertUniqueIndex('supervisor_profiles', ['user_id']);
+        $this->assertUniqueIndex('hte_supervisor_assignments', ['supervisor_profile_id', 'hte_department_id']);
         $this->assertUniqueIndex('students', ['user_id']);
         $this->assertUniqueIndex('student_guardians', ['student_id']);
         $this->assertUniqueIndex('student_internships', ['student_id', 'academic_section_id']);
         $this->assertUniqueIndex('student_internship_placements', ['current_internship_key']);
         $this->assertUniqueIndex('student_schedule_overrides', ['student_internship_id', 'day_of_week']);
-        $this->assertUniqueIndex('ojt_enrollments', ['school_id']);
+        $this->assertUniqueIndex('ojt_enrollments', ['school_id', 'academic_section_id']);
+        $this->assertUniqueIndex('ojt_enrollments', ['student_record_id', 'academic_section_id']);
         $this->assertUniqueIndex('attendance', ['student_internship_id', 'date']);
         $this->assertUniqueIndex('attendance_schedule_snapshots', ['attendance_id', 'period']);
         $this->assertUniqueIndex('attendance_events', ['attendance_id', 'event_type']);
@@ -235,7 +254,8 @@ class CoreDatabaseSchemaTest extends TestCase
 
     public function test_contact_number_columns_use_consistent_names(): void
     {
-        $this->assertTrue(Schema::hasColumn('users', 'contact_number'));
+        $this->assertFalse(Schema::hasColumn('users', 'contact_number'));
+        $this->assertTrue(Schema::hasColumn('employee_profiles', 'contact_number'));
         $this->assertTrue(Schema::hasColumn('students', 'contact_number'));
         $this->assertTrue(Schema::hasColumn('htes', 'contact_number'));
 
@@ -244,6 +264,31 @@ class CoreDatabaseSchemaTest extends TestCase
         $this->assertFalse(Schema::hasColumn('students', 'parent_phone'));
         $this->assertFalse(Schema::hasColumn('students', 'parent_contact_number'));
         $this->assertFalse(Schema::hasColumn('htes', 'contact_phone'));
+    }
+
+    public function test_users_table_contains_account_fields_only(): void
+    {
+        $this->assertEqualsCanonicalizing([
+            'id', 'email', 'username', 'role_id', 'email_verified_at', 'password',
+            'is_active', 'requires_password_change', 'requires_security_setup',
+            'last_login_at', 'remember_token', 'created_at', 'updated_at',
+        ], Schema::getColumnListing('users'));
+    }
+
+    public function test_employee_profile_stores_separate_name_parts(): void
+    {
+        foreach (['first_name', 'middle_name', 'last_name'] as $column) {
+            $this->assertTrue(Schema::hasColumn('employee_profiles', $column));
+        }
+        $this->assertFalse(Schema::hasColumn('employee_profiles', 'full_name'));
+    }
+
+    public function test_supervisor_profile_stores_full_name(): void
+    {
+        $this->assertTrue(Schema::hasColumn('supervisor_profiles', 'full_name'));
+        foreach (['first_name', 'middle_name', 'last_name'] as $column) {
+            $this->assertFalse(Schema::hasColumn('supervisor_profiles', $column));
+        }
     }
 
     private function assertUniqueIndex(string $table, array $columns): void

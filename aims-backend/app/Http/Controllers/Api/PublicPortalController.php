@@ -18,10 +18,12 @@ class PublicPortalController extends Controller
                 'student_interns' => Student::count(),
                 'partner_htes' => HTE::where('is_active', true)->count(),
                 'completed_internships' => Student::forInternshipStatus('completed')->count(),
-                'active_supervisors' => User::where('role', 'supervisor')->where('is_active', true)->count(),
+                'active_supervisors' => User::forRole('supervisor')->where('is_active', true)->count(),
             ],
             'announcements' => Announcement::query()
                 ->where('is_published', true)
+                ->whereNull('archived_at')
+                ->where(fn ($query) => $query->whereNull('scheduled_at')->orWhere('scheduled_at', '<=', now()))
                 ->whereIn('target_audience', ['all', 'students'])
                 ->latest('published_at')
                 ->limit(3)

@@ -25,7 +25,7 @@ import api from "../../services/api";
 const reportLabels = {
   draft: "Draft",
   pending_program_head: "Pending Program Head Validation",
-  pending_vpaa: "Pending VPAA Final Validation",
+  pending_vpaa: "Pending Dean Final Validation",
   final_validated: "Final Validated",
 };
 
@@ -177,10 +177,12 @@ function Metric({ label, value, icon: Icon }) {
 export default function TravelMonitoringManagement({
   apiBase = "/program-head/travel",
 }) {
+  const isDean = apiBase.startsWith("/dean");
   const isVpaa = apiBase.startsWith("/vpaa");
   const [data, setData] = useState({ summary: {}, sessions: [] });
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState(isVpaa ? "pending" : "sessions");
+  const [tab, setTab] = useState(isDean ? "pending" : "sessions");
+  const [returnReason, setReturnReason] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -207,11 +209,13 @@ export default function TravelMonitoringManagement({
     load();
   }, [load]);
 
-  const availableTabs = isVpaa
+  const availableTabs = isDean
     ? [
         ["pending", "Pending Final Validation"],
         ["final", "Final Validated"],
       ]
+    : isVpaa
+      ? [["sessions", "All forwarded reports"], ["pending", "Pending Dean"], ["final", "Final Validated"]]
     : [
         ["sessions", "Travel Sessions"],
         ["pending", "Pending Validation"],
@@ -222,7 +226,7 @@ export default function TravelMonitoringManagement({
     if (tab === "pending")
       return (
         session.report?.status ===
-        (isVpaa ? "pending_vpaa" : "pending_program_head")
+        (isDean || isVpaa ? "pending_vpaa" : "pending_program_head")
       );
     if (tab === "forwarded")
       return ["pending_vpaa", "final_validated"].includes(
@@ -233,15 +237,18 @@ export default function TravelMonitoringManagement({
   const selected =
     data.sessions.find((session) => session.id === selectedId) || null;
 
-  const review = async () => {
+  const review = async (decision = 'approved') => {
+    if (decision === 'returned' && !returnReason.trim()) return toast.error('Enter a reason for returning the report.');
     setBusy(true);
     try {
       const response = await api.put(
         `${apiBase}/reports/${selected.report.id}/review`,
+        isDean ? { decision, reason: decision === 'returned' ? returnReason.trim() : undefined } : {},
       );
       toast.success(response.data.message);
       setSelectedId(null);
-      setTab(isVpaa ? "final" : "forwarded");
+      setReturnReason('');
+      setTab(isDean ? (decision === 'returned' ? 'pending' : 'final') : 'forwarded');
       await load(true);
     } catch (error) {
       toast.error(errorMessage(error, "Unable to validate the report."));
@@ -268,7 +275,7 @@ export default function TravelMonitoringManagement({
         <div className="relative flex flex-wrap items-end justify-between gap-5">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-[#f7d979]">
-              <FiShield /> {isVpaa ? "Final validation" : "Program validation"}
+              <FiShield /> {isDean ? "Dean final validation" : isVpaa ? "University oversight" : "Program validation"}
             </div>
             <h1 className="text-2xl font-black sm:text-3xl">
               Travel Report Management
@@ -515,21 +522,24 @@ export default function TravelMonitoringManagement({
                 </div>
               )}
               <div className="mt-5 flex flex-wrap gap-2">
-                {((!isVpaa &&
+                {((!isDean && !isVpaa &&
                   selected.report.status === "pending_program_head") ||
-                  (isVpaa && selected.report.status === "pending_vpaa")) && (
+                  (isDean && selected.report.status === "pending_vpaa")) && (<div className="w-full space-y-3">
+                  {isDean && <textarea aria-label="Reason for return" value={returnReason} onChange={(event) => setReturnReason(event.target.value)} placeholder="Reason for return (required if returning)" rows={2} className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm dark:border-slate-600 dark:bg-slate-800" />}
                   <button
                     disabled={busy}
-                    onClick={review}
+                    onClick={() => review('approved')}
                     className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 font-black text-white disabled:opacity-40"
                   >
                     <FiShield />
                     {busy
                       ? "Validating..."
-                      : isVpaa
+                      : isDean
                         ? "Final Validate"
-                        : "Validate & Send to VPAA"}
+                        : "Validate & Send to Dean"}
                   </button>
+                  {isDean && <button disabled={busy || !returnReason.trim()} onClick={() => review('returned')} className="ml-2 rounded-xl border border-rose-300 px-5 py-3 font-black text-rose-700 disabled:opacity-40">Return for revision</button>}
+                  </div>
                 )}
               </div>
             </section>

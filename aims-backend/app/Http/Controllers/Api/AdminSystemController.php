@@ -46,7 +46,7 @@ class AdminSystemController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:10', 'unique:colleges,code'],
-            'required_ojt_hours' => ['required', 'numeric', 'between:1,2000'],
+            'required_ojt_hours' => ['sometimes', 'numeric', 'between:1,2000'],
         ]);
 
         return response()->json([
@@ -60,7 +60,7 @@ class AdminSystemController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:10', Rule::unique('colleges', 'code')->ignore($college)],
-            'required_ojt_hours' => ['required', 'numeric', 'between:1,2000'],
+            'required_ojt_hours' => ['sometimes', 'numeric', 'between:1,2000'],
         ]);
         $college->update($data);
 
@@ -179,7 +179,11 @@ class AdminSystemController extends Controller
                 'approved_moas' => MOA::where('status', 'approved')->count(),
                 'attendance_records' => Attendance::count(),
             ],
-            'users_by_role' => User::selectRaw('role, COUNT(*) as total')->groupBy('role')->pluck('total', 'role'),
+            'users_by_role' => User::query()
+                ->join('roles', 'roles.id', '=', 'users.role_id')
+                ->selectRaw('roles.code AS role, COUNT(*) AS total')
+                ->groupBy('roles.code')
+                ->pluck('total', 'role'),
             'students_by_program' => $studentsByProgram,
             'attendance_by_status' => $attendanceByStatus,
             'requirements_by_status' => $requirements,

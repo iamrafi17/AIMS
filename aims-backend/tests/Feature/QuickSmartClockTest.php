@@ -11,6 +11,7 @@ use App\Models\InternshipRequirement;
 use App\Models\Program;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\AttendanceHours;
 use App\Support\StudentRecordNormalizer;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -104,6 +105,43 @@ class QuickSmartClockTest extends TestCase
             'period' => 'pm',
             'activity' => 'Updated records and joined the afternoon team meeting.',
         ]);
+
+        $attendance = Attendance::forStudent($user->student->id)->firstOrFail();
+        $this->assertSame('08:00', $attendance->am_time_in->format('H:i'));
+        $this->assertSame('12:00', $attendance->am_time_out->format('H:i'));
+        $this->assertSame('13:00', $attendance->pm_time_in->format('H:i'));
+        $this->assertSame('17:00', $attendance->pm_time_out->format('H:i'));
+        $this->assertSame(8.0, AttendanceHours::regular($attendance));
+        foreach (['am_in', 'am_out', 'pm_in', 'pm_out'] as $eventType) {
+            $this->assertDatabaseHas('attendance_events', [
+                'attendance_id' => $attendance->id,
+                'event_type' => $eventType,
+            ]);
+        }
+    }
+
+    public function test_legacy_clock_apis_are_retired_and_cannot_write_attendance(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-26 8:00 AM', 'Asia/Manila'));
+        $user = $this->studentUser();
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/student/attendance/clock-in', [
+            'latitude' => 13.4753,
+            'longitude' => 122.0275,
+            'work_mode' => 'wfh',
+            'session_type' => 'full_day',
+        ])->assertStatus(410)
+            ->assertJsonPath('quick_clock_endpoint', '/api/student/attendance/quick-clock');
+
+        Carbon::setTestNow(Carbon::parse('2026-08-26 5:00 PM', 'Asia/Manila'));
+        $this->postJson('/api/student/attendance/clock-out', [
+            'latitude' => 13.4753,
+            'longitude' => 122.0275,
+        ])->assertStatus(410)
+            ->assertJsonPath('quick_clock_endpoint', '/api/student/attendance/quick-clock');
+
+        $this->assertFalse(Attendance::forStudent($user->student->id)->exists());
     }
 
     public function test_smart_clock_rejects_present_attendance_when_the_schedule_is_not_configured(): void
@@ -348,6 +386,18 @@ class QuickSmartClockTest extends TestCase
         ]);
     }
 
+    public function test_holiday_status_requires_an_official_holiday_for_that_student(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-21 09:00:00', 'Asia/Manila'));
+        $user = $this->studentUser();
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/student/attendance/quick-clock', ['status' => 'holiday'])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Today is not an official holiday in your OJT calendar.');
+        $this->assertFalse(Attendance::forStudent($user->student->id)->exists());
+    }
+
     public function test_smart_clock_can_use_device_time_in_local_test_mode(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-03-18 10:00:00', 'Asia/Manila'));
@@ -463,10 +513,10 @@ class QuickSmartClockTest extends TestCase
                 ->assertJsonPath('dashboard_status.consent', 'done')
                 ->assertJsonPath('dashboard_status.schedule', 'approved')
                 ->assertJsonPath('dashboard_status.attendance_days', 2)
-                ->assertJsonPath('requirements_progress.approved', 2)
-                ->assertJsonPath('requirements_progress.total', 4)
+                ->assertJsonPath('requirements_progress.approved', 3)
+                ->assertJsonPath('requirements_progress.total', 5)
                 ->assertJsonPath('requirements_progress.pending', 1)
-                ->assertJsonPath('requirements_progress.percent_complete', 50)
+                ->assertJsonPath('requirements_progress.percent_complete', 60)
                 ->assertJsonPath('ojt_progress.rendered_hours', 12)
                 ->assertJsonPath('ojt_progress.hours_left', 474)
                 ->assertJsonPath('ojt_progress.percent_complete', 2.5)
@@ -477,6 +527,110 @@ class QuickSmartClockTest extends TestCase
                 ->assertJsonPath('ojt_progress.weekly_hours.0.hours', 8)
                 ->assertJsonPath('ojt_progress.weekly_hours.1.hours', 4)
                 ->assertJsonPath('ojt_progress.period_state', 'active');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_student_dashboard_uses_eight_hour_workdays_and_flags_projection_after_end_date(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-21 09:00:00', 'Asia/Manila'));
+        $user = $this->studentUser();
+        $user->student->update([
+            'ojt_start_date' => '2026-09-20',
+            'ojt_end_date' => '2026-09-22',
+            'required_ojt_hours' => 486,
+        ]);
+        Attendance::create([
+            'student_id' => $user->student->id,
+            'date' => '2026-09-18',
+            'work_mode' => 'wfh',
+            'session_type' => 'full_day',
+            'status' => 'present',
+            'am_time_in' => '2026-09-18 08:00:00',
+            'am_time_out' => '2026-09-18 12:00:00',
+            'pm_time_in' => '2026-09-18 13:00:00',
+            'pm_time_out' => '2026-09-18 17:30:00',
+        ]);
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/student/dashboard')->assertOk()
+            ->assertJsonPath('ojt_progress.rendered_hours', 8.5)
+            ->assertJsonPath('ojt_progress.hours_left', 477.5)
+            ->assertJsonPath('ojt_progress.daily_scheduled_hours', 8)
+            ->assertJsonPath('ojt_progress.working_days_left', 60)
+            ->assertJsonPath('ojt_progress.calendar_days_left', 1);
+
+        $this->assertGreaterThan(0, $response->json('ojt_progress.projected_days_late'));
+        $this->assertGreaterThan('2026-09-22', $response->json('ojt_progress.projected_completion_date'));
+    }
+
+    public function test_manual_half_day_discards_times_and_activities_from_the_other_period(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-03-18 12:00 PM', 'Asia/Manila'));
+
+        try {
+            $user = $this->studentUser();
+            $user->student->update([
+                'allow_past_attendance' => true,
+                'ojt_start_date' => '2026-03-01',
+                'ojt_end_date' => '2026-03-31',
+            ]);
+            Sanctum::actingAs($user);
+
+            $this->postJson('/api/student/attendance/entry', [
+                'date' => '2026-03-17',
+                'status' => 'present',
+                'work_mode' => 'wfh',
+                'session_type' => 'am_half',
+                'am_time_in' => '08:00',
+                'am_time_out' => '12:00',
+                'pm_time_in' => '13:00',
+                'pm_time_out' => '17:00',
+                'am_activity' => 'Morning work',
+                'pm_activity' => 'Stale afternoon activity',
+            ])->assertOk()
+                ->assertJsonPath('attendance.regular_hours', 4)
+                ->assertJsonPath('attendance.pm_time_in', null)
+                ->assertJsonPath('attendance.pm_time_out', null)
+                ->assertJsonPath('attendance.pm_activity', null);
+
+            $attendance = Attendance::forStudent($user->student->id)->firstOrFail();
+            $this->assertDatabaseMissing('attendance_events', [
+                'attendance_id' => $attendance->id,
+                'event_type' => 'pm_in',
+            ]);
+            $this->assertDatabaseMissing('attendance_events', [
+                'attendance_id' => $attendance->id,
+                'event_type' => 'pm_out',
+            ]);
+
+            $this->postJson('/api/student/attendance/entry', [
+                'date' => '2026-03-17',
+                'status' => 'present',
+                'work_mode' => 'wfh',
+                'session_type' => 'pm_half',
+                'am_time_in' => '08:00',
+                'am_time_out' => '12:00',
+                'pm_time_in' => '13:00',
+                'pm_time_out' => '17:00',
+                'am_activity' => 'Stale morning activity',
+                'pm_activity' => 'Afternoon work',
+            ])->assertOk()
+                ->assertJsonPath('attendance.regular_hours', 4)
+                ->assertJsonPath('attendance.am_time_in', null)
+                ->assertJsonPath('attendance.am_time_out', null)
+                ->assertJsonPath('attendance.am_activity', null);
+
+            $attendance->refresh();
+            $this->assertDatabaseMissing('attendance_events', [
+                'attendance_id' => $attendance->id,
+                'event_type' => 'am_in',
+            ]);
+            $this->assertDatabaseMissing('attendance_events', [
+                'attendance_id' => $attendance->id,
+                'event_type' => 'am_out',
+            ]);
         } finally {
             Carbon::setTestNow();
         }
@@ -604,6 +758,7 @@ class QuickSmartClockTest extends TestCase
             'name' => 'Bachelor of Science in Information Technology',
             'code' => 'BSIT',
             'is_active' => true,
+            'smart_clock_enabled' => true,
         ]);
 
         $user = User::factory()->create(['role' => 'student']);
@@ -624,7 +779,7 @@ class QuickSmartClockTest extends TestCase
         $hte->programs()->attach($program->id, ['is_active' => true]);
         $period = $this->academicPeriod('2026-2027', '1st Semester');
 
-        Student::create([
+        $student = Student::create([
             'user_id' => $user->id,
             'student_id' => 'TEST-'.str_pad((string) $user->id, 4, '0', STR_PAD_LEFT),
             'first_name' => 'Test',
@@ -647,6 +802,14 @@ class QuickSmartClockTest extends TestCase
             'internship_year' => '2026-2027',
             'registration_status' => 'approved',
             'internship_status' => 'active',
+            'consent_status' => 'done',
+        ]);
+
+        InternshipRequirement::create([
+            'student_id' => $student->id,
+            'requirement_name' => "Notarized Parent's/Guardian's Consent",
+            'file_path' => 'requirements/test-consent.pdf',
+            'status' => 'approved',
         ]);
 
         return $user->load('student');

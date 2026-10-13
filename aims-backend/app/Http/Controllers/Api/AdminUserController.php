@@ -21,12 +21,16 @@ class AdminUserController extends Controller
     {
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
-            'role' => ['nullable', Rule::in(['student', 'coordinator', 'program_head', 'vpaa', 'admin', 'supervisor'])],
+            'role' => ['nullable', Rule::in(['student', 'coordinator', 'program_head', 'dean', 'vpaa', 'admin', 'supervisor'])],
             'college_id' => ['nullable', 'integer', Rule::exists('colleges', 'id')],
             'per_page' => ['nullable', 'integer', Rule::in([10, 15, 25, 50])],
         ]);
 
         $users = User::with([
+            'roleDefinition:id,code,name',
+            'employeeProfile.activeProgramAssignment.program.college',
+            'employeeProfile.college',
+            'normalizedSupervisorProfile.activeAssignment.department.hte',
             'college:id,name,code',
             'program:id,college_id,name,code',
             'student:id,user_id',
@@ -36,17 +40,34 @@ class AdminUserController extends Controller
         ])
             ->when($filters['search'] ?? null, function ($query) use ($filters) {
                 $query->where(function ($q) use ($filters) {
-                    $q->where('name', 'like', '%'.$filters['search'].'%')
-                        ->orWhere('email', 'like', '%'.$filters['search'].'%')
-                        ->orWhere('user_id', 'like', '%'.$filters['search'].'%');
+                    $q->where('email', 'like', '%'.$filters['search'].'%')
+                        ->orWhere('username', 'like', '%'.$filters['search'].'%');
+                    $q->orWhereHas('employeeProfile', function ($profiles) use ($filters): void {
+                        foreach (preg_split('/\s+/u', trim($filters['search'])) as $part) {
+                            $profiles->where(fn ($name) => $name
+                                ->where('first_name', 'like', '%'.$part.'%')
+                                ->orWhere('middle_name', 'like', '%'.$part.'%')
+                                ->orWhere('last_name', 'like', '%'.$part.'%'));
+                        }
+                    });
+                    $q->orWhereHas('normalizedSupervisorProfile', fn ($profiles) => $profiles
+                        ->where('full_name', 'like', '%'.$filters['search'].'%'));
+                    $q->orWhereHas('student', fn ($students) => $students
+                        ->where('first_name', 'like', '%'.$filters['search'].'%')
+                        ->orWhere('middle_name', 'like', '%'.$filters['search'].'%')
+                        ->orWhere('last_name', 'like', '%'.$filters['search'].'%'));
                 });
             })
             ->when($filters['role'] ?? null, function ($query) use ($filters) {
-                $query->where('role', $filters['role']);
+                $query->forRole($filters['role']);
             })
             ->when($filters['college_id'] ?? null, function ($query) use ($filters) {
                 $query->where(function ($collegeQuery) use ($filters) {
-                    $collegeQuery->where('college_id', $filters['college_id'])
+                    $collegeQuery->whereHas(
+                        'employeeProfile.activeProgramAssignment.program',
+                        fn ($programQuery) => $programQuery->where('college_id', $filters['college_id']),
+                    )
+                        ->orWhereHas('employeeProfile', fn ($profile) => $profile->where('college_id', $filters['college_id']))
                         ->orWhereHas('student', fn ($studentQuery) => $studentQuery
                             ->forCollege($filters['college_id']));
                 });
@@ -56,6 +77,10 @@ class AdminUserController extends Controller
             ->withQueryString();
 
         $users->getCollection()->each(function (User $user): void {
+            if ($user->role === 'dean') {
+                $user->setRelation('college', $user->employeeProfile?->college);
+                return;
+            }
             if (! $user->isStudent() || ! $user->student) {
                 return;
             }
@@ -72,8 +97,8 @@ class AdminUserController extends Controller
         $data = $request->validate([
             'name' => [$request->input('role') === 'supervisor' ? 'nullable' : 'required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
-            'role' => 'required|in:student,coordinator,program_head,vpaa,admin,supervisor',
-            'supervisor_record_id' => [$request->input('role') === 'supervisor' ? 'required' : 'nullable', 'integer', 'exists:supervisors,id'],
+            'role' => 'required|in:student,coordinator,program_head,dean,vpaa,admin,supervisor',
+            'supervisor_record_id' => [$request->input('role') === 'supervisor' ? 'required' : 'nullable', 'integer', 'exists:hte_supervisor_assignments,id'],
             'is_active' => ['nullable', 'boolean'],
             ...$this->assignmentRules($request),
         ]);
@@ -83,7 +108,7 @@ class AdminUserController extends Controller
         $user = DB::transaction(function () use ($data, $temporaryPassword): User {
             $supervisor = null;
             if ($data['role'] === 'supervisor') {
-                $supervisor = Supervisor::with('department.hte')
+                $supervisor = Supervisor::with(['department.hte', 'supervisorProfile'])
                     ->lockForUpdate()
                     ->findOrFail($data['supervisor_record_id']);
 
@@ -131,14 +156,14 @@ class AdminUserController extends Controller
         $term = trim($validated['search']);
 
         $supervisors = Supervisor::query()
-            ->with(['department.hte:id,name,address', 'user:id,name,email,user_id,is_active'])
+            ->with(['department.hte:id,name,address', 'user:id,email,username,is_active'])
             ->where(function ($query) use ($term) {
-                $query->where('full_name', 'like', '%'.$term.'%')
+                $query->whereHas('supervisorProfile', fn ($profile) => $profile->where('full_name', 'like', '%'.$term.'%'))
                     ->orWhereHas('department', fn ($departmentQuery) => $departmentQuery
                         ->where('department_name', 'like', '%'.$term.'%')
                         ->orWhereHas('hte', fn ($hteQuery) => $hteQuery->where('name', 'like', '%'.$term.'%')));
             })
-            ->orderBy('full_name')
+            ->orderBy('id')
             ->limit(30)
             ->get()
             ->map(fn (Supervisor $supervisor) => [
@@ -171,8 +196,8 @@ class AdminUserController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'role' => 'sometimes|in:student,coordinator,program_head,vpaa,admin,supervisor',
-            'supervisor_record_id' => ['nullable', 'integer', 'exists:supervisors,id'],
+            'role' => 'sometimes|in:student,coordinator,program_head,dean,vpaa,admin,supervisor',
+            'supervisor_record_id' => ['nullable', 'integer', 'exists:hte_supervisor_assignments,id'],
             ...$this->assignmentRules($request, $user),
         ]);
         $data['role'] = $data['role'] ?? $user->role;
@@ -235,8 +260,8 @@ class AdminUserController extends Controller
     {
         abort_if($request->user()->is($user), 422, 'You cannot change the role of your current account.');
         $data = $request->validate([
-            'role' => 'required|in:student,coordinator,program_head,vpaa,admin,supervisor',
-            'supervisor_record_id' => ['nullable', 'integer', 'exists:supervisors,id'],
+            'role' => 'required|in:student,coordinator,program_head,dean,vpaa,admin,supervisor',
+            'supervisor_record_id' => ['nullable', 'integer', 'exists:hte_supervisor_assignments,id'],
             ...$this->assignmentRules($request, $user),
         ]);
         $this->validateAssignment($data);
@@ -289,9 +314,10 @@ class AdminUserController extends Controller
     {
         $role = $request->input('role', $user?->role);
         $scoped = in_array($role, ['coordinator', 'program_head'], true);
+        $collegeScoped = $scoped || $role === 'dean';
 
         return [
-            'college_id' => [$scoped ? 'required' : 'nullable', 'integer', Rule::exists('colleges', 'id')],
+            'college_id' => [$collegeScoped ? 'required' : 'nullable', 'integer', Rule::exists('colleges', 'id')],
             'program_id' => [$scoped ? 'required' : 'nullable', 'integer', Rule::exists('programs', 'id')],
         ];
     }
@@ -330,6 +356,9 @@ class AdminUserController extends Controller
 
     private function assignmentAttributes(array $data): array
     {
+        if ($data['role'] === 'dean') {
+            return ['college_id' => $data['college_id'], 'program_id' => null];
+        }
         if (! in_array($data['role'], ['coordinator', 'program_head'], true)) {
             return ['college_id' => null, 'program_id' => null];
         }

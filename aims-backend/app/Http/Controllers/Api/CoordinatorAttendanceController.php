@@ -29,7 +29,7 @@ class CoordinatorAttendanceController extends Controller
         // attendance record becomes expensive as a program accumulates history.
         $query = $this->applyFilters(
             Attendance::query()
-                ->whereHas('student', fn (Builder $student) => $student->forProgram(ProgramAccess::programId($request->user()))),
+                ->whereHas('student', fn (Builder $student) => $student->whereIn('students.id', ProgramAccess::studentQuery($request->user())->select('students.id'))),
             $request
         );
 
@@ -73,7 +73,7 @@ class CoordinatorAttendanceController extends Controller
         $programId = ProgramAccess::programId($request->user());
 
         $locations = StudentLiveLocation::query()
-            ->whereHas('student', fn (Builder $student) => $student->forProgram($programId))
+            ->whereHas('student', fn (Builder $student) => $student->whereIn('students.id', ProgramAccess::studentQuery($request->user())->select('students.id')))
             ->whereHas('student.user', fn (Builder $user) => $user->where('is_active', true))
             ->whereHas('student.attendance', fn (Builder $attendance) => $attendance
                 ->whereDate('attendance.date', now()->toDateString())
@@ -135,9 +135,9 @@ class CoordinatorAttendanceController extends Controller
         return $query
             ->when($request->search, function (Builder $builder, string $search) {
                 $builder->whereHas('student', function (Builder $student) use ($search) {
-                    $student->where('student_id', 'like', '%'.$search.'%')
-                        ->orWhere('first_name', 'like', '%'.$search.'%')
-                        ->orWhere('last_name', 'like', '%'.$search.'%');
+                    $student->where('students.student_id', 'like', '%'.$search.'%')
+                        ->orWhere('students.first_name', 'like', '%'.$search.'%')
+                        ->orWhere('students.last_name', 'like', '%'.$search.'%');
                 });
             })
             ->when($request->status, fn (Builder $builder, string $status) => $builder->where('status', $status))
@@ -208,7 +208,7 @@ class CoordinatorAttendanceController extends Controller
             'total' => $total,
             'statuses' => $statuses,
             'attendance_rate' => $workdays > 0 ? round((($statuses['present'] + $statuses['late']) / $workdays) * 100, 1) : 0,
-            'total_hours' => round($totalHours, 1),
+            'total_hours' => round($totalHours, 2),
             'journals_submitted' => $journalsSubmitted,
             'journals_pending' => $journalsPending,
             'analytics' => [

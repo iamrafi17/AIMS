@@ -39,7 +39,7 @@ class AdminUserEmailTest extends TestCase
             'password' => $created->json('temporary_password'),
             'device_name' => 'New staff email login',
         ])->assertOk()
-            ->assertJsonPath('user.user_id', $user->user_id)
+            ->assertJsonPath('user.username', $user->username)
             ->assertJsonPath('user.email', 'vpaa@example.com')
             ->assertJsonPath('user.onboarding_step', 'complete_profile');
     }
@@ -76,7 +76,7 @@ class AdminUserEmailTest extends TestCase
                 'email' => $email,
             ])->assertOk()
                 ->assertJsonPath('user.email', $email)
-                ->assertJsonPath('user.user_id', $staff->user_id);
+                ->assertJsonPath('user.username', $staff->username);
             $this->assertSame($email, $staff->fresh()->email);
         }
 

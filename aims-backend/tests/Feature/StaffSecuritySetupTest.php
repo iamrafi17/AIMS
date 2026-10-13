@@ -44,7 +44,7 @@ class StaffSecuritySetupTest extends TestCase
             ->assertJsonPath('user.requires_security_setup', true)
             ->assertJsonPath('user.requires_profile_setup', true);
 
-        $userId = $created->json('user.user_id');
+        $userId = $created->json('user.username');
         $temporaryPassword = $created->json('temporary_password');
         $this->assertMatchesRegularExpression('/[A-Z]/', $temporaryPassword);
         $this->assertMatchesRegularExpression('/[a-z]/', $temporaryPassword);
@@ -95,7 +95,7 @@ class StaffSecuritySetupTest extends TestCase
 
         $this->withToken($token)->getJson('/api/coordinator/dashboard')->assertOk();
 
-        $staff = User::where('user_id', $userId)->firstOrFail();
+        $staff = User::where('username', $userId)->firstOrFail();
         $this->assertSame('juan.delacruz@marsu.edu.ph', $staff->email);
         $this->assertSame('09171234567', $staff->contact_number);
         $this->assertSame('Santa Cruz, Marinduque', $staff->address);
@@ -136,7 +136,7 @@ class StaffSecuritySetupTest extends TestCase
             ]);
 
             $login = $this->postJson('/api/login', [
-                'login' => $user->user_id,
+                'login' => $user->username,
                 'password' => 'TempPass123!',
                 'device_name' => 'First login test',
             ])->assertOk()
@@ -192,7 +192,7 @@ class StaffSecuritySetupTest extends TestCase
         ]);
         $questions = SecurityQuestion::query()->take(3)->get();
         $token = $this->postJson('/api/login', [
-            'login' => $user->user_id,
+            'login' => $user->username,
             'password' => 'TempPass123!',
             'device_name' => 'Validation test',
         ])->json('token');
@@ -236,7 +236,7 @@ class StaffSecuritySetupTest extends TestCase
         $questions = SecurityQuestion::query()->take(3)->get();
         $answers = ['Adobo', 'Volleyball', 'Reading'];
         $token = $this->postJson('/api/login', [
-            'login' => $user->user_id,
+            'login' => $user->username,
             'password' => 'TempPass123!',
             'device_name' => 'Recovery setup test',
         ])->json('token');
@@ -250,7 +250,7 @@ class StaffSecuritySetupTest extends TestCase
             ])->all(),
         ])->assertOk();
 
-        $challenge = $this->postJson('/api/forgot-password', ['user_id' => $user->user_id])
+        $challenge = $this->postJson('/api/forgot-password', ['user_id' => $user->username])
             ->assertOk()
             ->assertJsonPath('questions.0.id', $questions[0]->id)
             ->assertJsonPath('questions.1.id', $questions[1]->id)
@@ -258,7 +258,7 @@ class StaffSecuritySetupTest extends TestCase
             ->json('challenge_token');
 
         $this->postJson('/api/forgot-password/verify', [
-            'user_id' => $user->user_id,
+            'user_id' => $user->username,
             'challenge_token' => $challenge,
             'answers' => $questions->values()->map(fn (SecurityQuestion $question, int $index) => [
                 'security_question_id' => $question->id,
@@ -267,7 +267,7 @@ class StaffSecuritySetupTest extends TestCase
         ])->assertUnprocessable();
 
         $resetToken = $this->postJson('/api/forgot-password/verify', [
-            'user_id' => $user->user_id,
+            'user_id' => $user->username,
             'challenge_token' => $challenge,
             'answers' => $questions->values()->map(fn (SecurityQuestion $question, int $index) => [
                 'security_question_id' => $question->id,
@@ -276,7 +276,7 @@ class StaffSecuritySetupTest extends TestCase
         ])->assertOk()->json('reset_token');
 
         $this->postJson('/api/reset-password', [
-            'user_id' => $user->user_id,
+            'user_id' => $user->username,
             'token' => $resetToken,
             'password' => 'RecoveredPass123!',
             'password_confirmation' => 'RecoveredPass123!',

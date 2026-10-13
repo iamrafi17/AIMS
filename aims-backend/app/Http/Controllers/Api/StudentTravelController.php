@@ -3,13 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Student;
 use App\Models\SystemNotification;
 use App\Models\TravelLog;
 use App\Support\ReverseGeocoder;
+use App\Support\OjtCompletion;
 use App\Support\TravelWorkflow;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class StudentTravelController extends Controller
@@ -23,9 +24,14 @@ class StudentTravelController extends Controller
         $sessions = TravelLog::query()
             ->with(TravelWorkflow::relations())
             ->whereHas('participants', fn ($query) => $query->whereKey($student->id))
-            ->latest('start_time')
+            ->latest('id')
             ->get();
-        $current = $sessions->first(fn (TravelLog $session) => in_array($session->status, ['active', 'traveling', 'arrived'], true));
+        $current = $sessions->first(fn (TravelLog $session) => in_array($session->status, ['active', 'traveling', 'arrived'], true))
+            ?? $sessions->first(fn (TravelLog $session) => $session->status === 'scheduled');
+
+        $travelRequirement = ! $student->hte_id ? 'no_hte'
+            : ($current?->status === 'scheduled' ? 'scheduled'
+                : ($current ? 'in_progress' : 'awaiting_schedule'));
 
         return response()->json([
             'student' => TravelWorkflow::studentPayload($student),
@@ -34,6 +40,7 @@ class StudentTravelController extends Controller
                 'name' => $coordinator->name,
             ] : null,
             'can_start' => $this->startEligibility($request, $student, $current),
+            'travel_requirement' => $travelRequirement,
             'current_session' => $current ? TravelWorkflow::sessionPayload($current, '/student/travel') : null,
             'history' => $sessions->reject(fn (TravelLog $session) => $current && $session->is($current))
                 ->map(fn (TravelLog $session) => TravelWorkflow::sessionPayload($session, '/student/travel'))
@@ -55,35 +62,31 @@ class StudentTravelController extends Controller
             throw ValidationException::withMessages(['session' => 'An active assigned HTE is required before starting travel.']);
         }
         if (($student->ojt_start_date && now()->startOfDay()->lt($student->ojt_start_date))
-            || ($student->ojt_end_date && now()->startOfDay()->gt($student->ojt_end_date))) {
+            || (! OjtCompletion::usesAutomaticEnd($student) && $student->ojt_end_date && now()->startOfDay()->gt($student->ojt_end_date))) {
             throw ValidationException::withMessages(['session' => 'Travel can only start during your active internship period.']);
         }
 
-        $coordinator = TravelWorkflow::coordinatorFor($student);
-        if (! $coordinator) {
-            throw ValidationException::withMessages(['session' => 'No active Internship Coordinator is assigned to your program.']);
-        }
-
-        $session = DB::transaction(function () use ($request, $student, $coordinator, $coordinates) {
-            $hasActiveSession = TravelLog::query()
+        $session = DB::transaction(function () use ($request, $student, $coordinates) {
+            $session = TravelLog::query()
                 ->whereHas('participants', fn ($query) => $query->whereKey($student->id))
-                ->whereIn('status', ['active', 'traveling', 'arrived'])
-                ->lockForUpdate()
-                ->exists();
+                ->where('status', 'scheduled')->latest('id')->lockForUpdate()->first();
+            if (! $session) {
+                throw ValidationException::withMessages(['session' => 'No travel schedule has been set by your coordinator.']);
+            }
+            if ((int) $session->hte_id !== (int) $student->hte_id) {
+                throw ValidationException::withMessages(['session' => 'Your HTE assignment changed. Ask your coordinator to update the travel schedule.']);
+            }
+            if (now()->toDateString() !== $session->scheduled_at->toDateString()) {
+                throw ValidationException::withMessages(['session' => 'Travel can start only on the scheduled date. Ask your coordinator to reschedule a missed trip.']);
+            }
+            $hasActiveSession = TravelLog::query()->whereKeyNot($session->id)
+                ->whereHas('participants', fn ($query) => $query->whereKey($student->id))
+                ->whereIn('status', ['active', 'traveling', 'arrived'])->exists();
             if ($hasActiveSession) {
                 throw ValidationException::withMessages(['session' => 'Complete your current travel session before starting another one.']);
             }
 
-            $session = TravelLog::create([
-                'created_by' => $request->user()->id,
-                'coordinator_id' => $coordinator->id,
-                'hte_id' => $student->hte_id,
-                'session_code' => 'TRV-'.now()->format('ymd').'-'.Str::upper(Str::random(6)),
-                'destination' => $student->hte->address,
-                'start_time' => now(),
-                'status' => 'active',
-            ]);
-            $session->participants()->attach($student->id);
+            $session->update(['start_time' => now(), 'status' => 'active']);
             $session->checkpoints()->create([
                 ...$coordinates,
                 'sequence' => 1,
@@ -96,7 +99,7 @@ class StudentTravelController extends Controller
             return $session;
         });
 
-        SystemNotification::sendToUser($coordinator->id, 'Student travel session started', $student->full_name.' started travel to '.$student->hte->name.'.', 'travel', '/coordinator/travel');
+        SystemNotification::sendToUser($session->coordinator_id, 'Student travel session started', $student->full_name.' started travel to '.$student->hte->name.'.', 'travel', '/coordinator/travel');
         SystemNotification::sendToUser($request->user()->id, 'Travel session started', 'Your starting GPS location was saved successfully.', 'travel', '/student/travel');
 
         return response()->json([
@@ -308,15 +311,35 @@ class StudentTravelController extends Controller
         return $earthRadiusKm * 2 * atan2(sqrt($value), sqrt(1 - $value));
     }
 
-    private function startEligibility(Request $request, $student, ?TravelLog $current): array
+    private function startEligibility(Request $request, Student $student, ?TravelLog $current): array
     {
         $reasons = [];
-        if (! $request->user()->is_active) $reasons[] = 'Student account is inactive.';
-        if ($student->internship_status !== 'active') $reasons[] = 'An active internship is required.';
-        if (! $student->hte_id || ! $student->hte?->is_active) $reasons[] = 'An active HTE assignment is required.';
-        if (($student->ojt_start_date && now()->startOfDay()->lt($student->ojt_start_date)) || ($student->ojt_end_date && now()->startOfDay()->gt($student->ojt_end_date))) $reasons[] = 'The internship period is not currently active.';
-        if ($current) $reasons[] = 'Another travel session is active.';
-        if (! TravelWorkflow::coordinatorFor($student)) $reasons[] = 'No active Internship Coordinator is assigned.';
+        if (! $request->user()->is_active) {
+            $reasons[] = 'Student account is inactive.';
+        }
+        if ($student->internship_status !== 'active') {
+            $reasons[] = 'An active internship is required.';
+        }
+        if (! $student->hte_id || ! $student->hte?->is_active) {
+            $reasons[] = 'An active HTE assignment is required.';
+        }
+        if (($student->ojt_start_date && now()->startOfDay()->lt($student->ojt_start_date)) || (! OjtCompletion::usesAutomaticEnd($student) && $student->ojt_end_date && now()->startOfDay()->gt($student->ojt_end_date))) {
+            $reasons[] = 'The internship period is not currently active.';
+        }
+        if ($current) {
+            if ($current->status === 'scheduled') {
+                if (now()->toDateString() !== $current->scheduled_at->toDateString()) {
+                    $reasons[] = 'Travel can start only on the scheduled date.';
+                }
+            } else {
+                $reasons[] = 'Another travel session is active.';
+            }
+        } else {
+            $reasons[] = 'No travel schedule has been set by your coordinator.';
+        }
+        if (! TravelWorkflow::coordinatorFor($student)) {
+            $reasons[] = 'No active Internship Coordinator is assigned.';
+        }
 
         return ['allowed' => $reasons === [], 'reasons' => $reasons];
     }

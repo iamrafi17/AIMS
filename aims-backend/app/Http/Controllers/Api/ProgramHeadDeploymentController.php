@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ApprovalRecord;
 use App\Models\Student;
 use App\Models\SystemNotification;
+use App\Models\User;
 use App\Support\ProgramAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -29,7 +30,7 @@ class ProgramHeadDeploymentController extends Controller
             'remarks' => ['nullable', 'required_if:decision,returned', 'string', 'max:2000'],
         ]);
 
-        $vpaaApproval = DB::transaction(function () use ($approval, $request, $student, $validated) {
+        $deanApproval = DB::transaction(function () use ($approval, $request, $student, $validated) {
             $locked = ApprovalRecord::query()->lockForUpdate()->findOrFail($approval->id);
             abort_unless($locked->status === 'pending', 422, 'This deployment request is no longer pending.');
 
@@ -51,14 +52,16 @@ class ProgramHeadDeploymentController extends Controller
             return ApprovalRecord::submit(ApprovalRecord::TYPE_DEPLOYMENT, $student->id, $request->user()->id);
         });
 
-        if ($vpaaApproval) {
-            SystemNotification::sendToRole('vpaa', 'Deployment request forwarded', $student->student_id.' deployment passed Program Head review and awaits final validation.', 'approval', '/vpaa/approvals');
+        if ($deanApproval) {
+            User::query()->forRole('dean')->where('is_active', true)
+                ->whereHas('employeeProfile', fn ($profile) => $profile->where('college_id', $student->college_id))
+                ->pluck('id')->each(fn (int $userId) => SystemNotification::sendToUser($userId, 'Deployment request forwarded', $student->student_id.' deployment awaits final validation.', 'approval', '/dean/approvals'));
         } else {
             SystemNotification::sendToUser($approval->submitted_by, 'Deployment request returned', $student->student_id.' deployment requires revision: '.$validated['remarks'], 'approval', '/coordinator/htes');
         }
 
         return response()->json([
-            'message' => $validated['decision'] === 'forwarded' ? 'Deployment request forwarded to the VPAA.' : 'Deployment request returned to the Coordinator.',
+            'message' => $validated['decision'] === 'forwarded' ? 'Deployment request forwarded to the Dean.' : 'Deployment request returned to the Coordinator.',
         ]);
     }
 }

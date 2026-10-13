@@ -27,8 +27,10 @@ class AppServiceProvider extends ServiceProvider
             $login = Str::lower(trim((string) $request->input('login')));
 
             return [
-                Limit::perMinute(10)->by($request->ip()),
-                Limit::perMinute(5)->by($login.'|'.$request->ip()),
+                Limit::perMinute(60)->by('login-requests|'.$request->ip()),
+                Limit::perMinute(5)
+                    ->by('login-failures|'.$login.'|'.$request->ip())
+                    ->after(fn ($response) => $response->getStatusCode() === 422),
             ];
         });
 

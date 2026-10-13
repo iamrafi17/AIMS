@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -59,12 +60,12 @@ class ReportTemplate extends Model
     }
 
     public function scopeForTemplateScope(
-        $query,
+        Builder $query,
         ?int $programId,
         string $reportType,
         string $periodScope,
         ?int $academicPeriodId = null,
-    ) {
+    ): Builder {
         return $query
             ->where('program_id', $programId)
             ->where('report_type', $reportType)

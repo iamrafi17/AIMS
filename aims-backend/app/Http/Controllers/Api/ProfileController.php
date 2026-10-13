@@ -17,35 +17,47 @@ class ProfileController extends Controller
     {
         $user = $request->user();
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => [$user->isStudent() ? 'nullable' : 'required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'contact_number' => ['nullable', 'string', 'digits:11'],
             'address' => ['nullable', 'string', 'max:1000'],
         ]);
 
         DB::transaction(function () use ($user, $validated) {
+            if ($user->isStudent() && $user->student) {
+                $user->update(['email' => $validated['email']]);
+                $user->student->update([
+                    'contact_number' => $validated['contact_number'] ?? $user->student->contact_number,
+                    'address' => $validated['address'] ?? $user->student->address,
+                ]);
+
+                return;
+            }
+
             $user->update([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
                 'contact_number' => $validated['contact_number'] ?? $user->contact_number,
                 'address' => $validated['address'] ?? $user->address,
             ]);
-
-            $user->student?->update([
-                'contact_number' => $validated['contact_number'] ?? $user->student->contact_number,
-                'address' => $validated['address'] ?? $user->student->address,
-            ]);
         });
 
         return response()->json([
             'message' => 'Profile updated successfully.',
-            'user' => $this->userPayload($user),
+            'user' => $this->userPayload($user->fresh('student')),
         ]);
     }
 
     public function updateAccount(Request $request)
     {
         $user = $request->user();
+
+        if ($user->isStudent()) {
+            throw ValidationException::withMessages([
+                'name' => ['Update a student name through the student information form.'],
+            ]);
+        }
+
         $user->update($request->validate([
             'name' => ['required', 'string', 'max:255'],
         ]));
@@ -70,15 +82,8 @@ class ProfileController extends Controller
             'birth_date' => ['required', 'date', 'before:today'],
         ]);
 
-        DB::transaction(function () use ($user, $student, $validated) {
+        DB::transaction(function () use ($student, $validated) {
             $student->update($validated);
-            $user->update([
-                'name' => trim(collect([
-                    $validated['first_name'],
-                    $validated['middle_name'] ?? null,
-                    $validated['last_name'],
-                ])->filter()->implode(' ')),
-            ]);
         });
 
         return response()->json([
@@ -97,18 +102,26 @@ class ProfileController extends Controller
         ]);
 
         DB::transaction(function () use ($user, $validated) {
+            if ($user->isStudent() && $user->student) {
+                $user->update(['email' => $validated['email']]);
+                $user->student->update([
+                    'contact_number' => $validated['contact_number'],
+                    'address' => $validated['address'],
+                ]);
+
+                return;
+            }
+
             $user->update($validated);
-            $user->student?->update([
-                'contact_number' => $validated['contact_number'],
-                'address' => $validated['address'],
-            ]);
         });
+
+        $user = $user->fresh('student');
 
         return response()->json([
             'message' => 'Contact information updated successfully.',
-            'email' => $user->fresh()->email,
-            'contact_number' => $user->student?->fresh()->contact_number ?? $user->fresh()->contact_number,
-            'address' => $user->student?->fresh()->address ?? $user->fresh()->address,
+            'email' => $user->email,
+            'contact_number' => $user->isStudent() && $user->student ? $user->student->contact_number : $user->contact_number,
+            'address' => $user->isStudent() && $user->student ? $user->student->address : $user->address,
         ]);
     }
 
@@ -175,13 +188,17 @@ class ProfileController extends Controller
 
     private function userPayload(User $user): array
     {
+        $student = $user->isStudent()
+            ? ($user->relationLoaded('student') ? $user->student : $user->student()->first())
+            : null;
+
         return [
             'id' => $user->id,
-            'name' => $user->name,
+            'name' => $student?->full_name ?? $user->name,
             'email' => $user->email,
-            'user_id' => $user->user_id,
-            'contact_number' => $user->contact_number,
-            'address' => $user->address,
+            'username' => $user->username,
+            'contact_number' => $student?->contact_number ?? $user->contact_number,
+            'address' => $student?->address ?? $user->address,
             'role' => $user->role,
             'avatar' => $user->avatar,
             'avatar_url' => $user->avatar_url,

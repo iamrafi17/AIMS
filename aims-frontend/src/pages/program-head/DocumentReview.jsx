@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   FiActivity,
   FiAlertTriangle,
-  FiBookOpen,
   FiBriefcase,
   FiCheck,
   FiCheckCircle,
@@ -19,6 +18,8 @@ import {
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
+import { groupStudentRequirements } from './studentRequirementGroups';
+import ProgramHeadMoaReview from './ProgramHeadMoaReview';
 
 const emptyData = {
   summary: {
@@ -32,6 +33,7 @@ const emptyData = {
     expiring_moas: 0,
   },
   requirements: [],
+  folder_readiness: {},
   moas: [],
 };
 
@@ -45,15 +47,21 @@ const statusStyles = {
   pending: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300',
   approved: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300',
   rejected: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300',
+  returned: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300',
+  endorsed: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300',
+  reviewed: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300',
   expired: 'border-slate-200 bg-slate-100 text-slate-600 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300',
 };
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/5 dark:border-gray-600 dark:bg-gray-900 dark:text-white';
+const PdfPages = lazy(() => import('../../components/PdfPages'));
+const formatDocumentDate = (value, options = { month: 'short', day: 'numeric', year: 'numeric' }) => value
+  ? new Date(value).toLocaleDateString('en-PH', options) : '—';
 
 function StatusBadge({ status }) {
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${statusStyles[status] || statusStyles.pending}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${status === 'approved' ? 'bg-emerald-500' : status === 'rejected' ? 'bg-rose-500' : status === 'expired' ? 'bg-slate-500' : 'bg-amber-500'}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${status === 'approved' ? 'bg-emerald-500' : status === 'rejected' || status === 'returned' ? 'bg-rose-500' : status === 'expired' ? 'bg-slate-500' : 'bg-amber-500'}`} />
       {status}
     </span>
   );
@@ -120,7 +128,12 @@ function DocumentReview() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [selectedDocument, setSelectedDocument] = useState(null);
+  const [selectedStudentKey, setSelectedStudentKey] = useState(null);
+  const [requirementPreview, setRequirementPreview] = useState(null);
+  const requirementPreviewAbort = useRef(null);
+  const requirementPreviewUrl = useRef(null);
   const [decision, setDecision] = useState(null);
+  const [endorsement, setEndorsement] = useState(null);
   const [feedback, setFeedback] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -152,6 +165,11 @@ function DocumentReview() {
     return () => { mounted = false; };
   }, []);
 
+  useEffect(() => () => {
+    requirementPreviewAbort.current?.abort();
+    if (requirementPreviewUrl.current) URL.revokeObjectURL(requirementPreviewUrl.current);
+  }, []);
+
   const normalizedSearch = search.trim().toLowerCase();
   const filteredRequirements = data.requirements.filter((item) => {
     const matchesSearch = !normalizedSearch || `${item.requirement_name} ${item.student?.name} ${item.student?.student_id} ${item.student?.program}`.toLowerCase().includes(normalizedSearch);
@@ -159,24 +177,62 @@ function DocumentReview() {
     const matchesType = typeFilter === 'all' || item.file_type === typeFilter;
     return matchesSearch && matchesStatus && matchesType;
   });
-  const filteredMoas = data.moas.filter((item) => {
-    const status = item.computed_status || item.status;
-    const matchesSearch = !normalizedSearch || `${item.hte} ${item.college} ${status}`.toLowerCase().includes(normalizedSearch);
-    return matchesSearch && (statusFilter === 'all' || status === statusFilter);
-  });
+  const studentGroups = groupStudentRequirements(data.requirements);
+  const filteredStudentGroups = studentGroups.filter((group) => group.requirements.some((item) => filteredRequirements.includes(item)));
+  const selectedStudent = studentGroups.find((group) => group.key === selectedStudentKey);
 
-  const openRequirement = (requirement) => setSelectedDocument({ kind: 'requirement', document: requirement });
-  const openMoa = (moa) => setSelectedDocument({ kind: 'moa', document: moa });
+  const closeDocument = () => {
+    requirementPreviewAbort.current?.abort();
+    requirementPreviewAbort.current = null;
+    if (requirementPreviewUrl.current) URL.revokeObjectURL(requirementPreviewUrl.current);
+    requirementPreviewUrl.current = null;
+    setRequirementPreview(null);
+    setSelectedDocument(null);
+  };
+
+  const openRequirement = async (requirement) => {
+    requirementPreviewAbort.current?.abort();
+    if (requirementPreviewUrl.current) URL.revokeObjectURL(requirementPreviewUrl.current);
+    requirementPreviewUrl.current = null;
+    setSelectedDocument({ kind: 'requirement', document: requirement });
+    const isPdf = requirement.file_type?.toLowerCase() === 'pdf' || /\.pdf$/i.test(requirement.file_path || '');
+    const isImage = /^image(?:\/|$)/i.test(requirement.file_type || '') || /\.(?:png|jpe?g|gif|webp)$/i.test(requirement.file_path || '');
+    if (!isPdf && !isImage) {
+      setRequirementPreview({ file: null, loading: false });
+      return;
+    }
+
+    const controller = new AbortController();
+    requirementPreviewAbort.current = controller;
+    setRequirementPreview({ file: null, loading: true });
+    try {
+      const response = await api.get(`/program-head/documents/requirements/${requirement.id}/download`, {
+        responseType: 'blob',
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted) {
+        const imageUrl = isImage ? URL.createObjectURL(response.data) : null;
+        requirementPreviewUrl.current = imageUrl;
+        setRequirementPreview({ file: isPdf ? response.data : null, imageUrl, loading: false });
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setRequirementPreview({ file: null, loading: false, error: error.response?.data?.message || 'Unable to preview this file.' });
+      }
+    } finally {
+      if (requirementPreviewAbort.current === controller) requirementPreviewAbort.current = null;
+    }
+  };
 
   const openDecision = (kind, document, nextDecision) => {
-    setSelectedDocument(null);
+    closeDocument();
     setFeedback('');
     setDecision({ kind, document, decision: nextDecision });
   };
 
   const submitDecision = async (event) => {
     event.preventDefault();
-    if (decision.decision === 'rejected' && !feedback.trim()) {
+    if (decision.kind === 'requirement' && decision.decision === 'rejected' && !feedback.trim()) {
       toast.error('Feedback is required when rejecting a requirement.');
       return;
     }
@@ -206,8 +262,7 @@ function DocumentReview() {
           moas: current.moas.map((item) => item.id === decision.document.id ? response.data.moa : item),
           summary: {
             ...current.summary,
-            pending_moas: Math.max(current.summary.pending_moas - (decision.document.status === 'pending' ? 1 : 0), 0),
-            approved_moas: current.summary.approved_moas + (decision.decision === 'approved' && decision.document.status !== 'approved' ? 1 : 0) - (decision.document.status === 'approved' && decision.decision !== 'approved' ? 1 : 0),
+            pending_moas: Math.max(current.summary.pending_moas - 1, 0),
           },
         }));
       }
@@ -215,6 +270,7 @@ function DocumentReview() {
       toast.success(response.data.message);
       setDecision(null);
       setFeedback('');
+      if (decision.kind === 'requirement') await loadDocuments(true);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Unable to save the review decision.');
     } finally {
@@ -232,10 +288,28 @@ function DocumentReview() {
       const anchor = window.document.createElement('a');
       anchor.href = url;
       anchor.download = document.file_path?.split('/').pop() || `${kind}-${document.id}.file`;
+      window.document.body.appendChild(anchor);
       anchor.click();
-      URL.revokeObjectURL(url);
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Unable to download this document.');
+    }
+  };
+
+  const submitEndorsement = async () => {
+    if (!endorsement) return;
+    setBusy(true);
+    try {
+      const action = endorsement.status === 'returned' ? 're-endorse' : 'endorse';
+      const response = await api.post(`/program-head/student-internships/${endorsement.key}/${action}`);
+      toast.success(response.data.message);
+      setEndorsement(null);
+      await loadDocuments(true);
+    } catch (error) {
+      toast.error(error.response?.data?.errors?.folder?.[0] || error.response?.data?.message || 'Unable to endorse this folder.');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -311,61 +385,37 @@ function DocumentReview() {
         </div>
       </nav>
 
-      {activeTab !== 'monitoring' && (
+      {activeTab === 'requirements' && (
         <div className="portal-filter-panel flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 md:flex-row">
           <label className="portal-filter-search relative flex-1"><FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={activeTab === 'requirements' ? 'Search student, ID, program, or requirement...' : 'Search HTE, college, or status...'} className={`${inputClass} pl-10`} /></label>
           <div className="flex gap-2">
-            <label className="portal-filter-field--icon relative flex-1 md:w-44"><FiFilter className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={`${inputClass} appearance-none pl-9`}><option value="all">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option>{activeTab === 'moas' && <option value="expired">Expired</option>}</select></label>
+            <label className="portal-filter-field--icon relative flex-1 md:w-44"><FiFilter className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={`${inputClass} appearance-none pl-9`}><option value="all">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></label>
             {activeTab === 'requirements' && <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className={`${inputClass} flex-1 md:w-40`}><option value="all">All file types</option><option value="pdf">PDF</option><option value="image">Image</option><option value="document">Document</option></select>}
           </div>
         </div>
       )}
 
       {activeTab === 'requirements' && (
-        <Panel title="Requirement Review" subtitle={`${filteredRequirements.length} submitted requirement records shown`} icon={FiFileText}>
+        <Panel title="Requirement Review" subtitle={`${filteredStudentGroups.length} students with submitted requirements shown`} icon={FiFileText}>
           <div className="overflow-x-auto">
-            <table className="portal-card-table portal-card-table--document-review w-full min-w-[980px] text-left">
-              <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700"><th className="pb-3 font-black">Student</th><th className="pb-3 font-black">Requirement</th><th className="pb-3 font-black">File</th><th className="pb-3 font-black">Submitted</th><th className="pb-3 font-black">Review Status</th><th className="pb-3 font-black">Reviewer</th><th className="pb-3 text-right font-black">Actions</th></tr></thead>
-              <tbody>{filteredRequirements.map((requirement) => (
-                <tr key={requirement.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 dark:border-gray-700 dark:hover:bg-gray-900/40">
-                  <td className="py-4"><p className="text-sm font-black text-slate-800 dark:text-white">{requirement.student?.name}</p><p className="mt-1 text-[10px] text-slate-400">{requirement.student?.student_id} · {requirement.student?.program || 'No program'}</p></td>
-                  <td className="py-4"><p className="max-w-56 text-xs font-black text-slate-700 dark:text-gray-200">{requirement.requirement_name}</p><p className="mt-1 text-[10px] text-slate-400">{requirement.student?.hte}</p></td>
-                  <td className="py-4"><span className="rounded-lg bg-slate-100 px-2 py-1 text-[9px] font-black uppercase text-slate-500 dark:bg-gray-700 dark:text-gray-300">{requirement.file_type || 'File'}</span></td>
-                  <td className="py-4 text-xs text-slate-500">{requirement.submitted_at ? new Date(requirement.submitted_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
-                  <td className="py-4"><StatusBadge status={requirement.status} />{requirement.feedback && <p className="mt-1.5 max-w-48 truncate text-[10px] text-rose-500">{requirement.feedback}</p>}</td>
-                  <td className="py-4"><p className="text-xs font-bold text-slate-600 dark:text-gray-300">{requirement.reviewer || '—'}</p><p className="mt-1 text-[9px] text-slate-400">{requirement.reviewed_at ? new Date(requirement.reviewed_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : 'Not reviewed'}</p></td>
-                  <td className="py-4"><div className="flex justify-end gap-1.5"><button type="button" onClick={() => downloadDocument('requirement', requirement)} title="Download document" className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-gray-200"><FiDownload /></button><button type="button" onClick={() => openRequirement(requirement)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#7D001D]/10 px-3 py-2 text-xs font-black text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300"><FiEye /> Review</button></div></td>
+            <table className="portal-card-table portal-card-table--document-review w-full min-w-[700px] text-left">
+              <thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700"><th className="pb-3 font-black">Student</th><th className="pb-3 font-black">Submitted</th><th className="pb-3 font-black">Status</th><th className="pb-3 font-black">Reviewer</th><th className="pb-3 text-right font-black">Action</th></tr></thead>
+              <tbody>{filteredStudentGroups.map((group) => (
+                <tr key={group.key} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 dark:border-gray-700 dark:hover:bg-gray-900/40">
+                  <td className="py-4"><p className="text-sm font-black text-slate-800 dark:text-white">{group.student.name || 'Unnamed student'}</p><p className="mt-1 text-[10px] text-slate-400">{group.student.student_id} · {group.student.program || 'No program'}</p></td>
+                  <td className="py-4 text-xs text-slate-500">{formatDocumentDate(group.submittedAt)}</td>
+                  <td className="py-4"><span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black ${statusStyles[group.status] || statusStyles.pending}`}>{group.statusLabel}</span></td>
+                  <td className="py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{group.reviewer || '—'}</td>
+                  <td className="py-4 text-right"><button type="button" onClick={() => setSelectedStudentKey(group.key)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#7D001D]/10 px-3 py-2 text-xs font-black text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300"><FiEye /> View</button></td>
                 </tr>
               ))}</tbody>
             </table>
           </div>
-          {!filteredRequirements.length && <div className="py-16 text-center"><FiFileText className="mx-auto text-4xl text-slate-300" /><p className="mt-3 text-sm font-bold text-slate-400">No submitted requirements match these filters.</p></div>}
+          {!filteredStudentGroups.length && <div className="py-16 text-center"><FiFileText className="mx-auto text-4xl text-slate-300" /><p className="mt-3 text-sm font-bold text-slate-400">No students with submitted requirements match these filters.</p></div>}
         </Panel>
       )}
 
-      {activeTab === 'moas' && (
-        <Panel title="MOA Review" subtitle={`${filteredMoas.length} memorandum records shown`} icon={FiBriefcase}>
-          <div className="grid gap-4 lg:grid-cols-2">
-            {filteredMoas.map((moa) => {
-              const status = moa.computed_status || moa.status;
-              return (
-                <article key={moa.id} className="rounded-2xl border border-slate-100 p-5 transition hover:border-[#7D001D]/20 hover:shadow-md dark:border-gray-700">
-                  <div className="flex items-start justify-between gap-3"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#7D001D]/10 text-xl text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300"><FiBookOpen /></div><StatusBadge status={status} /></div>
-                  <h3 className="mt-4 text-base font-black text-slate-800 dark:text-white">{moa.hte || 'Unnamed HTE'}</h3>
-                  <p className="mt-1 text-xs font-bold text-slate-400">{moa.college || 'No college'} · Memorandum of Agreement</p>
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-xl bg-slate-50 p-3 dark:bg-gray-900"><p className="text-[9px] font-black uppercase text-slate-400">Effective date</p><p className="mt-1 text-xs font-black text-slate-700 dark:text-gray-200">{new Date(`${moa.effective_date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</p></div>
-                    <div className="rounded-xl bg-slate-50 p-3 dark:bg-gray-900"><p className="text-[9px] font-black uppercase text-slate-400">Expiration date</p><p className="mt-1 text-xs font-black text-slate-700 dark:text-gray-200">{new Date(`${moa.expiration_date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</p></div>
-                  </div>
-                  {status === 'approved' && moa.days_remaining <= 60 && <div className="mt-4 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"><FiAlertTriangle className="mt-0.5 shrink-0" /> Expires in {moa.days_remaining} days. Renewal follow-up is recommended.</div>}
-                  <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-gray-700"><div><p className="text-[9px] font-black uppercase text-slate-400">Reviewed by</p><p className="mt-1 text-xs font-bold text-slate-600 dark:text-gray-300">{moa.reviewer || 'Not yet reviewed'}</p></div><div className="flex gap-2"><button type="button" onClick={() => downloadDocument('moa', moa)} className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-gray-200"><FiDownload /></button><button type="button" onClick={() => openMoa(moa)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#7D001D] px-3 py-2 text-xs font-black text-white"><FiEye /> Review MOA</button></div></div>
-                </article>
-              );
-            })}
-          </div>
-          {!filteredMoas.length && <div className="py-16 text-center"><FiBriefcase className="mx-auto text-4xl text-slate-300" /><p className="mt-3 text-sm font-bold text-slate-400">No MOAs match these filters.</p></div>}
-        </Panel>
-      )}
+      {activeTab === 'moas' && <ProgramHeadMoaReview moas={data.moas} onChanged={() => loadDocuments(true)} />}
 
       {activeTab === 'monitoring' && (
         <div className="space-y-6">
@@ -401,60 +451,75 @@ function DocumentReview() {
         </div>
       )}
 
-      {selectedDocument?.kind === 'requirement' && (
-        <Modal title="Review Student Requirement" subtitle={`${selectedDocument.document.student?.name} · ${selectedDocument.document.student?.student_id}`} onClose={() => setSelectedDocument(null)}>
-          <div className="grid gap-6 p-6 lg:grid-cols-[1fr_270px]">
-            <div className="grid min-h-80 place-items-center rounded-3xl bg-gradient-to-br from-slate-100 to-slate-200 p-6 text-center dark:from-gray-900 dark:to-gray-700">
-              <div><div className="mx-auto grid h-20 w-20 place-items-center rounded-3xl bg-white text-4xl text-[#7D001D] shadow-sm dark:bg-gray-800 dark:text-rose-300"><FiFileText /></div><p className="mt-5 text-sm font-black text-slate-700 dark:text-white">{selectedDocument.document.requirement_name}</p><p className="mt-2 text-xs text-slate-400">{selectedDocument.document.file_type?.toUpperCase() || 'DOCUMENT'} file submitted for review</p><button type="button" onClick={() => downloadDocument('requirement', selectedDocument.document)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-xs font-black text-[#7D001D] shadow-sm dark:bg-gray-800 dark:text-rose-300"><FiDownload /> Download and inspect file</button></div>
+      {selectedStudent && !selectedDocument && !decision && !endorsement && (
+        <Modal title={selectedStudent.student.name || 'Student requirements'} subtitle={`${selectedStudent.student.program || 'No program'} · ${selectedStudent.student.student_id || 'No student ID'}`} onClose={() => setSelectedStudentKey(null)} size="max-w-4xl">
+          <div className="space-y-5 p-5 sm:p-6">
+            <div className="flex flex-wrap justify-between gap-4 rounded-2xl bg-slate-50 p-4 dark:bg-gray-900">
+              <div><p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Submitted</p><p className="mt-1 text-sm font-bold text-slate-700 dark:text-gray-200">{formatDocumentDate(selectedStudent.submittedAt, { month: 'long', day: 'numeric', year: 'numeric' })}</p></div>
+              <div><p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Overall status</p><p className="mt-1 text-sm font-black uppercase text-[#7D001D] dark:text-rose-300">{selectedStudent.statusLabel}</p></div>
             </div>
             <div>
-              <div className="space-y-4">
-                <div><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Student</p><p className="mt-1 text-sm font-black text-slate-700 dark:text-white">{selectedDocument.document.student?.name}</p><p className="mt-1 text-xs text-slate-400">{selectedDocument.document.student?.student_id} · {selectedDocument.document.student?.program}</p></div>
-                <div><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">HTE Placement</p><p className="mt-1 text-xs font-bold text-slate-600 dark:text-gray-300">{selectedDocument.document.student?.hte}</p></div>
-                <div><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Submitted</p><p className="mt-1 text-xs font-bold text-slate-600 dark:text-gray-300">{selectedDocument.document.submitted_at ? new Date(selectedDocument.document.submitted_at).toLocaleString('en-PH') : '—'}</p></div>
-                <div><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Current decision</p><div className="mt-2"><StatusBadge status={selectedDocument.document.status} /></div></div>
-                {selectedDocument.document.feedback && <div className="rounded-xl bg-rose-50 p-3 dark:bg-rose-950/30"><p className="text-[9px] font-black uppercase text-rose-500">Previous feedback</p><p className="mt-1 text-xs leading-5 text-rose-700 dark:text-rose-300">{selectedDocument.document.feedback}</p></div>}
-              </div>
-              <div className="mt-6 grid gap-2">
-                {selectedDocument.document.status !== 'approved' && <button type="button" onClick={() => openDecision('requirement', selectedDocument.document, 'approved')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white"><FiCheck /> Approve Requirement</button>}
-                {selectedDocument.document.status !== 'rejected' && <button type="button" onClick={() => openDecision('requirement', selectedDocument.document, 'rejected')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-black text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300"><FiX /> Reject with Feedback</button>}
+              <h3 className="text-sm font-black uppercase tracking-wider text-slate-700 dark:text-white">Requirements</h3>
+              <div className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-100 dark:divide-gray-700 dark:border-gray-700">
+                {selectedStudent.requirements.map((requirement) => (
+                  <div key={requirement.id} className="flex flex-wrap items-center gap-3 p-3 sm:p-4">
+                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${requirement.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : requirement.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>{requirement.status === 'approved' ? <FiCheck /> : requirement.status === 'rejected' ? <FiX /> : <FiClock />}</span>
+                    <div className="min-w-40 flex-1"><p className="text-sm font-bold text-slate-800 dark:text-white">{requirement.requirement_name}</p>{requirement.feedback && <p className="mt-1 text-xs text-rose-600">{requirement.feedback}</p>}</div>
+                    <StatusBadge status={requirement.status} />
+                    <div className="ml-auto flex gap-2">
+                      <button type="button" onClick={() => openRequirement(requirement)} className="inline-flex items-center gap-1 rounded-lg bg-[#7D001D]/10 px-3 py-2 text-xs font-bold text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300"><FiEye /> View</button>
+                      <button type="button" onClick={() => downloadDocument('requirement', requirement)} className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 dark:bg-gray-700 dark:text-gray-200"><FiDownload /> Download</button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
+            <div className="border-t border-slate-100 pt-4 text-xs text-slate-600 dark:border-gray-700 dark:text-gray-300"><p><span className="font-black">Reviewed by:</span> {selectedStudent.reviewer || '—'}</p><p className="mt-1"><span className="font-black">Reviewed:</span> {formatDocumentDate(selectedStudent.reviewedAt, { month: 'long', day: 'numeric', year: 'numeric' })}</p></div>
+            {data.folder_readiness?.[selectedStudent.key] && (() => {
+              const readiness = data.folder_readiness[selectedStudent.key];
+              const locked = ['for_dean_review', 'for_review', 'reviewed', 'final_approved'].includes(readiness.approval_status);
+              return <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-gray-700"><p className="text-sm font-black text-slate-700 dark:text-white">{readiness.approved}/{readiness.total} required documents approved{readiness.approval_status ? ` · ${readiness.approval_status.replaceAll('_', ' ')}` : ''}</p><button type="button" disabled={!readiness.complete || locked || busy} onClick={() => setEndorsement({ key: selectedStudent.key, student: selectedStudent.student, status: readiness.approval_status, approved: readiness.approved, total: readiness.total })} className="rounded-xl bg-[#7D001D] px-4 py-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-40">{readiness.approval_status === 'returned' ? 'Re-Endorse to Dean' : 'Endorse to Dean'}</button></div>;
+            })()}
           </div>
         </Modal>
       )}
 
-      {selectedDocument?.kind === 'moa' && (
-        <Modal title="Review Memorandum of Agreement" subtitle={`${selectedDocument.document.hte} · ${selectedDocument.document.college || 'No college'}`} onClose={() => setSelectedDocument(null)}>
-          <div className="grid gap-6 p-6 lg:grid-cols-[1fr_280px]">
-            <div className="grid min-h-80 place-items-center rounded-3xl bg-gradient-to-br from-blue-50 to-slate-200 p-6 text-center dark:from-blue-950/40 dark:to-gray-800">
-              <div><div className="mx-auto grid h-20 w-20 place-items-center rounded-3xl bg-white text-4xl text-blue-700 shadow-sm dark:bg-gray-800 dark:text-blue-300"><FiBookOpen /></div><p className="mt-5 text-sm font-black text-slate-700 dark:text-white">Memorandum of Agreement</p><p className="mt-2 text-xs text-slate-400">{selectedDocument.document.hte}</p><button type="button" onClick={() => downloadDocument('moa', selectedDocument.document)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-xs font-black text-blue-700 shadow-sm dark:bg-gray-800 dark:text-blue-300"><FiDownload /> Download and inspect MOA</button></div>
-            </div>
-            <div>
-              <div className="space-y-4">
-                <div><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Host Training Establishment</p><p className="mt-1 text-sm font-black text-slate-700 dark:text-white">{selectedDocument.document.hte}</p></div>
-                <div><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">College</p><p className="mt-1 text-xs font-bold text-slate-600 dark:text-gray-300">{selectedDocument.document.college || 'Not specified'}</p></div>
-                <div className="grid grid-cols-2 gap-3"><div><p className="text-[9px] font-black uppercase text-slate-400">Effective</p><p className="mt-1 text-xs font-bold text-slate-600 dark:text-gray-300">{new Date(`${selectedDocument.document.effective_date}T00:00:00`).toLocaleDateString('en-PH')}</p></div><div><p className="text-[9px] font-black uppercase text-slate-400">Expires</p><p className="mt-1 text-xs font-bold text-slate-600 dark:text-gray-300">{new Date(`${selectedDocument.document.expiration_date}T00:00:00`).toLocaleDateString('en-PH')}</p></div></div>
-                <div><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Current decision</p><div className="mt-2"><StatusBadge status={selectedDocument.document.computed_status || selectedDocument.document.status} /></div></div>
-                <div className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500 dark:bg-gray-900">Confirm the agreement parties, validity dates, institutional responsibilities, insurance provisions, and termination clauses before recording a decision.</div>
+      {endorsement && <Modal title={endorsement.status === 'returned' ? 'Re-Endorse Student Folder' : 'Endorse Student Folder'} subtitle={`${endorsement.student.name} · ${endorsement.student.student_id}`} onClose={() => !busy && setEndorsement(null)} size="max-w-lg"><div className="p-6"><p className="text-sm text-slate-600 dark:text-gray-300">{endorsement.approved}/{endorsement.total} requirements approved. Send this complete student folder to the Dean for final approval?</p><div className="mt-6 flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setEndorsement(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold">Cancel</button><button type="button" disabled={busy} onClick={submitEndorsement} className="rounded-xl bg-[#7D001D] px-4 py-2 text-xs font-bold text-white">{busy ? 'Sending...' : 'Endorse'}</button></div></div></Modal>}
+
+      {selectedDocument?.kind === 'requirement' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm sm:p-5" onMouseDown={(event) => event.target === event.currentTarget && closeDocument()}>
+          <div role="dialog" aria-modal="true" aria-label={`Review file: ${selectedDocument.document.requirement_name}`} className="flex h-[min(88dvh,800px)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-800">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-gray-700">
+              <div className="min-w-0">
+                <h2 className="break-words text-lg font-bold text-slate-900 dark:text-white">{selectedDocument.document.requirement_name}</h2>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">{selectedDocument.document.student?.name} · {selectedDocument.document.student?.student_id} · {selectedDocument.document.student?.program}</p>
               </div>
-              {(selectedDocument.document.computed_status || selectedDocument.document.status) !== 'expired' && <div className="mt-6 grid gap-2">
-                {selectedDocument.document.status !== 'approved' && <button type="button" onClick={() => openDecision('moa', selectedDocument.document, 'approved')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white"><FiCheck /> Approve MOA</button>}
-                {selectedDocument.document.status !== 'rejected' && <button type="button" onClick={() => openDecision('moa', selectedDocument.document, 'rejected')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-black text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300"><FiX /> Reject MOA</button>}
-              </div>}
+              <button type="button" onClick={closeDocument} aria-label="Close file review" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-gray-200"><FiX /></button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-100 p-3 dark:bg-gray-900">
+              {requirementPreview?.loading ? <p className="py-12 text-center text-sm text-slate-600 dark:text-slate-300">Loading file...</p> : requirementPreview?.file ? (
+                <Suspense fallback={<p className="py-12 text-center text-sm text-slate-600">Rendering PDF...</p>}><PdfPages file={requirementPreview.file} /></Suspense>
+              ) : requirementPreview?.imageUrl ? <img src={requirementPreview.imageUrl} alt={selectedDocument.document.requirement_name} className="mx-auto max-h-full max-w-full object-contain" /> : <p className="py-12 text-center text-sm text-slate-600 dark:text-slate-300">{requirementPreview?.error || 'Preview is available for PDF and image files. You can download this submission.'}</p>}
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-4 dark:border-gray-700">
+              {selectedDocument.document.can_program_head_review === false && <p className="mr-auto text-xs font-bold text-amber-700 dark:text-amber-300">Awaiting coordinator approval</p>}
+              {selectedDocument.document.program_head_endorsed && <p className="mr-auto text-xs font-bold text-emerald-700 dark:text-emerald-300">Endorsed for Dean approval</p>}
+              <button type="button" onClick={() => downloadDocument('requirement', selectedDocument.document)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-[#7D001D] dark:border-gray-600 dark:text-rose-300"><FiDownload /> Download File</button>
+              {selectedDocument.document.can_program_head_review !== false && !selectedDocument.document.program_head_endorsed && <button type="button" onClick={() => openDecision('requirement', selectedDocument.document, 'approved')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white"><FiCheck /> Approve Requirement</button>}
+              {selectedDocument.document.can_program_head_review !== false && !selectedDocument.document.program_head_endorsed && selectedDocument.document.status !== 'rejected' && <button type="button" onClick={() => openDecision('requirement', selectedDocument.document, 'rejected')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-black text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300"><FiX /> Reject with Feedback</button>}
             </div>
           </div>
-        </Modal>
+        </div>
       )}
 
       {decision && (
-        <Modal title={`${decision.decision === 'approved' ? 'Approve' : 'Reject'} ${decision.kind === 'requirement' ? 'Requirement' : 'MOA'}`} subtitle="Review decisions are recorded with your account and timestamp" onClose={() => !busy && setDecision(null)} size="max-w-lg">
+        <Modal title={`${decision.kind === 'moa' ? (decision.decision === 'endorsed' ? 'Endorse' : 'Return') : (decision.decision === 'approved' ? 'Approve' : 'Reject')} ${decision.kind === 'requirement' ? 'Requirement' : 'MOA'}`} subtitle="Review decisions are recorded with your account and timestamp" onClose={() => !busy && setDecision(null)} size="max-w-lg">
           <form onSubmit={submitDecision} className="p-6">
             <div className={`grid h-14 w-14 place-items-center rounded-2xl text-2xl ${decision.decision === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'}`}>{decision.decision === 'approved' ? <FiCheckCircle /> : <FiXCircle />}</div>
             <h3 className="mt-4 font-black text-slate-800 dark:text-white">{decision.kind === 'requirement' ? decision.document.requirement_name : decision.document.hte}</h3>
-            <p className="mt-2 text-xs leading-5 text-slate-400">{decision.decision === 'approved' ? 'This document will be marked approved and included in compliance totals.' : 'This document will be marked rejected and returned for corrective action.'}</p>
-            {decision.decision === 'rejected' && <label className="mt-5 block"><span className="mb-2 block text-xs font-black text-slate-600 dark:text-gray-200">Rejection feedback <span className="text-rose-500">*</span></span><textarea required rows="4" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="Explain what must be corrected or resubmitted..." className={inputClass} /></label>}
-            <div className="mt-6 flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end dark:border-gray-700"><button type="button" onClick={() => setDecision(null)} disabled={busy} className="rounded-xl border border-slate-200 px-5 py-3 text-xs font-black text-slate-600 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">Cancel</button><button type="submit" disabled={busy} className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-xs font-black text-white disabled:opacity-50 ${decision.decision === 'approved' ? 'bg-emerald-600' : 'bg-rose-600'}`}>{busy ? <FiRefreshCw className="animate-spin" /> : decision.decision === 'approved' ? <FiCheck /> : <FiX />} Confirm {decision.decision === 'approved' ? 'Approval' : 'Rejection'}</button></div>
+            <p className="mt-2 text-xs leading-5 text-slate-400">{decision.kind === 'moa' ? decision.decision === 'endorsed' ? 'Send this MOA to the Dean for final approval.' : 'Return this MOA to the coordinator.' : decision.decision === 'approved' ? 'This requirement will be marked approved.' : 'This requirement will be returned for corrective action.'}</p>
+            {(decision.decision === 'rejected' || decision.decision === 'returned') && <label className="mt-5 block"><span className="mb-2 block text-xs font-black text-slate-600 dark:text-gray-200">Feedback {decision.kind === 'requirement' && <span className="text-rose-500">*</span>}</span><textarea required={decision.kind === 'requirement'} rows="4" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="Explain what must be corrected or resubmitted..." className={inputClass} /></label>}
+            <div className="mt-6 flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end dark:border-gray-700"><button type="button" onClick={() => setDecision(null)} disabled={busy} className="rounded-xl border border-slate-200 px-5 py-3 text-xs font-black text-slate-600 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">Cancel</button><button type="submit" disabled={busy} className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-xs font-black text-white disabled:opacity-50 ${decision.decision === 'approved' ? 'bg-emerald-600' : 'bg-rose-600'}`}>{busy ? <FiRefreshCw className="animate-spin" /> : decision.decision === 'approved' ? <FiCheck /> : <FiX />} Confirm {decision.kind === 'moa' ? decision.decision === 'endorsed' ? 'Endorsement' : 'Return' : decision.decision === 'approved' ? 'Approval' : 'Rejection'}</button></div>
           </form>
         </Modal>
       )}

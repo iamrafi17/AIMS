@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use App\Models\OjtEnrollment;
 use App\Models\Student;
 use App\Models\TravelCheckpoint;
 use App\Models\TravelLog;
@@ -14,39 +13,33 @@ final class TravelWorkflow
     public static function relations(): array
     {
         return [
-            'creator:id,name',
-            'coordinator:id,name,email',
+            'creator:id,role_id',
+            'coordinator:id,role_id,email',
             'hte:id,name,address,latitude,longitude',
-            'participants.user:id,name,email,is_active',
+            'participants.user:id,role_id,email,is_active',
             'participants.program.college',
             'participants.hte:id,name,address',
+            'participants.hteDepartment:id,department_name',
             'checkpoints' => fn ($query) => $query->orderBy('sequence'),
-            'report.coordinator:id,name,email',
-            'report.validations.reviewer:id,name,role',
+            'report.coordinator:id,role_id,email',
+            'report.validations.reviewer:id,role_id',
         ];
     }
 
     public static function coordinatorFor(Student $student): ?User
     {
-        $enrollmentCoordinator = OjtEnrollment::query()
-            ->where('student_record_id', $student->id)
-            ->with('coordinator:id,name,role,is_active,college_id,program_id')
-            ->first()?->coordinator;
-
-        if ($enrollmentCoordinator
-            && $enrollmentCoordinator->role === 'coordinator'
-            && $enrollmentCoordinator->is_active
-            && (int) $enrollmentCoordinator->program_id === (int) $student->program_id) {
-            return $enrollmentCoordinator;
+        $assignedId = \Illuminate\Support\Facades\DB::table('coordinator_section_assignments')
+            ->where('academic_section_id', $student->academic_section_id)->value('coordinator_id');
+        if ($assignedId) {
+            $assigned = User::query()->forRole('coordinator')->where('is_active', true)
+                ->forAssignedProgram((int) $student->program_id)->find($assignedId);
+            if ($assigned) {
+                return $assigned;
+            }
         }
 
-        return User::query()
-            ->where('role', 'coordinator')
-            ->where('is_active', true)
-            ->where('college_id', $student->college_id)
-            ->where('program_id', $student->program_id)
-            ->orderBy('id')
-            ->first();
+        return null;
+
     }
 
     public static function authorizeStudent(User $user, TravelLog $travel): Student
@@ -54,7 +47,6 @@ final class TravelWorkflow
         $student = $user->student;
         abort_unless(
             $student
-            && (int) $travel->created_by === (int) $user->id
             && $travel->participants()->whereKey($student->id)->exists(),
             404,
         );
@@ -67,6 +59,7 @@ final class TravelWorkflow
         ProgramAccess::programId($user);
         abort_unless((int) $travel->coordinator_id === (int) $user->id, 404);
         ProgramAccess::authorizeTravel($user, $travel);
+        abort_unless($travel->participants()->whereIn('students.id', ProgramAccess::studentQuery($user)->select('students.id'))->exists(), 404);
     }
 
     public static function sessionPayload(TravelLog $session, string $photoBase): array
@@ -80,6 +73,8 @@ final class TravelWorkflow
             'session_code' => $session->session_code,
             'status' => $session->status,
             'travel_date' => $session->start_time?->toDateString(),
+            'scheduled_at' => $session->scheduled_at?->toIso8601String(),
+            'scheduled_date' => $session->scheduled_at?->toDateString(),
             'start_time' => $session->start_time?->toIso8601String(),
             'departed_at' => $session->departed_at?->toIso8601String(),
             'arrived_at' => $session->arrived_at?->toIso8601String(),
@@ -107,7 +102,7 @@ final class TravelWorkflow
 
     public static function reportPayload(TravelReport $report): array
     {
-        $report->loadMissing(['coordinator:id,name,email', 'validations.reviewer:id,name,role']);
+        $report->loadMissing(['coordinator:id,role_id,email', 'validations.reviewer:id,role_id']);
 
         return [
             'id' => $report->id,
@@ -141,6 +136,8 @@ final class TravelWorkflow
             'id' => $student->id,
             'school_number' => $student->student_id,
             'student_id' => $student->student_id,
+            'year_level' => $student->year_level,
+            'section' => $student->section,
             'full_name' => trim(collect([$student->first_name, $student->middle_name, $student->last_name])->filter()->join(' ')),
             'name' => trim($student->first_name.' '.$student->last_name),
             'program' => $student->program ? [
@@ -157,6 +154,10 @@ final class TravelWorkflow
                 'id' => $student->hte->id,
                 'name' => $student->hte->name,
                 'address' => $student->hte->address,
+            ] : null,
+            'hte_department' => $student->hteDepartment ? [
+                'id' => $student->hteDepartment->id,
+                'name' => $student->hteDepartment->department_name,
             ] : null,
         ];
     }

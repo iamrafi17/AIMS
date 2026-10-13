@@ -25,6 +25,7 @@ const eventIcons = {
 };
 
 const statusStyles = {
+  scheduled: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-200',
   active: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-200',
   traveling: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-200',
   arrived: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200',
@@ -35,7 +36,7 @@ const statusStyles = {
 const reportLabels = {
   draft: 'Draft report',
   pending_program_head: 'Pending Program Head Validation',
-  pending_vpaa: 'Pending VPAA Validation',
+  pending_vpaa: 'Pending Dean Validation',
   final_validated: 'Final Validated',
 };
 
@@ -247,18 +248,19 @@ export default function StudentTravel() {
 
   return (
     <div className="space-y-6">
-      <PageIntro eyebrow="Student-controlled GPS record" title="Travel Monitoring" description="Start your own session, record route checkpoints, upload arrival evidence, and follow the official report validation status." icon={MapIcon} actions={!session && <button disabled={!data.can_start.allowed || busy} onClick={() => performGpsAction('start', '/student/travel/start')} className="inline-flex items-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#690016] disabled:cursor-not-allowed disabled:opacity-40"><PlayIcon className="h-5 w-5" />{busy === 'start' ? 'Capturing GPS...' : 'Start Session'}</button>} />
+      <PageIntro eyebrow="Student travel" title="Travel Monitoring" description="View your coordinator's schedule, record GPS checkpoints on travel day, and follow the report status." icon={MapIcon} actions={session?.status === 'scheduled' && <button disabled={!data.can_start.allowed || busy} onClick={() => performGpsAction('start', '/student/travel/start')} className="inline-flex items-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#690016] disabled:cursor-not-allowed disabled:opacity-40"><PlayIcon className="h-5 w-5" />{busy === 'start' ? 'Capturing GPS...' : 'Start Travel'}</button>} />
 
-      {!session && !data.can_start.allowed && <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/30"><p className="font-black text-amber-800 dark:text-amber-200">Travel session unavailable</p><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-700 dark:text-amber-300">{data.can_start.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul></section>}
+      {!session && <section className="rounded-3xl border border-violet-200 bg-violet-50 p-5 dark:border-violet-900 dark:bg-violet-950/30"><p className="font-black text-violet-800 dark:text-violet-200">{data.travel_requirement === 'awaiting_schedule' ? 'No travel schedule yet' : 'No travel session yet'}</p><p className="mt-2 text-sm text-violet-700 dark:text-violet-300">{data.travel_requirement === 'awaiting_schedule' ? 'Your coordinator has not set a travel date. You will be notified when a schedule is available.' : 'Your HTE assignment is needed before travel can be scheduled.'}</p></section>}
+      {session?.status === 'scheduled' && <section className="rounded-3xl border border-violet-200 bg-violet-50 p-5 dark:border-violet-900 dark:bg-violet-950/30"><h2 className="font-black text-violet-800 dark:text-violet-200">Upcoming Travel</h2><dl className="mt-4 grid grid-cols-[minmax(110px,auto)_1fr] gap-x-5 gap-y-2 text-sm"><dt>Travel Date</dt><dd className="font-bold">{new Date(`${session.scheduled_date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</dd><dt>Status</dt><dd className="font-bold">Scheduled</dd><dt>Departure Time</dt><dd className="font-bold">Not started yet</dd></dl><p className="mt-4 text-sm text-violet-700 dark:text-violet-300">{data.can_start.allowed ? 'You may start travel today.' : 'Start Travel will be available on your scheduled travel date.'}</p></section>}
 
       <section className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Assigned HTE" value={data.student?.hte?.name || 'Not assigned'} icon={MapPinIcon} />
         <MetricCard label="Coordinator" value={data.coordinator?.name || 'Not assigned'} icon={CheckCircleIcon} tone="violet" />
-        <MetricCard label="Current status" value={session?.status || 'Not started'} icon={ArrowPathIcon} tone="green" />
+        <MetricCard label="Current status" value={session?.status || 'No session'} icon={ArrowPathIcon} tone="green" />
         <MetricCard label="Travel history" value={data.history.length} icon={ClockIcon} tone="gold" />
       </section>
 
-      {session && <>
+      {session && session.status !== 'scheduled' && <>
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-wider text-[#a8750b]">{session.session_code}</p><h2 className="mt-1 text-2xl font-black">{session.hte?.name}</h2><p className="mt-1 text-sm text-slate-500">{session.hte?.address}</p></div><span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-black capitalize ${statusStyles[session.status]}`}>{session.status}</span></div><p className="mt-4 text-sm text-slate-500">Started {new Date(session.start_time).toLocaleString()} · {session.points.length} route point{session.points.length === 1 ? '' : 's'}</p></section>
         <RouteMap points={session.points} />
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6"><h2 className="text-xl font-black">Travel actions</h2><p className="mt-1 text-sm text-slate-500">Every action captures the best fresh GPS position available, up to 500-meter accuracy, before saving.</p>{gpsStatus && <div className="mt-4 flex items-center gap-3 rounded-2xl bg-blue-50 p-4 text-sm font-bold text-blue-700 dark:bg-blue-950/30 dark:text-blue-200"><ArrowPathIcon className="h-5 w-5 animate-spin" />{gpsStatus}</div>}<div className="mt-5 flex flex-wrap gap-3">{session.status === 'active' && <button disabled={busy} onClick={() => performGpsAction('departure', `/student/travel/${session.id}/departure`)} className="rounded-xl bg-[#7D001D] px-5 py-3 font-black text-white disabled:opacity-40">{busy === 'departure' ? 'Confirming GPS...' : 'Start Departure'}</button>}{session.status === 'traveling' && <button disabled={busy} onClick={() => performGpsAction('arrival', `/student/travel/${session.id}/arrival`)} className="rounded-xl bg-emerald-600 px-5 py-3 font-black text-white disabled:opacity-40">{busy === 'arrival' ? 'Confirming GPS...' : 'Mark Final Arrival'}</button>}</div>{session.status === 'traveling' && <div className="mt-5 flex flex-col gap-3 rounded-2xl bg-slate-50 p-4 dark:bg-slate-800 sm:flex-row"><input value={remarks} onChange={(event) => setRemarks(event.target.value)} maxLength={1000} placeholder="Optional checkpoint remarks" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700" /><button disabled={busy} onClick={() => performGpsAction('checkpoint', `/student/travel/${session.id}/checkpoints`, { remarks })} className="rounded-xl border border-[#7D001D]/30 px-5 py-3 font-black text-[#7D001D] disabled:opacity-40 dark:text-red-300">{busy === 'checkpoint' ? 'Confirming GPS...' : 'Add Checkpoint'}</button></div>}</section>

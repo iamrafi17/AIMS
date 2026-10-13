@@ -5,6 +5,7 @@ const roleRoutes = {
   student: '/student/dashboard',
   coordinator: '/coordinator/dashboard',
   program_head: '/program-head/dashboard',
+  dean: '/dean/dashboard',
   vpaa: '/vpaa/dashboard',
   admin: '/admin/dashboard',
   supervisor: '/supervisor/dashboard',

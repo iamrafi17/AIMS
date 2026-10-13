@@ -10,6 +10,7 @@ import UserAvatar from '../UserAvatar';
 const pageNames = {
   dashboard: 'Dashboard',
   students: 'Student Management',
+  'coordinator-assignments': 'Coordinator Assignments',
   attendance: 'Attendance & Journals',
   htes: 'HTE Management',
   travel: 'Travel Monitoring',
@@ -18,6 +19,31 @@ const pageNames = {
   requirements: 'Requirements',
   profile: 'Profile',
   notifications: 'Notifications',
+  'my-activity': 'My Activity',
+  'ojt-setup': 'OJT Setup',
+  documents: 'Documents',
+  'internship-requirements': 'Internship Requirements',
+  moas: 'MOA Management',
+  'live-map': 'Live Map',
+  approvals: 'Approvals',
+  users: 'Users',
+  academic: 'Academic',
+  system: 'System',
+  progress: 'Student Progress',
+  evaluations: 'Evaluations',
+};
+
+const routeTitles = {
+  '/program-head/students': 'Student Internship Monitoring',
+  '/dean/documents': 'Student Document Folders',
+  '/dean/approvals': 'Deployment Approvals',
+  '/dean/moas': 'MOA Endorsement',
+  '/dean/travel': 'Travel Validation',
+  '/vpaa/approvals': 'Student Folder Review',
+  '/vpaa/moas': 'MOA Final Approval',
+  '/program-head/documents': 'Documents',
+  '/student/attendance': 'Attendance',
+  '/supervisor/attendance': 'Attendance',
 };
 
 function formatNotificationTime(value) {
@@ -39,7 +65,7 @@ function Header({ ref, onMenuClick, sidebarOpen }) {
   const [notificationMenuOpen, setNotificationMenuOpen] = useState(false);
   const notificationMenuRef = useRef(null);
   const pageKey = location.pathname.split('/').filter(Boolean).at(-1);
-  const pageTitle = pageNames[pageKey] || 'AIMS Portal';
+  const pageTitle = routeTitles[location.pathname] || pageNames[pageKey] || 'AIMS Portal';
   const rolePath = user?.role === 'program_head' ? 'program-head' : user?.role;
 
   const loadNotifications = useCallback(async () => {

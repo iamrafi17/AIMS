@@ -24,8 +24,8 @@ import useAuth from '../../context/useAuth';
 import UserAvatar from '../../components/UserAvatar';
 import { EmptyPanel, LoadingPanel, MetricCard, PageIntro } from '../../components/common/PortalUI';
 
-const roles = ['student', 'coordinator', 'program_head', 'vpaa', 'admin', 'supervisor'];
-const staffRoles = ['admin', 'coordinator', 'program_head', 'vpaa', 'supervisor'];
+const roles = ['student', 'coordinator', 'program_head', 'dean', 'vpaa', 'admin', 'supervisor'];
+const staffRoles = ['admin', 'coordinator', 'program_head', 'dean', 'vpaa', 'supervisor'];
 const programScopedRoles = ['coordinator', 'program_head'];
 const pageSizeOptions = [10, 15, 25, 50];
 
@@ -100,7 +100,7 @@ function UserModal({ item, onClose, onSaved }) {
     setForm((current) => ({
       ...current,
       role,
-      college_id: programScopedRoles.includes(role) ? current.college_id : '',
+      college_id: (programScopedRoles.includes(role) || role === 'dean') ? current.college_id : '',
       program_id: programScopedRoles.includes(role) ? current.program_id : '',
       supervisor_record_id: role === 'supervisor' ? current.supervisor_record_id : '',
     }));
@@ -144,8 +144,8 @@ function UserModal({ item, onClose, onSaved }) {
         const response = await api.post('/admin/users', payload);
         toast.success(response.data.message);
         onSaved({
-          idLabel: 'User ID',
-          userId: response.data.user?.user_id || response.data.user?.email || String(response.data.user?.id),
+          idLabel: 'Username',
+          userId: response.data.user?.username || response.data.user?.email || String(response.data.user?.id),
           temporaryPassword: response.data.temporary_password,
           name: response.data.user?.name || form.name,
           email: response.data.user?.email,
@@ -252,17 +252,17 @@ function UserModal({ item, onClose, onSaved }) {
 
           {hasUserId && (
             <label className="block">
-              <span className="mb-2 block text-sm font-bold">User ID</span>
+              <span className="mb-2 block text-sm font-bold">Username</span>
               <input
                 readOnly
-                value={item?.role === form.role && item?.user_id ? item.user_id : 'Generated automatically after saving'}
+                value={item?.role === form.role && item?.username ? item.username : 'Generated automatically after saving'}
                 className={`${inputClass} bg-slate-50 font-mono text-slate-600 dark:bg-slate-800 dark:text-slate-300`}
               />
-              <span className="mt-1 block text-xs text-slate-500">The User ID can be used instead of email when signing in.</span>
+              <span className="mt-1 block text-xs text-slate-500">The Username can be used instead of email when signing in.</span>
             </label>
           )}
 
-          {programScoped && (
+          {(programScoped || form.role === 'dean') && (
             <div className="grid gap-4 rounded-2xl border border-[#d4af37]/40 bg-[#d4af37]/10 p-4 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-2 block text-sm font-bold">Assigned college</span>
@@ -278,7 +278,7 @@ function UserModal({ item, onClose, onSaved }) {
                   ))}
                 </select>
               </label>
-              <label className="block">
+              {programScoped && <label className="block">
                 <span className="mb-2 block text-sm font-bold">Assigned program</span>
                 <select
                   required
@@ -292,9 +292,9 @@ function UserModal({ item, onClose, onSaved }) {
                     <option key={program.id} value={program.id}>{program.code} — {program.name}</option>
                   ))}
                 </select>
-              </label>
+              </label>}
               <p className="text-xs leading-5 text-[#6b4f00] dark:text-amber-200 sm:col-span-2">
-                Coordinators and Program Heads can only access records assigned to their selected program.
+                {form.role === 'dean' ? 'Dean access includes every program in the selected college.' : 'Coordinators and Program Heads can only access records assigned to their selected program.'}
               </p>
             </div>
           )}
@@ -531,7 +531,7 @@ function ResetPasswordModal({ user, onClose, onCompleted }) {
               <UserAvatar user={user} className="h-11 w-11" />
               <div className="min-w-0">
                 <p className="truncate font-black">{user.name}</p>
-                <p className="truncate text-sm text-slate-500">{user.user_id || user.email}</p>
+                <p className="truncate text-sm text-slate-500">{user.username || user.email}</p>
                 <p className="mt-0.5 text-xs font-bold text-[#7D001D] dark:text-red-300">{roleLabel(user.role)}</p>
               </div>
             </div>
@@ -688,7 +688,7 @@ export default function AdminUsers() {
                 setPage(1);
               }}
               className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700 dark:bg-slate-950"
-              placeholder="Search name, email, or User ID..."
+              placeholder="Search name, email, or Username..."
             />
           </label>
           <select
@@ -752,7 +752,7 @@ export default function AdminUsers() {
                         {isCurrentAccount && <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">You</span>}
                       </div>
                       <p className="truncate text-xs text-slate-500">{user.email}</p>
-                      {user.user_id && <p className="mt-0.5 font-mono text-[11px] font-bold text-[#7D001D] dark:text-red-300">{user.user_id}</p>}
+                      {user.username && <p className="mt-0.5 font-mono text-[11px] font-bold text-[#7D001D] dark:text-red-300">{user.username}</p>}
                       <p className="mt-0.5 text-[10px] font-bold capitalize text-slate-400">{roleLabel(user.role)} · Tap for details</p>
                     </div>
                     <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-black ${!user.is_active ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200' : pendingProfile ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'}`}>
@@ -830,7 +830,7 @@ export default function AdminUsers() {
                               {isCurrentAccount && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">You</span>}
                             </div>
                             <p className="max-w-60 truncate text-xs text-slate-500">{user.email}</p>
-                            {user.user_id && <p className="mt-0.5 font-mono text-xs font-bold text-[#7D001D] dark:text-red-300">{user.user_id}</p>}
+                            {user.username && <p className="mt-0.5 font-mono text-xs font-bold text-[#7D001D] dark:text-red-300">{user.username}</p>}
                           </div>
                         </div>
                       </td>

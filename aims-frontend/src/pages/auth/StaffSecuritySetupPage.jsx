@@ -22,6 +22,7 @@ const roleRoutes = {
   coordinator: '/coordinator/dashboard',
   program_head: '/program-head/dashboard',
   vpaa: '/vpaa/dashboard',
+  dean: '/dean/dashboard',
   supervisor: '/supervisor/dashboard',
 };
 
@@ -29,6 +30,7 @@ const roleLabels = {
   coordinator: 'Coordinator',
   program_head: 'Program Head',
   vpaa: 'VPAA',
+  dean: 'Dean',
   supervisor: 'Supervisor',
 };
 
@@ -268,7 +270,7 @@ export default function StaffSecuritySetupPage() {
       <section className="flex min-h-[calc(100vh-3rem)] items-center justify-center lg:min-h-screen lg:px-10 lg:py-12">
         <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-8">
           <div className="flex flex-col gap-5 border-b border-slate-200 pb-6 dark:border-slate-700 sm:flex-row sm:items-start sm:justify-between">
-            <div><p className="text-xs font-black uppercase tracking-[0.16em] text-[#a8750b]">Required account setup</p><h2 className="mt-1 text-2xl font-black">Welcome, {user?.name}</h2><p className="mt-1 text-sm text-slate-500">{roleLabels[user?.role] || 'Staff'} · {user?.user_id}</p></div>
+            <div><p className="text-xs font-black uppercase tracking-[0.16em] text-[#a8750b]">Required account setup</p><h2 className="mt-1 text-2xl font-black">Welcome, {user?.name}</h2><p className="mt-1 text-sm text-slate-500">{roleLabels[user?.role] || 'Staff'} · {user?.username}</p></div>
             <button type="button" onClick={handleLogout} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300"><ArrowRightOnRectangleIcon className="h-5 w-5" />Sign out</button>
           </div>
 

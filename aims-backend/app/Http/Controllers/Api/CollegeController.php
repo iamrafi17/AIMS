@@ -36,6 +36,12 @@ class CollegeController extends Controller
                 ->where('programs.college_id', $college->id)
                 ->when($programId, fn ($programQuery) => $programQuery->whereKey($programId))
                 ->where('hte_programs.is_active', true))
+            ->with(['departments' => fn ($query) => $query
+                ->whereHas('programs', fn ($programs) => $programs
+                    ->where('programs.college_id', $college->id)
+                    ->when($programId, fn ($programQuery) => $programQuery->whereKey($programId))
+                    ->where('hte_department_programs.is_active', true))
+                ->orderBy('department_name')])
             ->orderBy('name')
             ->get();
 

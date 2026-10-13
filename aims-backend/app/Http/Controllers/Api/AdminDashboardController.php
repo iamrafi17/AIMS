@@ -14,8 +14,10 @@ class AdminDashboardController extends Controller
     public function index(Request $request)
     {
         // Get user statistics by role
-        $userStats = User::selectRaw('role, COUNT(*) as count')
-            ->groupBy('role')
+        $userStats = User::query()
+            ->join('roles', 'roles.id', '=', 'users.role_id')
+            ->selectRaw('roles.code AS role, COUNT(*) AS count')
+            ->groupBy('roles.code')
             ->pluck('count', 'role');
 
         // Get student statistics
@@ -37,10 +39,11 @@ class AdminDashboardController extends Controller
             ->first();
 
         // Get recent activity (last 10 users)
-        $recentUsers = User::latest('last_login_at')
+        $recentUsers = User::with(['roleDefinition', 'employeeProfile', 'student', 'normalizedSupervisorProfile'])
+            ->latest('last_login_at')
             ->whereNotNull('last_login_at')
             ->limit(10)
-            ->get(['id', 'name', 'email', 'role', 'last_login_at']);
+            ->get(['id', 'email', 'role_id', 'last_login_at']);
 
         return response()->json([
             'user_statistics' => $userStats,

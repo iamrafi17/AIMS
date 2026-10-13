@@ -14,13 +14,35 @@ class AdminUserListTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_admin_creates_a_college_scoped_dean_account(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $college = College::create(['name' => 'College of Computing', 'code' => 'CICS']);
+        Sanctum::actingAs($admin);
+
+        $this->postJson('/api/admin/users', [
+            'name' => 'CICS Dean', 'email' => 'dean@example.com', 'role' => 'dean',
+        ])->assertUnprocessable()->assertJsonValidationErrors('college_id');
+        $response = $this->postJson('/api/admin/users', [
+            'name' => 'CICS Dean', 'email' => 'dean@example.com', 'role' => 'dean', 'college_id' => $college->id,
+        ])->assertCreated()->assertJsonPath('user.college_id', $college->id);
+        $dean = User::findOrFail($response->json('user.id'));
+        $this->assertSame($college->id, $dean->normalizedCollegeId());
+        $this->assertStringStartsWith('DN-', $dean->username);
+        $this->getJson("/api/admin/users?role=dean&college_id={$college->id}")
+            ->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.id', $dean->id)
+            ->assertJsonPath('data.0.college.code', 'CICS');
+    }
+
     public function test_admin_can_filter_users_by_college_and_choose_a_page_size(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
         $college = College::create(['name' => 'College of Computing', 'code' => 'CCS']);
         $otherCollege = College::create(['name' => 'College of Education', 'code' => 'CED']);
-        $matchingUser = User::factory()->create(['role' => 'coordinator', 'college_id' => $college->id]);
-        $otherUser = User::factory()->create(['role' => 'coordinator', 'college_id' => $otherCollege->id]);
+        $program = Program::create(['college_id' => $college->id, 'name' => 'Computing', 'code' => 'COMP']);
+        $otherProgram = Program::create(['college_id' => $otherCollege->id, 'name' => 'Education', 'code' => 'EDUC']);
+        $matchingUser = User::factory()->create(['role' => 'coordinator', 'college_id' => $college->id, 'program_id' => $program->id]);
+        $otherUser = User::factory()->create(['role' => 'coordinator', 'college_id' => $otherCollege->id, 'program_id' => $otherProgram->id]);
 
         Sanctum::actingAs($admin);
 

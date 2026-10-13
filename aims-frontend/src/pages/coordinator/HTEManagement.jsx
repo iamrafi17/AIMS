@@ -5,10 +5,8 @@ import {
   FiCalendar,
   FiCheck,
   FiChevronDown,
-  FiDownload,
   FiEdit2,
   FiEye,
-  FiFileText,
   FiMapPin,
   FiPlus,
   FiSearch,
@@ -22,6 +20,7 @@ import toast from 'react-hot-toast';
 import GeofenceMap from '../../components/maps/GeofenceMap';
 import api from '../../services/api';
 import ContactNumberInput from '../../components/forms/ContactNumberInput';
+import { HolidayCalendarPanel, HolidayImportForm } from './HolidayCalendarPanel';
 
 const weekdays = [
   ['mon', 'Mon'], ['tue', 'Tue'], ['wed', 'Wed'], ['thu', 'Thu'],
@@ -43,15 +42,9 @@ const emptyHoliday = {
   name: '', date: '', holiday_type: 'national_holiday', description: '',
   official_reference: '', source_url: '', affected_area: '', hte_ids: [], is_recurring: false,
 };
-const holidayTypeLabels = {
-  national_holiday: 'National Holiday',
-  local_holiday: 'Local Holiday',
-  special_non_working: 'Special Non-working Day',
-};
-const emptyMoa = { hte_id: '', effective_date: '', expiration_date: '', file: null };
 const emptyDepartment = { department_name: '', supervisor_full_name: '' };
 const emptyData = {
-  htes: [], deployments: [], holidays: [], holiday_forecast: { next: null, upcoming: [], upcoming_count: 0 }, moas: [], colleges: [], batches: [], supervisors: [], expiration_alerts: [],
+  htes: [], deployments: [], holidays: [], holiday_forecast: { next: null, upcoming: [], upcoming_count: 0 }, moas: [], programs: [], colleges: [], batches: [], supervisors: [], expiration_alerts: [], ojt_settings: [],
   summary: { total_htes: 0, active_htes: 0, deployed_students: 0, geofenced_htes: 0, valid_moas: 0, expiring_moas: 0 },
 };
 
@@ -60,7 +53,10 @@ const statusClass = {
   active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
   inactive: 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-gray-300',
   approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  not_deployed: 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-gray-300',
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  returned: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300',
+  endorsed: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
   rejected: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300',
   expired: 'bg-slate-200 text-slate-700 dark:bg-gray-700 dark:text-gray-300',
   completed: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
@@ -68,7 +64,7 @@ const statusClass = {
 };
 
 function Badge({ value }) {
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${statusClass[value] || statusClass.pending}`}>{value}</span>;
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${statusClass[value] || statusClass.pending}`}>{value === 'not_deployed' ? 'Not deployed' : value}</span>;
 }
 
 function Modal({ title, subtitle, onClose, children, wide = false, compact = false }) {
@@ -149,6 +145,8 @@ function HTEManagement() {
   const [tab, setTab] = useState('htes');
   const [search, setSearch] = useState('');
   const [hteEditor, setHteEditor] = useState(null);
+  const [hteToDelete, setHteToDelete] = useState(null);
+  const [hteDeleteBusy, setHteDeleteBusy] = useState(false);
   const [hteForm, setHteForm] = useState(emptyHte);
   const [newDepartments, setNewDepartments] = useState([emptyDepartment]);
   const [hteSearchOpen, setHteSearchOpen] = useState(false);
@@ -162,12 +160,13 @@ function HTEManagement() {
   const [batchScheduleEditor, setBatchScheduleEditor] = useState(null);
   const [scheduleLoadingId, setScheduleLoadingId] = useState(null);
   const [deploymentEditor, setDeploymentEditor] = useState(null);
+  const [deploymentView, setDeploymentView] = useState(null);
+  const [deploymentCompletion, setDeploymentCompletion] = useState(null);
   const [deploymentScheduleLoading, setDeploymentScheduleLoading] = useState(false);
   const [holidayEditor, setHolidayEditor] = useState(null);
   const [holidayForm, setHolidayForm] = useState(emptyHoliday);
-  const [moaOpen, setMoaOpen] = useState(false);
-  const [moaForm, setMoaForm] = useState(emptyMoa);
-
+  const [holidayImportOpen, setHolidayImportOpen] = useState(false);
+  const [holidayCalendarFocus, setHolidayCalendarFocus] = useState(null);
   const fetchWorkspace = useCallback(async () => {
     setLoading(true);
     try {
@@ -190,7 +189,6 @@ function HTEManagement() {
     const term = search.trim().toLowerCase();
     return !term ? data.deployments : data.deployments.filter((student) => `${student.student_id} ${student.first_name} ${student.last_name} ${student.hte?.name || ''}`.toLowerCase().includes(term));
   }, [data.deployments, search]);
-
   const openHteSearch = () => {
     setHteSearchQuery('');
     setHteSearchResults([]);
@@ -305,6 +303,20 @@ function HTEManagement() {
       toast.error(errorMessage(error, 'Unable to save HTE record.'));
     } finally {
       setBusy(false);
+    }
+  };
+  const deleteHte = async () => {
+    if (!hteToDelete) return;
+    setHteDeleteBusy(true);
+    try {
+      const response = await api.delete(`/coordinator/htes/${hteToDelete.id}`);
+      toast.success(response.data.message);
+      setHteToDelete(null);
+      await fetchWorkspace();
+    } catch (error) {
+      toast.error(errorMessage(error, 'Unable to remove HTE from this program.'));
+    } finally {
+      setHteDeleteBusy(false);
     }
   };
   const viewHte = async (hte) => {
@@ -444,15 +456,17 @@ function HTEManagement() {
   };
   const openDeployment = async (student) => {
     const hte = data.htes.find((item) => String(item.id) === String(student.hte_id));
+    const officialOjtSetting = data.ojt_settings.find((item) => String(item.academic_period_id) === String(student.academic_period_id));
     const hasOverride = Boolean(student.current_internship?.schedule_overrides?.length);
     setDeploymentEditor({
       ...student,
+      official_ojt_setting: officialOjtSetting || null,
       hte_id: student.hte_id || '',
       hte_department_id: student.hte_department_id || '',
       supervisor_record_id: student.supervisor_record_id || '',
-      ojt_start_date: student.ojt_start_date?.slice(0, 10) || '',
+      ojt_start_date: officialOjtSetting?.ojt_start_date?.slice(0, 10) || student.ojt_start_date?.slice(0, 10) || '',
       ojt_end_date: student.ojt_end_date?.slice(0, 10) || '',
-      required_ojt_hours: Number(student.required_ojt_hours || 486),
+      required_ojt_hours: Number(officialOjtSetting?.required_hours || student.required_ojt_hours || 486),
       official_am_start: timeValue(student.official_am_start, timeValue(hte?.default_am_start, '08:00')),
       official_am_end: timeValue(student.official_am_end, timeValue(hte?.default_am_end, '12:00')),
       official_pm_start: timeValue(student.official_pm_start, timeValue(hte?.default_pm_start, '13:00')),
@@ -480,6 +494,16 @@ function HTEManagement() {
       toast.error(errorMessage(error, 'Unable to load this student’s batch schedule.'));
     } finally {
       setDeploymentScheduleLoading(false);
+    }
+  };
+  const openDeploymentView = async (student) => {
+    setDeploymentView(student);
+    setDeploymentCompletion(null);
+    try {
+      const { data: result } = await api.get(`/coordinator/htes/deployments/${student.id}/completion`);
+      setDeploymentCompletion(result.completion);
+    } catch (error) {
+      toast.error(errorMessage(error, 'Unable to load OJT completion estimate.'));
     }
   };
   const selectDeploymentHte = async (hteId) => {
@@ -532,7 +556,7 @@ function HTEManagement() {
         supervisor_record_id: deploymentEditor.supervisor_record_id ? Number(deploymentEditor.supervisor_record_id) : null,
         supervisor_id: null,
         ojt_start_date: deploymentEditor.ojt_start_date || null,
-        ojt_end_date: deploymentEditor.ojt_end_date || null,
+        ojt_end_date: deploymentEditor.official_ojt_setting ? null : deploymentEditor.ojt_end_date || null,
         required_ojt_hours: Number(deploymentEditor.required_ojt_hours),
         schedule_mode: deploymentEditor.schedule_mode,
         official_am_start: deploymentEditor.official_am_start,
@@ -576,6 +600,7 @@ function HTEManagement() {
         : await api.put(`/coordinator/htes/holidays/${holidayEditor.holiday.id}`, payload);
       toast.success(response.data.message);
       setHolidayEditor(null);
+      setHolidayCalendarFocus(payload.date);
       fetchWorkspace();
     } catch (error) {
       toast.error(errorMessage(error, 'Unable to save holiday.'));
@@ -594,46 +619,18 @@ function HTEManagement() {
     }
   };
 
-  const saveMoa = async (event) => {
-    event.preventDefault();
-    if (!moaForm.file) return toast.error('Choose a PDF file.');
-    const payload = new FormData();
-    Object.entries(moaForm).forEach(([key, value]) => payload.append(key, value));
-    setBusy(true);
-    try {
-      const response = await api.post('/coordinator/htes/moas', payload, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success(response.data.message);
-      setMoaOpen(false);
-      setMoaForm(emptyMoa);
-      fetchWorkspace();
-    } catch (error) {
-      toast.error(errorMessage(error, 'Unable to upload MOA.'));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const downloadMoa = async (moa) => {
-    try {
-      const response = await api.get(`/coordinator/htes/moas/${moa.id}/download`, { responseType: 'blob' });
-      const url = URL.createObjectURL(response.data);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = moa.file_path?.split('/').pop() || `moa-${moa.id}.pdf`;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast.error('Unable to download the MOA file.');
-    }
-  };
   const deploymentHte = data.htes.find((hte) => String(hte.id) === String(deploymentEditor?.hte_id));
   const deploymentDepartments = deploymentHte?.departments || [];
   const deploymentDepartment = deploymentDepartments.find((department) => String(department.id) === String(deploymentEditor?.hte_department_id));
   const deploymentSupervisors = deploymentDepartment?.supervisors || [];
+  const viewPublishedSetting = deploymentView && data.ojt_settings.find(
+    (setting) => String(setting.academic_period_id) === String(deploymentView.academic_period_id),
+  );
 
   if (loading) return <div className="grid h-64 place-items-center"><div className="h-11 w-11 animate-spin rounded-full border-4 border-[#7D001D]/20 border-t-[#7D001D]" /></div>;
 
   return <div data-hte-tab={tab} className="coordinator-hte portal-card-tables space-y-6">
-    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-[#a8750b]">Coordinator Portal</p><h1 className="mt-1 text-2xl font-black text-[#690016] dark:text-white">HTE & Deployment Management</h1><p className="mt-1 text-sm text-slate-400">Partner records, internship schedules, geofences, holidays, and MOA monitoring.</p></div><div className="flex gap-2"><button onClick={() => { setMoaForm(emptyMoa); setMoaOpen(true); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-[#7D001D] dark:border-gray-700 dark:bg-gray-800 dark:text-rose-300"><FiUpload /> Upload MOA</button><button onClick={openHteSearch} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-4 py-2.5 text-xs font-black text-white"><FiPlus /> Add HTE</button></div></header>
+    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-[#a8750b]">Coordinator Portal</p><h1 className="mt-1 text-2xl font-black text-[#690016] dark:text-white">HTE & Deployment Management</h1><p className="mt-1 text-sm text-slate-400">Partner records, internship schedules, geofences, and holidays.</p></div><div className="flex gap-2"><button onClick={openHteSearch} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-4 py-2.5 text-xs font-black text-white"><FiPlus /> Add HTE</button></div></header>
 
     <section className="portal-summary-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-6">{[
       ['Partner HTEs', data.summary.total_htes, FiBriefcase, 'text-[#7D001D] bg-rose-50 dark:bg-rose-950/40'],
@@ -647,45 +644,34 @@ function HTEManagement() {
     {data.expiration_alerts.length > 0 && <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40"><div className="flex items-start gap-3"><FiAlertTriangle className="mt-0.5 shrink-0 text-amber-600" /><div><p className="text-sm font-black text-amber-900 dark:text-amber-200">MOA expiration alerts</p><div className="mt-2 flex flex-wrap gap-2">{data.expiration_alerts.map((alert) => <span key={alert.id} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${alert.level === 'expired' || alert.level === 'critical' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200'}`}>{alert.hte} ({alert.college}) · {alert.days_remaining < 0 ? `expired ${Math.abs(alert.days_remaining)} days ago` : `${alert.days_remaining} days left`}</span>)}</div></div></div></section>}
 
     <div className="flex flex-wrap items-center justify-between gap-3"><nav className="portal-mobile-tabs flex max-w-full gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-1 dark:bg-gray-800">{[
-      ['htes', 'HTE Records', FiBriefcase], ['deployments', 'Student Deployments', FiUsers], ['holidays', 'Holidays', FiCalendar], ['moas', 'MOA Monitoring', FiFileText],
+      ['htes', 'HTE Records', FiBriefcase], ['deployments', 'Student Deployments', FiUsers], ['holidays', 'Holidays', FiCalendar],
     ].map(([value, label, Icon]) => <button key={value} onClick={() => setTab(value)} className={`inline-flex whitespace-nowrap items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black ${tab === value ? 'bg-white text-[#7D001D] shadow-sm dark:bg-gray-700 dark:text-rose-300' : 'text-slate-500'}`}><Icon /> {label}</button>)}</nav>{['htes', 'deployments'].includes(tab) && <label className="relative w-full sm:w-72"><FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} className={`${inputClass} pl-10`} placeholder={tab === 'htes' ? 'Search HTE records...' : 'Search deployments...'} /></label>}</div>
 
-    {tab === 'htes' && <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"><div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-left"><thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-gray-900"><tr><th className="px-5 py-4">HTE / Contact</th><th className="px-4 py-4">Interns</th><th className="px-4 py-4">Working Schedule</th><th className="px-4 py-4">Geofence</th><th className="px-4 py-4">MOA</th><th className="px-5 py-4 text-right">Actions</th></tr></thead><tbody>{filteredHtes.length ? filteredHtes.map((hte) => <tr key={hte.id} className="border-t border-slate-100 hover:bg-slate-50/60 dark:border-gray-700 dark:hover:bg-gray-900/40"><td className="px-5 py-4"><div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300"><FiBriefcase /></span><div><p className="text-sm font-black text-slate-800 dark:text-white">{hte.name}</p><p className="mt-1 max-w-64 truncate text-[11px] text-slate-400">{hte.address}</p><p className="mt-1 text-[10px] text-slate-400">{hte.contact_person} · {hte.contact_number}</p></div></div></td><td className="px-4 py-4"><p className="text-sm font-black text-slate-800 dark:text-white">{hte.students_count || 0}</p><p className="text-[10px] text-slate-400">{hte.active_students_count || 0} active</p></td><td className="px-4 py-4"><WorkingSchedule hte={hte} /></td><td className="px-4 py-4">{hte.geofence_enabled ? <div><span className="inline-flex items-center gap-1 text-xs font-black text-violet-600"><FiMapPin /> Active</span><p className="mt-1 text-[10px] text-slate-400">{hte.geofence_radius} meter radius</p></div> : <span className="text-xs text-slate-400">Disabled</span>}</td><td className="px-4 py-4"><p className="text-sm font-black text-slate-800 dark:text-white">{hte.valid_moa_count || 0}</p><p className="text-[10px] text-slate-400">valid agreement(s)</p></td><td className="px-5 py-4"><div className="flex justify-end gap-1.5"><button onClick={() => viewHte(hte)} className="rounded-lg bg-blue-100 p-2 text-blue-700" title="View"><FiEye /></button><button disabled={scheduleLoadingId === hte.id} onClick={() => openBatchSchedule(hte)} className="rounded-lg bg-violet-100 p-2 text-violet-700 disabled:opacity-50" title="Batch schedule"><FiCalendar className={scheduleLoadingId === hte.id ? 'animate-pulse' : ''} /></button><button onClick={() => openEditHte(hte)} className="rounded-lg bg-amber-100 p-2 text-amber-700" title="Edit"><FiEdit2 /></button></div></td></tr>) : <tr><td colSpan="6" className="py-16 text-center text-slate-400">No HTE records match your search.</td></tr>}</tbody></table></div></section>}
+    {tab === 'htes' && <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"><div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-left"><thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-gray-900"><tr><th className="px-5 py-4">HTE / Contact</th><th className="px-4 py-4">Interns</th><th className="px-4 py-4">Working Schedule</th><th className="px-4 py-4">Geofence</th><th className="px-4 py-4">MOA</th><th className="px-5 py-4 text-right">Actions</th></tr></thead><tbody>{filteredHtes.length ? filteredHtes.map((hte) => <tr key={hte.id} className="border-t border-slate-100 hover:bg-slate-50/60 dark:border-gray-700 dark:hover:bg-gray-900/40"><td className="px-5 py-4"><div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-[#7D001D] dark:bg-rose-950/50 dark:text-rose-300"><FiBriefcase /></span><div><p className="text-sm font-black text-slate-800 dark:text-white">{hte.name}</p><p className="mt-1 max-w-64 truncate text-[11px] text-slate-400">{hte.address}</p><p className="mt-1 text-[10px] text-slate-400">{hte.contact_person} · {hte.contact_number}</p></div></div></td><td className="px-4 py-4"><p className="text-sm font-black text-slate-800 dark:text-white">{hte.students_count || 0}</p><p className="text-[10px] text-slate-400">{hte.active_students_count || 0} active</p></td><td className="px-4 py-4"><WorkingSchedule hte={hte} /></td><td className="px-4 py-4">{hte.geofence_enabled ? <div><span className="inline-flex items-center gap-1 text-xs font-black text-violet-600"><FiMapPin /> Active</span><p className="mt-1 text-[10px] text-slate-400">{hte.geofence_radius} meter radius</p></div> : <span className="text-xs text-slate-400">Disabled</span>}</td><td className="px-4 py-4"><p className="text-sm font-black text-slate-800 dark:text-white">{hte.valid_moa_count || 0}</p><p className="text-[10px] text-slate-400">valid agreement(s)</p></td><td className="px-5 py-4"><div className="flex justify-end gap-1.5"><button onClick={() => viewHte(hte)} className="rounded-lg bg-blue-100 p-2 text-blue-700" title="View"><FiEye /></button><button disabled={scheduleLoadingId === hte.id} onClick={() => openBatchSchedule(hte)} className="rounded-lg bg-violet-100 p-2 text-violet-700 disabled:opacity-50" title="Batch schedule"><FiCalendar className={scheduleLoadingId === hte.id ? 'animate-pulse' : ''} /></button><button onClick={() => openEditHte(hte)} className="rounded-lg bg-amber-100 p-2 text-amber-700" title="Edit"><FiEdit2 /></button><button type="button" onClick={() => setHteToDelete(hte)} className="rounded-lg bg-rose-100 p-2 text-rose-700 hover:bg-rose-200" title="Delete HTE" aria-label={"Delete " + hte.name}><FiTrash2 /></button></div></td></tr>) : <tr><td colSpan="6" className="py-16 text-center text-slate-400">No HTE records match your search.</td></tr>}</tbody></table></div></section>}
 
-    {tab === 'deployments' && <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"><div className="overflow-x-auto"><table className="w-full min-w-[1220px] text-left"><thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-gray-900"><tr><th className="px-5 py-4">Student</th><th className="px-4 py-4">Assigned HTE / Department</th><th className="px-4 py-4">HTE Supervisor</th><th className="px-4 py-4">Internship Period</th><th className="px-4 py-4">Working Hours</th><th className="px-4 py-4">Status</th><th className="px-5 py-4 text-right">Action</th></tr></thead><tbody>{filteredDeployments.length ? filteredDeployments.map((student) => <tr key={student.id} className="border-t border-slate-100 dark:border-gray-700"><td className="px-5 py-4"><p className="text-sm font-black text-slate-800 dark:text-white">{student.last_name}, {student.first_name}</p><p className="mt-1 text-[11px] text-slate-400">{student.student_id} · {student.program?.code}</p></td><td className="px-4 py-4"><p className="text-xs font-bold text-slate-700 dark:text-gray-200">{student.hte?.name || 'Not deployed'}</p><p className="mt-1 text-[10px] text-slate-400">{student.hte_department?.department_name || 'Department not assigned'}</p></td><td className="px-4 py-4"><p className="text-xs font-bold text-slate-700 dark:text-gray-200">{student.supervisor_record?.full_name || student.supervisor?.name || 'Not assigned'}</p><p className="mt-1 text-[10px] text-slate-400">{student.supervisor_record?.user?.email || student.supervisor?.email || 'Account not yet created'}</p></td><td className="px-4 py-4"><p className="text-xs text-slate-600 dark:text-gray-300">{formatDate(student.ojt_start_date)} – {formatDate(student.ojt_end_date)}</p><p className="mt-1 text-[10px] text-slate-400">{student.required_ojt_hours || 486} required hours</p></td><td className="px-4 py-4"><p className="text-xs font-bold text-slate-700 dark:text-gray-200">{timeValue(student.official_am_start, '08:00')}–{timeValue(student.official_am_end, '12:00')} / {timeValue(student.official_pm_start, '13:00')}–{timeValue(student.official_pm_end, '17:00')}</p><p className="mt-1 text-[10px] uppercase text-slate-400">{(student.work_days || defaultDays).join(' · ')}</p></td><td className="px-4 py-4"><Badge value={student.internship_status} /></td><td className="px-5 py-4 text-right"><button onClick={() => openDeployment(student)} className="inline-flex items-center gap-2 rounded-lg bg-amber-100 px-3 py-2 text-xs font-black text-amber-700"><FiEdit2 /> Configure</button></td></tr>) : <tr><td colSpan="7" className="py-16 text-center text-slate-400">No approved student records found.</td></tr>}</tbody></table></div></section>}
+    {tab === 'deployments' && <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"><div className="overflow-x-auto"><table className="w-full min-w-[1220px] text-left"><thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-gray-900"><tr><th className="px-5 py-4">Student</th><th className="px-4 py-4">Assigned HTE / Department</th><th className="px-4 py-4">HTE Supervisor</th><th className="px-4 py-4">Internship Period</th><th className="px-4 py-4">Working Hours</th><th className="px-4 py-4">Status</th><th className="px-5 py-4 text-right">Action</th></tr></thead><tbody>{filteredDeployments.length ? filteredDeployments.map((student) => <tr key={student.id} className="border-t border-slate-100 dark:border-gray-700"><td className="px-5 py-4"><p className="text-sm font-black text-slate-800 dark:text-white">{student.last_name}, {student.first_name}</p><p className="mt-1 text-[11px] text-slate-400">{student.student_id} · {student.program?.code}</p></td><td className="px-4 py-4"><p className="text-xs font-bold text-slate-700 dark:text-gray-200">{student.hte?.name || 'Not deployed'}</p><p className="mt-1 text-[10px] text-slate-400">{student.hte_department?.department_name || 'Department not assigned'}</p>{student.current_internship?.preferred_hte && <p className="mt-1 text-[10px] text-[#7D001D] dark:text-rose-300">Preferred: {student.current_internship.preferred_hte.name}{student.current_internship.preferred_department ? ` / ${student.current_internship.preferred_department.department_name}` : ''}</p>}</td><td className="px-4 py-4"><p className="text-xs font-bold text-slate-700 dark:text-gray-200">{student.supervisor_record?.full_name || student.supervisor?.name || 'Not assigned'}</p><p className="mt-1 text-[10px] text-slate-400">{student.hte_id ? student.supervisor_record?.user?.email || student.supervisor?.email || 'Account not yet created' : 'No supervisor assigned'}</p></td><td className="px-4 py-4"><p className="text-xs text-slate-600 dark:text-gray-300">{student.hte_id && (student.ojt_start_date || student.ojt_end_date) ? `${formatDate(student.ojt_start_date)} – ${data.ojt_settings.some((setting) => String(setting.academic_period_id) === String(student.academic_period_id)) ? 'Automatic estimate in View' : formatDate(student.ojt_end_date)}` : 'Not set'}</p><p className="mt-1 text-[10px] text-slate-400">{student.hte_id ? `${student.required_ojt_hours} required hours` : 'No deployment hours yet'}</p></td><td className="px-4 py-4"><p className="text-xs font-bold text-slate-700 dark:text-gray-200">{student.hte_id ? `${timeValue(student.official_am_start, '08:00')}–${timeValue(student.official_am_end, '12:00')} / ${timeValue(student.official_pm_start, '13:00')}–${timeValue(student.official_pm_end, '17:00')}` : 'Not set'}</p><p className="mt-1 text-[10px] uppercase text-slate-400">{student.hte_id ? (student.work_days || defaultDays).join(' · ') : 'No schedule assigned'}</p></td><td className="px-4 py-4"><Badge value={student.hte_id ? student.internship_status : 'not_deployed'} /></td><td className="px-5 py-4"><div className="flex justify-end gap-2"><button type="button" onClick={() => openDeploymentView(student)} title="View deployment" aria-label={`View deployment for ${student.first_name} ${student.last_name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"><FiEye className="h-4 w-4" /></button><button type="button" onClick={() => openDeployment(student)} title="Edit deployment" aria-label={`Edit deployment for ${student.first_name} ${student.last_name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600"><FiEdit2 className="h-4 w-4" /></button></div></td></tr>) : <tr><td colSpan="7" className="py-16 text-center text-slate-400">No approved student records found.</td></tr>}</tbody></table></div></section>}
 
     {tab === 'holidays' && <div className="space-y-5">
-      <section className="rounded-3xl bg-[linear-gradient(135deg,#690016,#8f1634)] p-5 text-white shadow-lg">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200">Holiday Forecast</p>
-            <h2 className="mt-2 text-xl font-black">{data.holiday_forecast?.next?.name || 'No upcoming holiday'}</h2>
-            {data.holiday_forecast?.next && <p className="mt-1 text-sm text-white/75">{formatDate(data.holiday_forecast.next.date)} · {data.holiday_forecast.next.days_until === 0 ? 'Today' : `${data.holiday_forecast.next.days_until} days remaining`}</p>}
-          </div>
-          <div className="rounded-2xl bg-white/10 px-4 py-3 text-right ring-1 ring-white/15">
-            <p className="text-2xl font-black">{data.holiday_forecast?.next?.affected_students || 0}</p>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-white/65">Affected active students</p>
-          </div>
-        </div>
-        {!!data.holiday_forecast?.upcoming?.length && <div className="mt-5 grid gap-2 md:grid-cols-2 xl:grid-cols-4">{data.holiday_forecast.upcoming.slice(0, 4).map((holiday) => <div key={`${holiday.id}-${holiday.date}`} className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><p className="text-xs font-black">{holiday.name}</p><p className="mt-1 text-[10px] text-white/65">{formatDate(holiday.date)} · {holiday.type_label}</p></div>)}</div>}
-      </section>
-
       <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <div className="mb-5 flex items-center justify-between gap-4"><div><h2 className="font-black text-slate-800 dark:text-white">Official Holiday Calendar</h2><p className="mt-1 text-xs text-slate-400">Verified non-working dates used by the student calendar and Smart Clock.</p></div><button onClick={() => openHoliday()} className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#7D001D] px-4 py-2.5 text-xs font-black text-white"><FiPlus /> Add Holiday</button></div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{data.holidays.length ? data.holidays.map((holiday) => <article key={holiday.id} className="rounded-2xl border border-slate-100 p-4 dark:border-gray-700">
-          <div className="flex items-start justify-between"><span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-50 text-violet-600 dark:bg-violet-950/50"><FiCalendar /></span><div className="flex gap-1"><button onClick={() => openHoliday(holiday)} className="rounded-lg p-2 text-amber-600 hover:bg-amber-50 dark:hover:bg-gray-700" title="Edit holiday"><FiEdit2 /></button><button onClick={() => deleteHoliday(holiday)} className="rounded-lg p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-gray-700" title="Delete holiday"><FiTrash2 /></button></div></div>
-          <p className="mt-3 text-sm font-black text-slate-800 dark:text-white">{holiday.name}</p>
-          <p className="mt-1 text-xs font-bold text-violet-600">{formatDate(holiday.date)}</p>
-          <span className="mt-2 inline-flex rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-black uppercase text-violet-700">{holidayTypeLabels[holiday.holiday_type] || 'National Holiday'}</span>
-          {holiday.affected_area && <p className="mt-2 text-xs font-bold text-slate-600 dark:text-slate-300">Area: {holiday.affected_area}</p>}
-          {!!holiday.htes?.length && <p className="mt-1 text-xs text-slate-500">HTEs: {holiday.htes.map((hte) => hte.name).join(', ')}</p>}
-          <p className="mt-2 text-xs leading-5 text-slate-400">{holiday.description || 'No description provided.'}</p>
-          <p className="mt-2 text-[10px] font-bold text-slate-500">Reference: {holiday.official_reference || 'Legacy record'}</p>
-          {holiday.is_recurring && <span className="mt-3 inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase text-blue-600 dark:bg-blue-950/50">Repeats yearly</span>}
-        </article>) : <div className="col-span-full rounded-2xl border border-dashed border-slate-300 py-14 text-center text-slate-400 dark:border-gray-700">No holidays configured.</div>}</div>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-black text-slate-800 dark:text-white">Official Holiday Calendar</h2><p className="mt-1 text-xs text-slate-400">Verified non-working dates used by the student calendar and Smart Clock.</p></div><div className="flex flex-wrap gap-2"><button onClick={() => setHolidayImportOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-[#7D001D] px-4 py-2.5 text-xs font-black text-[#7D001D] dark:text-rose-300"><FiUpload /> Import PH Holidays</button><button onClick={() => openHoliday()} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-4 py-2.5 text-xs font-black text-white"><FiPlus /> Add Holiday</button></div></div>
+        <HolidayCalendarPanel holidays={data.holidays} htes={data.htes} onEdit={openHoliday} onDelete={deleteHoliday} focusDate={holidayCalendarFocus} />
       </section>
     </div>}
-    {tab === 'moas' && <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"><div className="flex items-center justify-between border-b border-slate-100 p-5 dark:border-gray-700"><div><h2 className="font-black text-slate-800 dark:text-white">MOA Upload & Monitoring</h2><p className="mt-1 text-xs text-slate-400">Uploaded agreements are submitted as pending for approval.</p></div><button onClick={() => { setMoaForm(emptyMoa); setMoaOpen(true); }} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-4 py-2.5 text-xs font-black text-white"><FiUpload /> Upload MOA</button></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left"><thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-gray-900"><tr><th className="px-5 py-4">HTE / College</th><th className="px-4 py-4">Effective Date</th><th className="px-4 py-4">Expiration</th><th className="px-4 py-4">Status</th><th className="px-5 py-4 text-right">Actions</th></tr></thead><tbody>{data.moas.length ? data.moas.map((moa) => <tr key={moa.id} className="border-t border-slate-100 dark:border-gray-700"><td className="px-5 py-4"><p className="text-sm font-black text-slate-800 dark:text-white">{moa.hte?.name}</p><p className="mt-1 text-[11px] text-slate-400">{moa.college?.code} · {moa.college?.name}</p></td><td className="px-4 py-4 text-xs font-bold text-slate-600 dark:text-gray-300">{formatDate(moa.effective_date)}</td><td className="px-4 py-4"><p className={`text-xs font-black ${moa.days_remaining <= 30 ? 'text-rose-600' : 'text-slate-600 dark:text-gray-300'}`}>{formatDate(moa.expiration_date)}</p><p className="mt-1 text-[10px] text-slate-400">{moa.days_remaining < 0 ? `Expired ${Math.abs(moa.days_remaining)} days ago` : `${moa.days_remaining} days remaining`}</p></td><td className="px-4 py-4"><Badge value={moa.computed_status} /></td><td className="px-5 py-4"><div className="flex justify-end gap-2"><button onClick={() => downloadMoa(moa)} className="inline-flex items-center gap-2 rounded-lg bg-blue-100 px-3 py-2 text-xs font-black text-blue-700"><FiDownload /> Download</button></div></td></tr>) : <tr><td colSpan="5" className="py-16 text-center text-slate-400">No MOA records uploaded.</td></tr>}</tbody></table></div></section>}
+    {hteToDelete && (
+      <Modal title="Delete HTE from this program?" subtitle={hteToDelete.name} onClose={() => { if (!hteDeleteBusy) setHteToDelete(null); }}>
+        <div className="space-y-4 p-5">
+          <div className="flex items-start gap-3 rounded-xl bg-rose-50 p-4 text-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+            <FiAlertTriangle className="mt-0.5 shrink-0 text-lg" />
+            <p className="text-sm">This HTE will be removed from your program's HTE list. Its shared record, MOA history, and existing student deployments will remain.</p>
+          </div>
+          {Number(hteToDelete.students_count) > 0 && <p className="text-sm font-bold text-slate-700 dark:text-gray-200">{hteToDelete.students_count} student{Number(hteToDelete.students_count) === 1 ? ' is' : 's are'} currently assigned to this HTE.</p>}
+        </div>
+        <div className="flex justify-end gap-3 border-t border-slate-100 px-5 py-4 dark:border-gray-700">
+          <button type="button" autoFocus disabled={hteDeleteBusy} onClick={() => setHteToDelete(null)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold disabled:opacity-50 dark:border-gray-600">Keep HTE</button>
+          <button type="button" disabled={hteDeleteBusy} onClick={deleteHte} className="rounded-xl bg-rose-700 px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">{hteDeleteBusy ? 'Removing...' : 'Delete from Program'}</button>
+        </div>
+      </Modal>
+    )}
 
     {hteSearchOpen && (
       <Modal title="Search HTE" subtitle="Search the shared database before adding a new partner establishment." onClose={() => setHteSearchOpen(false)} wide compact>
@@ -923,16 +909,43 @@ function HTEManagement() {
       </Modal>
     )}
 
-    {deploymentEditor && <Modal title="Configure Student Deployment" subtitle={`${deploymentEditor.first_name} ${deploymentEditor.last_name} · ${deploymentEditor.student_id}`} onClose={() => setDeploymentEditor(null)} wide>
+    {deploymentView && <Modal title="View Student Deployment" subtitle={`${deploymentView.first_name} ${deploymentView.last_name} | ${deploymentView.student_id}`} onClose={() => { setDeploymentView(null); setDeploymentCompletion(null); }} wide>
+      <div className="space-y-5 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-4 dark:bg-gray-900">
+          <div><p className="text-xs font-bold uppercase text-slate-400">Student</p><p className="mt-1 font-black text-slate-800 dark:text-white">{deploymentView.last_name}, {deploymentView.first_name}</p><p className="text-xs text-slate-500">{deploymentView.student_id} | {deploymentView.program?.code || 'Program not set'}</p></div>
+          <Badge value={deploymentView.hte_id ? deploymentView.internship_status : 'not_deployed'} />
+        </div>
+        {!deploymentView.hte_id && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">The preferred HTE and department are the student's registration choices. No official deployment has been assigned yet.</p>}
+        <dl className="grid gap-3 sm:grid-cols-2">
+          {[
+            ['Assigned HTE', deploymentView.hte?.name || 'Not deployed'],
+            ['Department / Unit', deploymentView.hte_department?.department_name || 'Not assigned'],
+            ['Preferred HTE', deploymentView.current_internship?.preferred_hte?.name || 'No preference'],
+            ['Preferred Department', deploymentView.current_internship?.preferred_department?.department_name || 'No preference'],
+            ['HTE Supervisor', deploymentView.supervisor_record?.full_name || deploymentView.supervisor?.name || 'Not assigned'],
+            ['Supervisor Email', deploymentView.supervisor_record?.user?.email || deploymentView.supervisor?.email || 'Not available'],
+            ['Internship Period', deploymentView.hte_id && (deploymentView.ojt_start_date || deploymentView.ojt_end_date) ? `${formatDate(deploymentView.ojt_start_date)} to ${viewPublishedSetting ? deploymentCompletion?.estimated_end_date ? formatDate(deploymentCompletion.estimated_end_date) : 'Calculating estimate' : formatDate(deploymentView.ojt_end_date)}` : 'Not set'],
+            [deploymentView.hte_id ? 'Required OJT Hours' : 'Program Required Hours', deploymentView.hte_id ? `${deploymentView.required_ojt_hours} hours` : viewPublishedSetting ? `${viewPublishedSetting.required_hours} hours (Program Head published)` : 'Not set'],
+            ...(!deploymentView.hte_id && viewPublishedSetting ? [['Program OJT Start Date', formatDate(viewPublishedSetting.ojt_start_date)]] : []),
+            ['Working Hours', deploymentView.hte_id ? `${timeValue(deploymentView.official_am_start, '08:00')} to ${timeValue(deploymentView.official_am_end, '12:00')} / ${timeValue(deploymentView.official_pm_start, '13:00')} to ${timeValue(deploymentView.official_pm_end, '17:00')}` : 'Not set'],
+            ['Working Days', deploymentView.hte_id ? (deploymentView.work_days?.length ? deploymentView.work_days : defaultDays).map((day) => weekdayNames[day] || day).join(', ') : 'Not set'],
+          ].map(([label, value]) => <div key={label} className="rounded-xl border border-slate-100 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"><dt className="text-xs font-bold uppercase text-slate-400">{label}</dt><dd className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{value}</dd></div>)}
+        </dl>
+        {deploymentCompletion && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200"><p className="font-bold">Automatic OJT completion</p><p className="mt-1">Completed hours: {deploymentCompletion.completed_hours} / {deploymentView.required_ojt_hours}</p><p className="mt-1">Estimated end: {deploymentCompletion.estimated_end_date ? formatDate(deploymentCompletion.estimated_end_date) : deploymentCompletion.schedule_error ? 'Schedule needs correction' : 'Schedule unavailable'}. Absences move this estimate later.</p><p className="mt-1">Actual completion: {deploymentCompletion.actual_completion_date ? formatDate(deploymentCompletion.actual_completion_date) : 'Not yet completed'}</p></div>}
+      </div>
+    </Modal>}
+
+    {deploymentEditor && <Modal title="Edit Student Deployment" subtitle={`${deploymentEditor.first_name} ${deploymentEditor.last_name} · ${deploymentEditor.student_id}`} onClose={() => setDeploymentEditor(null)} wide>
       <form onSubmit={saveDeployment}>
+        <p className="mx-5 mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">Student preference: {deploymentEditor.current_internship?.preferred_hte?.name || 'No preferred HTE'}{deploymentEditor.current_internship?.preferred_department ? ` / ${deploymentEditor.current_internship.preferred_department.department_name}` : ''}. Final assignment is selected below.</p>
         <div className="grid gap-4 p-5 md:grid-cols-3">
           <Field label="Assigned HTE"><select value={deploymentEditor.hte_id} onChange={(event) => selectDeploymentHte(event.target.value)} className={inputClass}><option value="">Not deployed</option>{data.htes.filter((hte) => hte.is_active).map((hte) => <option key={hte.id} value={hte.id}>{hte.name}</option>)}</select></Field>
           <Field label="Department / Unit"><select disabled={!deploymentEditor.hte_id} value={deploymentEditor.hte_department_id} onChange={(event) => setDeploymentEditor((current) => ({ ...current, hte_department_id: event.target.value, supervisor_record_id: '' }))} className={inputClass}><option value="">Select department</option>{deploymentDepartments.map((department) => <option key={department.id} value={department.id}>{department.department_name}</option>)}</select></Field>
           <Field label="HTE Supervisor"><select disabled={!deploymentEditor.hte_department_id} value={deploymentEditor.supervisor_record_id} onChange={(event) => setDeploymentEditor((current) => ({ ...current, supervisor_record_id: event.target.value }))} className={inputClass}><option value="">Select supervisor</option>{deploymentSupervisors.map((supervisor) => <option key={supervisor.id} value={supervisor.id}>{supervisor.full_name}{supervisor.user_id ? '' : ' · No account yet'}</option>)}</select></Field>
           <Field label="Internship Status"><select value={deploymentEditor.internship_status} onChange={(event) => setDeploymentEditor((current) => ({ ...current, internship_status: event.target.value }))} className={inputClass}><option value="pending">Pending</option><option value="active">Active</option><option value="completed">Completed</option><option value="dropped">Dropped</option></select></Field>
-          <Field label="Required OJT Hours"><input type="number" min="1" value={deploymentEditor.required_ojt_hours} onChange={(event) => setDeploymentEditor((current) => ({ ...current, required_ojt_hours: event.target.value }))} className={inputClass} required /></Field>
-          <Field label="OJT Start Date"><input type="date" value={deploymentEditor.ojt_start_date} onChange={(event) => setDeploymentEditor((current) => ({ ...current, ojt_start_date: event.target.value }))} className={inputClass} /></Field>
-          <Field label="OJT End Date"><input type="date" value={deploymentEditor.ojt_end_date} onChange={(event) => setDeploymentEditor((current) => ({ ...current, ojt_end_date: event.target.value }))} className={inputClass} /></Field>
+          <Field label="Required OJT Hours" hint={deploymentEditor.official_ojt_setting ? 'Program Head published' : 'Legacy period'}><input type="number" min="1" value={deploymentEditor.required_ojt_hours} onChange={(event) => setDeploymentEditor((current) => ({ ...current, required_ojt_hours: event.target.value }))} className={inputClass} readOnly={Boolean(deploymentEditor.official_ojt_setting)} required /></Field>
+          <Field label="OJT Start Date" hint={deploymentEditor.official_ojt_setting ? 'Program Head published' : 'Legacy period'}><input type="date" value={deploymentEditor.ojt_start_date} onChange={(event) => setDeploymentEditor((current) => ({ ...current, ojt_start_date: event.target.value }))} className={inputClass} readOnly={Boolean(deploymentEditor.official_ojt_setting)} /></Field>
+          {deploymentEditor.official_ojt_setting ? <Field label="Estimated OJT End Date" hint="Automatic"><p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300">Calculated from the saved work schedule and completed attendance hours after deployment. Absences extend the estimate.</p></Field> : <Field label="OJT End Date"><input type="date" value={deploymentEditor.ojt_end_date} onChange={(event) => setDeploymentEditor((current) => ({ ...current, ojt_end_date: event.target.value }))} className={inputClass} /></Field>}
           <label className="flex items-center gap-2 self-end rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold dark:border-gray-600"><input type="checkbox" checked={deploymentEditor.allow_past_attendance} onChange={(event) => setDeploymentEditor((current) => ({ ...current, allow_past_attendance: event.target.checked }))} /> Allow past attendance</label>
           <div className="md:col-span-3 border-t border-slate-100 pt-4 dark:border-gray-700">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -960,6 +973,7 @@ function HTEManagement() {
       </form>
     </Modal>}
 
+    {holidayImportOpen && <Modal title="Import Philippine Holidays" subtitle="Fetch nationwide holidays, review, then save the selected dates." onClose={() => setHolidayImportOpen(false)}><HolidayImportForm onClose={() => setHolidayImportOpen(false)} onImported={(date) => { setHolidayCalendarFocus(date); setHolidayImportOpen(false); fetchWorkspace(); }} /></Modal>}
     {holidayEditor && <Modal title={holidayEditor.mode === 'create' ? 'Add Official Holiday' : 'Edit Official Holiday'} subtitle="Verified non-working dates control the student calendar and Smart Clock." onClose={() => setHolidayEditor(null)}>
       <form onSubmit={saveHoliday}>
         <div className="space-y-4 p-5">
@@ -980,8 +994,6 @@ function HTEManagement() {
         <div className="flex justify-end gap-3 border-t border-slate-100 px-5 py-4 dark:border-gray-700"><button type="button" onClick={() => setHolidayEditor(null)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold dark:border-gray-600">Cancel</button><button disabled={busy || (holidayForm.holiday_type === 'local_holiday' && !holidayForm.hte_ids.length)} className="rounded-xl bg-[#7D001D] px-6 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? 'Saving...' : 'Save Holiday'}</button></div>
       </form>
     </Modal>}
-    {moaOpen && <Modal title="Upload Memorandum of Agreement" subtitle="PDF only, up to 10 MB. The MOA is automatically assigned to your college and program." onClose={() => setMoaOpen(false)}><form onSubmit={saveMoa}><div className="space-y-4 p-5"><Field label="Partner HTE" required><select value={moaForm.hte_id} onChange={(event) => setMoaForm((current) => ({ ...current, hte_id: event.target.value }))} className={inputClass} required><option value="">Select HTE</option>{data.htes.map((hte) => <option key={hte.id} value={hte.id}>{hte.name}</option>)}</select></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Effective Date" required><input type="date" value={moaForm.effective_date} onChange={(event) => setMoaForm((current) => ({ ...current, effective_date: event.target.value }))} className={inputClass} required /></Field><Field label="Expiration Date" required><input type="date" value={moaForm.expiration_date} onChange={(event) => setMoaForm((current) => ({ ...current, expiration_date: event.target.value }))} className={inputClass} required /></Field></div><Field label="MOA PDF" required><input type="file" accept=".pdf,application/pdf" onChange={(event) => setMoaForm((current) => ({ ...current, file: event.target.files?.[0] || null }))} className={inputClass} required /></Field></div><div className="flex justify-end gap-3 border-t border-slate-100 px-5 py-4 dark:border-gray-700"><button type="button" onClick={() => setMoaOpen(false)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold dark:border-gray-600">Cancel</button><button disabled={busy} className="rounded-xl bg-[#7D001D] px-6 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? 'Uploading...' : 'Upload MOA'}</button></div></form></Modal>}
-
     {selectedHte && <Modal title={selectedHte.name} subtitle={selectedHte.address} onClose={() => { setSelectedHte(null); setDepartmentForm(emptyDepartment); }} wide compact><div className="grid gap-5 p-5 lg:grid-cols-2"><div><div className="rounded-2xl bg-slate-50 p-4 dark:bg-gray-900"><div className="flex items-center justify-between"><Badge value={selectedHte.is_active ? 'active' : 'inactive'} />{selectedHte.geofence_enabled && <span className="inline-flex items-center gap-1 text-xs font-black text-violet-600"><FiMapPin /> {selectedHte.geofence_radius}m geofence</span>}</div><p className="mt-3 text-sm font-black text-slate-800 dark:text-white">{selectedHte.contact_person}</p><p className="mt-1 text-xs text-slate-400">{selectedHte.contact_email} · {selectedHte.contact_number}</p><p className="mt-3 text-xs font-bold text-slate-600 dark:text-gray-300">{timeValue(selectedHte.default_am_start, '08:00')}–{timeValue(selectedHte.default_am_end, '12:00')} / {timeValue(selectedHte.default_pm_start, '13:00')}–{timeValue(selectedHte.default_pm_end, '17:00')}</p></div><h3 className="mb-3 mt-5 font-black text-slate-800 dark:text-white">Deployed Students</h3><div className="space-y-2">{selectedHte.students?.length ? selectedHte.students.map((student) => <div key={student.id} className="flex items-center justify-between rounded-xl border border-slate-100 p-3 dark:border-gray-700"><div><p className="text-xs font-black text-slate-700 dark:text-gray-200">{student.first_name} {student.last_name}</p><p className="text-[10px] text-slate-400">{student.student_id} · {student.program?.code}</p></div><Badge value={student.internship_status} /></div>) : <p className="rounded-xl border border-dashed border-slate-300 py-8 text-center text-xs text-slate-400 dark:border-gray-700">No students deployed.</p>}</div></div><div><h3 className="font-black text-slate-800 dark:text-white">Departments / Units</h3><div className="mt-3 space-y-2">{selectedHte.departments?.length ? selectedHte.departments.map((department) => <div key={department.id} className="rounded-xl border border-slate-100 p-3 dark:border-gray-700"><p className="text-xs font-black text-[#7D001D] dark:text-rose-300">{department.department_name}</p><p className="mt-1 text-[11px] text-slate-500">Supervisor: {department.supervisors?.map((supervisor) => `${supervisor.full_name}${supervisor.user_id ? ' · Account created' : ' · No account'}`).join(', ') || 'None'}</p></div>) : <p className="rounded-xl border border-dashed border-slate-300 py-6 text-center text-xs text-slate-400 dark:border-gray-700">No departments recorded.</p>}</div><form onSubmit={saveDepartment} className="mt-3 grid gap-2 rounded-xl bg-slate-50 p-3 dark:bg-gray-900 sm:grid-cols-2"><Field label="Department Name" required><input value={departmentForm.department_name} onChange={(event) => setDepartmentForm((current) => ({ ...current, department_name: event.target.value }))} className={inputClass} required /></Field><Field label="Supervisor Full Name" required><input value={departmentForm.supervisor_full_name} onChange={(event) => setDepartmentForm((current) => ({ ...current, supervisor_full_name: event.target.value }))} className={inputClass} required /></Field><button disabled={busy} className="rounded-xl bg-[#7D001D] px-4 py-2.5 text-xs font-black text-white disabled:opacity-50 sm:col-span-2">{busy ? 'Saving...' : 'Add or Reuse Department & Supervisor'}</button></form><h3 className="mb-3 mt-5 font-black text-slate-800 dark:text-white">MOA Records</h3><div className="space-y-3">{selectedHte.moas?.length ? selectedHte.moas.map((moa) => <div key={moa.id} className="rounded-xl border border-slate-100 p-4 dark:border-gray-700"><div className="flex items-start justify-between"><div><p className="text-xs font-black text-slate-700 dark:text-gray-200">{moa.college?.code} Agreement</p><p className="mt-1 text-[10px] text-slate-400">{formatDate(moa.effective_date)} – {formatDate(moa.expiration_date)}</p></div><Badge value={new Date(moa.expiration_date) < new Date() ? 'expired' : moa.status} /></div></div>) : <p className="rounded-xl border border-dashed border-slate-300 py-8 text-center text-xs text-slate-400 dark:border-gray-700">No MOA records.</p>}</div><button onClick={() => { setSelectedHte(null); openEditHte(selectedHte); }} className="mt-5 w-full rounded-xl border border-slate-200 py-3 text-sm font-black text-[#7D001D] dark:border-gray-600 dark:text-rose-300">Edit HTE Configuration</button></div></div></Modal>}
   </div>;
 }

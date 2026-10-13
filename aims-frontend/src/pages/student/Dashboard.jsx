@@ -22,6 +22,7 @@ import api from '../../services/api';
 const statusOptions = [
   { value: 'present', label: 'Present', icon: FiCheckCircle },
   { value: 'absent', label: 'Absent', icon: FiXCircle },
+  { value: 'holiday', label: 'Holiday', icon: FiCalendar },
 ];
 
 const workModeOptions = [
@@ -193,11 +194,29 @@ function StudentDashboard() {
     fetchDashboard();
     fetchQuickClock();
 
+    let lastDashboardDate = new Date(Date.now() + serverOffsetRef.current).toDateString();
     const timer = window.setInterval(() => {
-      setCurrentTime(new Date(Date.now() + serverOffsetRef.current));
+      const now = new Date(Date.now() + serverOffsetRef.current);
+      setCurrentTime(now);
+      if (document.visibilityState === 'visible' && now.toDateString() !== lastDashboardDate) {
+        lastDashboardDate = now.toDateString();
+        fetchDashboard();
+        fetchQuickClock();
+      }
     }, 1000);
 
-    return () => window.clearInterval(timer);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      lastDashboardDate = new Date(Date.now() + serverOffsetRef.current).toDateString();
+      fetchDashboard();
+      fetchQuickClock();
+    };
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, []);
 
   const liveTrackingActive = status === 'present'
@@ -443,6 +462,8 @@ function StudentDashboard() {
   const complete = clockState?.completed || false;
   const primaryLabel = status === 'absent'
     ? 'Submit as Absent'
+    : status === 'holiday'
+      ? 'Submit as Holiday'
     : clockState?.next_action?.label || (complete ? 'All Time Slots Completed' : displaySlots[0]?.label || 'Time In');
 
   const formattedTime = currentTime.toLocaleTimeString('en-PH', {
@@ -462,7 +483,13 @@ function StudentDashboard() {
   const requirementsProgress = dashboardData?.requirements_progress || {};
   const requirementsPercent = Math.min(Math.max(Number(requirementsProgress.percent_complete) || 0, 0), 100);
   const progress = dashboardData?.ojt_progress || {};
+  const projectionLate = Boolean(progress.projected_completion_date && progress.end_date
+    && progress.projected_completion_date > progress.end_date && Number(progress.hours_left) > 0);
   const holidayForecast = dashboardData?.holiday_forecast || {};
+  const holidaysThisMonth = holidayForecast.this_month || [];
+  const holidayMonthLabel = holidayForecast.month
+    ? new Date(`${holidayForecast.month}-01T00:00:00`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })
+    : '';
   const weeklyHours = progress.weekly_hours || [];
   const weeklyScale = Math.max(...weeklyHours.map((item) => Number(item.hours) || 0), 8);
   const completedSlots = displaySlots.filter((slot) => slot.completed).length;
@@ -481,7 +508,13 @@ function StudentDashboard() {
         </div>
       </div>
 
-      <section className="quick-smart-clock relative isolate mx-auto flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#690016_0%,#820020_55%,#690016_100%)] px-4 py-4 text-white sm:px-5">
+      {clockState?.access?.available === false ? (
+        <section className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800" aria-label="Quick Smart Clock unavailable">
+          <FiClock className="mx-auto text-3xl text-[#7D001D] dark:text-rose-300" />
+          <h2 className="mt-3 text-lg font-bold text-slate-900 dark:text-white">Quick Smart Clock unavailable</h2>
+          <p className="mt-2 text-sm text-slate-600 dark:text-gray-300">{clockState.access.message}</p>
+        </section>
+      ) : <section className="quick-smart-clock relative isolate mx-auto flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#690016_0%,#820020_55%,#690016_100%)] px-4 py-4 text-white sm:px-5">
 
         <header className="quick-smart-clock-header relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
@@ -523,6 +556,8 @@ function StudentDashboard() {
             </>}
           </div>
         </header>
+        {clockState?.access?.can_finish_session && <p className="relative mt-3 rounded-xl border border-amber-200/40 bg-amber-100/15 px-3 py-2 text-xs font-bold text-amber-100">{clockState.access.message}</p>}
+        {todayHoliday && <p className="relative mt-3 rounded-xl border border-amber-200/40 bg-amber-100/15 px-3 py-2 text-xs font-bold text-amber-100">{todayHoliday.name}: If you worked at your HTE, select Present and use the Smart Clock. If you did not work, select Holiday; no OJT hours will be added.</p>}
 
         <div className="quick-smart-clock-face relative mx-auto flex w-full max-w-xl flex-col items-center py-6 text-center sm:py-7">
           <time className="font-mono text-3xl font-black leading-none tabular-nums sm:text-4xl">
@@ -569,16 +604,9 @@ function StudentDashboard() {
             </ol>
           )}
 
-          {status !== 'present' && !clockDisabled && <div className="mt-4 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-bold text-white/80">Record today as absent</div>}
+          {status !== 'present' && !clockDisabled && <div className="mt-4 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-bold text-white/80">{status === 'holiday' ? 'Record today as an official holiday' : 'Record today as absent'}</div>}
 
-          {clockDisabled ? (
-            <div className="mt-6 w-full max-w-lg rounded-2xl border border-violet-200/30 bg-white/15 px-5 py-4 text-left shadow-lg">
-              <p className="text-sm font-black text-amber-200">Official Holiday · Smart Clock unavailable</p>
-              <p className="mt-1 text-lg font-black">{todayHoliday?.name}</p>
-              <p className="mt-2 text-xs leading-5 text-white/75">No OJT attendance is required today. No hours, absence, or late record will be added.</p>
-              {todayHoliday?.official_reference && <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-white/55">{todayHoliday.official_reference}</p>}
-            </div>
-          ) : complete ? (
+          {complete ? (
             <div className="mt-8 rounded-full border border-white/20 bg-white/15 px-7 py-4 text-sm font-black shadow-lg"><FiCheckCircle className="mr-2 inline h-5 w-5" />Today’s attendance is complete</div>
           ) : (
             <button type="button" onClick={handlePrimaryAction} disabled={submitting || clockLoading} className="quick-smart-clock-action mt-4 inline-flex w-full max-w-44 items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-[#7D001D] transition hover:bg-[#fff9e8] disabled:cursor-not-allowed disabled:opacity-60">
@@ -590,22 +618,18 @@ function StudentDashboard() {
         <footer className="quick-smart-clock-footer relative">
           <div className="h-1 overflow-hidden rounded-full bg-white/15" aria-hidden="true"><div className="h-full rounded-full bg-[#d4af37] transition-[width] duration-300" style={{ width: clockProgress + '%' }} /></div>
           <div className="mt-2.5 flex items-center justify-between gap-4 text-xs font-bold text-white/70">
-            <span>{clockDisabled ? 'Official holiday · no attendance required' : `${completedSlots}/${displaySlots.length} completed`}</span>
+            <span>{clockState?.attendance?.status === 'holiday' ? 'Official holiday recorded' : `${completedSlots}/${displaySlots.length} completed`}</span>
             <Link to="/student/attendance" className="inline-flex items-center gap-1.5 text-sm font-black text-white/75 transition hover:text-white">See full log <span aria-hidden="true">↗</span></Link>
           </div>
           <button type="button" onClick={fetchQuickClock} disabled={clockLoading} className="sr-only">Resync clock</button>
         </footer>
-      </section>
+      </section>}
       <section className="rounded-3xl border border-violet-100 bg-[linear-gradient(135deg,#faf7ff,#fff)] p-5 shadow-sm dark:border-violet-900 dark:bg-none dark:bg-gray-800">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-100 text-xl text-violet-700"><FiCalendar /></span>
-            <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-600">Holiday Forecast</p><h2 className="mt-1 text-lg font-black text-slate-800 dark:text-white">{holidayForecast.next?.name || 'No upcoming official holiday'}</h2>{holidayForecast.next && <p className="mt-1 text-xs text-slate-500">{new Date(`${holidayForecast.next.date}T00:00:00`).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {holidayForecast.next.days_until === 0 ? 'Today' : `${holidayForecast.next.days_until} days remaining`}</p>}</div>
-          </div>
-          {holidayForecast.next && <span className="rounded-full bg-violet-100 px-3 py-1.5 text-[10px] font-black uppercase text-violet-700">{holidayForecast.next.type_label}</span>}
-        </div>
-        {holidayForecast.next && <div className="mt-4 rounded-2xl border border-violet-100 bg-white/80 p-4 text-xs text-slate-600 dark:border-violet-900 dark:bg-gray-900 dark:text-slate-300"><p className="font-black text-violet-800 dark:text-violet-300">No OJT attendance required</p><p className="mt-1">{holidayForecast.next.affects_workday ? 'This holiday falls on your scheduled working day. Your remaining required hours and working days will not decrease.' : 'This holiday does not fall on your scheduled working day, so it has no attendance impact.'}</p></div>}
-        {!!holidayForecast.upcoming?.length && <Link to="/student/attendance" className="mt-4 inline-flex items-center gap-2 text-xs font-black text-[#7D001D] hover:underline"><FiCalendar /> View holidays in calendar</Link>}
+        <div className="flex items-center gap-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-100 text-xl text-violet-700"><FiCalendar /></span><div><h2 className="text-sm font-black uppercase tracking-[0.12em] text-violet-700">Holiday Forecast</h2><p className="mt-1 text-sm font-bold text-slate-600 dark:text-slate-200">{holidayMonthLabel}</p></div></div>
+        {holidaysThisMonth.length ? <div className="mt-4 space-y-4 border-t border-violet-100 pt-4 dark:border-violet-900 sm:pl-14">{[['national_holiday', 'National holidays'], ['special_non_working', 'Special non-working days'], ['local_holiday', 'Local holidays']].map(([type, title]) => {
+          const entries = holidaysThisMonth.filter((holiday) => holiday.holiday_type === type);
+          return entries.length ? <div key={type}><h3 className="text-xs font-black text-violet-700 dark:text-violet-300">{title}</h3><ul className="mt-2 space-y-1.5">{entries.map((holiday) => <li key={`${holiday.id}-${holiday.date}`} className="flex gap-3 text-sm text-slate-700 dark:text-slate-200"><span className="w-14 shrink-0 font-black">{new Date(`${holiday.date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</span><span>{holiday.name}</span></li>)}</ul></div> : null;
+        })}</div> : <p className="mt-4 text-sm text-slate-500">No holidays this month.</p>}
       </section>
       <section>
         <div className="mb-4 flex items-end justify-between gap-4">
@@ -648,7 +672,7 @@ function StudentDashboard() {
         <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_right,rgba(212,175,55,0.13),transparent_38%),linear-gradient(135deg,#fff,#fffaf7)] p-6 dark:border-gray-700 dark:bg-none dark:bg-gray-800 lg:p-8">
           <div className="flex items-center gap-3">
             <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#7D001D] text-xl text-white"><FiTrendingUp /></div>
-            <div><h2 className="text-xl font-black text-[#690016]">OJT Progress</h2><p className="text-xs font-semibold text-slate-400">Calculated from completed attendance time slots</p></div>
+            <div><h2 className="text-xl font-black text-[#690016]">OJT Progress</h2><p className="text-xs font-semibold text-slate-400">Hours count when the day's attendance is complete</p></div>
           </div>
 
           <div className="mt-7 flex flex-col gap-7 xl:flex-row xl:items-center">
@@ -659,7 +683,7 @@ function StudentDashboard() {
                   { value: formatMetric(progress.rendered_hours), label: 'hrs done', tone: 'text-emerald-600' },
                   { value: formatMetric(progress.hours_left), label: 'hrs left', tone: 'text-[#7D001D]' },
                   { value: progress.entries || 0, label: 'entries', tone: 'text-blue-600' },
-                  { value: progress.working_days_left ?? progress.days_left ?? '—', label: 'working days left', tone: 'text-[#a8750b]' },
+                  { value: progress.working_days_left ?? progress.days_left ?? '—', label: '8-hour workdays needed', tone: 'text-[#a8750b]' },
                 ].map((metric) => (
                   <div key={metric.label} className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-gray-700 dark:bg-gray-900/80">
                     <p className={`text-2xl font-black ${metric.tone}`}>{metric.value}</p>
@@ -671,17 +695,18 @@ function StudentDashboard() {
 
             <div className="flex-1 space-y-6 xl:border-l xl:border-slate-200 xl:pl-8">
               <div>
-                <div className="mb-2 flex items-center justify-between gap-4 text-sm"><span className="font-bold text-slate-600">Hours</span><span className="font-black text-[#690016]">{formatMetric(progress.rendered_hours)} <span className="font-semibold text-slate-400">/ {formatMetric(progress.required_hours)}</span></span></div>
+                <div className="mb-2 flex items-center justify-between gap-4 text-sm"><span className="font-bold text-slate-600">Completed attendance hours</span><span className="font-black text-[#690016]">{formatMetric(progress.rendered_hours)} <span className="font-semibold text-slate-400">/ {formatMetric(progress.required_hours)}</span></span></div>
                 <div className="h-3 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-gradient-to-r from-[#7D001D] to-[#b88918] transition-all duration-700" style={{ width: `${Math.min(Number(progress.percent_complete) || 0, 100)}%` }} /></div>
               </div>
-              <div>
+              {!progress.automatic_end_date && <div>
                 <div className="mb-2 flex items-center justify-between gap-4 text-sm"><span className="font-bold text-slate-600">Semester</span><span className="font-black text-[#690016]">{formatMetric(progress.semester_elapsed_percent)}% <span className="font-semibold text-slate-400">elapsed</span></span></div>
                 <div className="h-3 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-[#d4af37] transition-all duration-700" style={{ width: `${Math.min(Number(progress.semester_elapsed_percent) || 0, 100)}%` }} /></div>
                 <div className="mt-3 flex justify-between text-xs font-bold text-slate-400"><span>{formatOjtDate(progress.start_date)}</span><span>{formatOjtDate(progress.end_date)}</span></div>
-              </div>
-              <div className={`rounded-xl border px-4 py-3 text-sm font-bold ${progress.period_state === 'ended' ? 'border-amber-200 bg-amber-50 text-amber-800' : progress.period_state === 'active' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+              </div>}
+              <div className={`rounded-xl border px-4 py-3 text-sm font-bold ${projectionLate ? 'border-rose-300 bg-rose-50 text-rose-800' : progress.period_state === 'ended' ? 'border-amber-200 bg-amber-50 text-amber-800' : progress.period_state === 'active' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
                 {progress.period_message || 'OJT schedule dates are not configured yet.'}
-                {progress.projected_completion_date && <span className="mt-1 block text-xs font-semibold">Projected completion from remaining hours: {formatOjtDate(progress.projected_completion_date)}</span>}
+                {progress.automatic_end_date ? <><span className="mt-1 block text-xs font-semibold">Completed hours: {formatMetric(progress.completed_hours)} / {formatMetric(progress.required_hours)}</span><span className="mt-1 block text-xs font-semibold">Estimated OJT end: {progress.projected_completion_date ? formatOjtDate(progress.projected_completion_date) : progress.schedule_error ? 'Schedule needs correction' : 'Schedule unavailable'}. Absences can extend this date.</span><span className="mt-1 block text-xs font-semibold">Actual completion: {progress.actual_completion_date ? formatOjtDate(progress.actual_completion_date) : 'Not yet completed'}</span></> : progress.projected_completion_date && <span className="mt-1 block text-xs font-semibold">Projected completion at 8 hours per scheduled workday: {formatOjtDate(progress.projected_completion_date)}</span>}
+                {projectionLate && <span className="mt-1 block text-xs font-semibold">Warning: projected completion is {progress.projected_days_late || 'after the OJT period ends'}{progress.projected_days_late ? ` ${Number(progress.projected_days_late) === 1 ? 'day' : 'days'} past the OJT end date` : ''}.</span>}
               </div>
             </div>
           </div>

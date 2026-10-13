@@ -35,7 +35,7 @@ class SystemNotification extends Model
 
     public static function sendToRole(string $role, string $title, string $message, string $type = 'information', ?string $actionUrl = null): void
     {
-        User::where('role', $role)->where('is_active', true)->pluck('id')->each(
+        User::forRole($role)->where('is_active', true)->pluck('id')->each(
             fn (int $userId) => static::sendToUser($userId, $title, $message, $type, $actionUrl)
         );
     }

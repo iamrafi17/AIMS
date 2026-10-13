@@ -75,6 +75,7 @@ function CoordinatorProfile() {
     coordinator: 'Internship Coordinator',
     program_head: 'Program Head',
     vpaa: 'Vice President for Academic Affairs',
+    dean: 'Dean',
     admin: 'System Administrator',
     supervisor: 'HTE Supervisor',
   }[user?.role] || 'AIMS User';
@@ -82,6 +83,7 @@ function CoordinatorProfile() {
     coordinator: 'Coordinator',
     program_head: 'Program Head',
     vpaa: 'VPAA',
+    dean: 'Dean',
     admin: 'Administrator',
     supervisor: 'Supervisor',
   }[user?.role] || 'Account';

@@ -50,6 +50,14 @@ class AcademicSection extends Model
         });
 
         static::saved(function (AcademicSection $section): void {
+            if ($section->wasChanged('program_id')) {
+                StudentInternship::query()->where('academic_section_id', $section->id)
+                    ->where('is_current', true)->pluck('student_id')
+                    ->merge(OjtEnrollment::query()->where('academic_section_id', $section->id)->pluck('student_record_id'))
+                    ->filter()->unique()
+                    ->each(fn (int $studentId) => Student::syncAcademicForeignKeysFor($studentId));
+            }
+
             $section->hasAcademicYearInput = false;
             $section->academicYearInput = null;
             $section->unsetRelation('academicPeriod');

@@ -2,8 +2,8 @@
 
 namespace App\Http\Middleware;
 
-use App\Http\Controllers\Api\AdminSystemController;
 use App\Http\Controllers\Api\AcademicPeriodController;
+use App\Http\Controllers\Api\AdminSystemController;
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AuthController;

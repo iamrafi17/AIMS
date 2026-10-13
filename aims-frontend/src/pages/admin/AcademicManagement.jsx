@@ -15,7 +15,7 @@ import api from '../../services/api';
 import { LoadingPanel, MetricCard, PageIntro } from '../../components/common/PortalUI';
 
 const baseForms = {
-  college: { name: '', code: '', required_ojt_hours: 486 },
+  college: { name: '', code: '' },
   program: { college_id: '', name: '', code: '' },
   section: { program_id: '', name: '', year_level: '', academic_period_id: '' },
 };
@@ -38,7 +38,8 @@ function AcademicModal({ type, item, colleges, programs, academicPeriods, onClos
     setSaving(true);
     try {
       const endpoint = `/admin/academic/${type === 'college' ? 'colleges' : type === 'program' ? 'programs' : 'sections'}`;
-      const response = item ? await api.put(`${endpoint}/${item.id}`, form) : await api.post(endpoint, form);
+      const payload = type === 'college' ? { name: form.name, code: form.code } : form;
+      const response = item ? await api.put(`${endpoint}/${item.id}`, payload) : await api.post(endpoint, payload);
       toast.success(response.data.message);
       onSaved();
     } catch (error) {
@@ -75,13 +76,6 @@ function AcademicModal({ type, item, colleges, programs, academicPeriods, onClos
             <label className="sm:col-span-2"><span className="mb-2 block text-sm font-bold">{type === 'section' ? 'Section name' : `${type} name`}</span><input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" /></label>
             {type !== 'section' && <label><span className="mb-2 block text-sm font-bold">Code</span><input required value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value.toUpperCase() })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 uppercase dark:border-slate-700" /></label>}
           </div>
-          {type === 'college' && (
-            <label className="block">
-              <span className="mb-2 block text-sm font-bold">Required Internship Hours</span>
-              <input type="number" min="1" max="2000" step="0.5" required value={form.required_ojt_hours} onChange={(event) => setForm({ ...form, required_ojt_hours: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" />
-              <span className="mt-1 block text-xs text-slate-500">New students enrolled under this college will automatically inherit this requirement.</span>
-            </label>
-          )}
           {type === 'section' && (
             <div className="grid gap-4 sm:grid-cols-2">
               <label><span className="mb-2 block text-sm font-bold">Year level</span><input type="number" required min="1" max="6" step="1" value={form.year_level} onChange={(event) => setForm({ ...form, year_level: event.target.value })} placeholder="Enter year level" className="w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" /></label>
@@ -240,7 +234,7 @@ export default function AdminAcademic() {
                 <div className="min-w-0">
                   <p className="break-words text-sm font-black text-slate-900 dark:text-white">{item.name}</p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    {type === 'college' ? `${Number(item.required_ojt_hours || 486)} required internship hours` : type === 'program' ? item.college?.name || 'Academic program' : item.program?.name || 'Official academic record'}
+                    {type === 'college' ? 'College record' : type === 'program' ? item.college?.name || 'Academic program' : item.program?.name || 'Official academic record'}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">
@@ -268,7 +262,7 @@ export default function AdminAcademic() {
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-800/70"><tr><th className="px-6 py-4">Record</th><th className="px-6 py-4">{type === 'section' ? 'Academic details' : 'Code / Parent'}</th><th className="px-6 py-4">Connected</th><th className="px-6 py-4 text-right">Actions</th></tr></thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {records.map((item) => <tr key={item.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                <td className="px-6 py-4"><p className="font-black text-slate-900 dark:text-white">{item.name}</p><p className="mt-1 max-w-xs truncate text-xs text-slate-500">{type === 'college' ? `${Number(item.required_ojt_hours || 486)} required internship hours` : type === 'program' ? item.college?.name || 'Academic program' : item.program?.name || 'Official academic record'}</p></td>
+                <td className="px-6 py-4"><p className="font-black text-slate-900 dark:text-white">{item.name}</p><p className="mt-1 max-w-xs truncate text-xs text-slate-500">{type === 'college' ? 'College record' : type === 'program' ? item.college?.name || 'Academic program' : item.program?.name || 'Official academic record'}</p></td>
                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.code || (item.program ? `${item.program.code} · Year ${item.year_level} · ${item.academic_year}${item.academic_period ? ` · ${item.academic_period.semester}` : ''}` : item.college?.code)}</td>
                 <td className="px-6 py-4 text-sm font-bold text-slate-700 dark:text-slate-200">{type === 'college' ? `${item.programs_count} programs · ${item.students_count} students` : type === 'program' ? `${item.students_count} students` : item.program?.code}</td>
                 <td className="px-6 py-4"><div className="flex justify-end gap-2"><button onClick={() => setModal({ type, item })} className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:text-[#7D001D] dark:border-slate-700 dark:text-slate-300"><PencilSquareIcon className="h-5 w-5" /></button><button onClick={() => setActionTarget({ type, item })} className="rounded-xl border border-rose-200 p-2 text-rose-700 transition hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30" title={`Delete ${item.name}`} aria-label={`Delete ${item.name}`}><TrashIcon className="h-5 w-5" /></button></div></td>

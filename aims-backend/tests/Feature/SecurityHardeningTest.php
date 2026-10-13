@@ -21,7 +21,7 @@ class SecurityHardeningTest extends TestCase
             'role' => 'coordinator',
         ]);
 
-        for ($attempt = 0; $attempt < 10; $attempt++) {
+        for ($attempt = 0; $attempt < 5; $attempt++) {
             $this->postJson('/api/login', [
                 'login' => 'rate-limit@example.com',
                 'password' => 'wrong-password',
@@ -34,6 +34,48 @@ class SecurityHardeningTest extends TestCase
             'password' => 'wrong-password',
             'device_name' => 'Security test',
         ])->assertTooManyRequests();
+    }
+
+    public function test_successful_logins_do_not_exhaust_the_failed_login_limit(): void
+    {
+        User::factory()->create([
+            'email' => 'successful-logins@example.com',
+            'password' => 'correct-password',
+            'role' => 'coordinator',
+        ]);
+
+        for ($attempt = 0; $attempt < 6; $attempt++) {
+            $this->postJson('/api/login', [
+                'login' => 'successful-logins@example.com',
+                'password' => 'correct-password',
+                'device_name' => 'Security test',
+            ])->assertOk();
+        }
+    }
+
+    public function test_failed_logins_for_other_accounts_do_not_block_valid_login_on_shared_ip(): void
+    {
+        User::factory()->create([
+            'email' => 'valid-shared-ip@example.com',
+            'password' => 'correct-password',
+            'role' => 'coordinator',
+        ]);
+
+        for ($account = 0; $account < 3; $account++) {
+            for ($attempt = 0; $attempt < 4; $attempt++) {
+                $this->postJson('/api/login', [
+                    'login' => "unknown-{$account}@example.com",
+                    'password' => 'wrong-password',
+                    'device_name' => 'Security test',
+                ])->assertUnprocessable();
+            }
+        }
+
+        $this->postJson('/api/login', [
+            'login' => 'valid-shared-ip@example.com',
+            'password' => 'correct-password',
+            'device_name' => 'Security test',
+        ])->assertOk();
     }
 
     public function test_inactive_user_cannot_reuse_an_existing_bearer_token(): void

@@ -22,22 +22,10 @@ return new class extends Migration
             $table->unsignedSmallInteger('sequence')->default(1)->after('travel_log_id');
             $table->timestamp('expected_at')->nullable()->after('checkpoint_name');
         });
-
-        Schema::create('travel_companions', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('travel_log_id')->constrained()->cascadeOnDelete();
-            $table->string('name');
-            $table->string('type', 40)->default('student');
-            $table->string('contact', 40)->nullable();
-            $table->string('relationship', 100)->nullable();
-            $table->timestamps();
-        });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('travel_companions');
-
         Schema::table('travel_checkpoints', function (Blueprint $table) {
             $table->dropColumn(['sequence', 'expected_at']);
         });

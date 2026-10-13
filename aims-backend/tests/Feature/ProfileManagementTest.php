@@ -28,10 +28,7 @@ class ProfileManagementTest extends TestCase
             ->assertJsonPath('message', 'Profile information updated successfully.')
             ->assertJsonPath('student.first_name', 'Maria');
 
-        $this->assertDatabaseHas('users', [
-            'id' => $user->id,
-            'name' => 'Maria Santos Reyes',
-        ]);
+        $this->assertSame('Maria Santos Reyes', $user->fresh()->name);
         $this->assertDatabaseHas('students', [
             'id' => $student->id,
             'first_name' => 'Maria',
@@ -172,8 +169,13 @@ class ProfileManagementTest extends TestCase
 
         $this->assertDatabaseHas('users', [
             'id' => $coordinator->id,
-            'name' => 'Ralph Joseph Grimaldo',
             'email' => 'coordinator@marsu.edu.ph',
+        ]);
+        $this->assertDatabaseHas('employee_profiles', [
+            'user_id' => $coordinator->id,
+            'first_name' => 'Ralph',
+            'middle_name' => 'Joseph',
+            'last_name' => 'Grimaldo',
             'contact_number' => '09181234567',
             'address' => 'MarSU Santa Cruz Campus',
         ]);

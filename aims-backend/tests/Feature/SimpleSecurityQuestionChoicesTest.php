@@ -66,14 +66,14 @@ class SimpleSecurityQuestionChoicesTest extends TestCase
             ]);
         }
 
-        $challenge = $this->postJson('/api/forgot-password', ['user_id' => $user->user_id])
+        $challenge = $this->postJson('/api/forgot-password', ['user_id' => $user->username])
             ->assertOk()
             ->assertJsonCount(3, 'questions')
             ->assertJsonFragment(['question' => 'What nickname do your family and friends call you?'])
             ->assertJsonFragment(['question' => 'What type of music do you like the most?']);
 
         $this->postJson('/api/forgot-password/verify', [
-            'user_id' => $user->user_id,
+            'user_id' => $user->username,
             'challenge_token' => $challenge->json('challenge_token'),
             'answers' => $questions->map(fn ($question) => [
                 'security_question_id' => $question->id,

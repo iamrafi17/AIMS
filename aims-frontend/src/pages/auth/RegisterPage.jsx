@@ -88,6 +88,7 @@ function RegisterPage() {
     parent_address: '',
     parent_contact_number: '',
     hte_id: '',
+    hte_department_id: '',
     internship_semester: '',
     internship_year: '',
     agree_terms: false,
@@ -137,8 +138,10 @@ function RegisterPage() {
 
     setFormData((current) => ({
       ...current,
-      ...(name === 'college_id' ? { program_id: '', hte_id: '' } : {}),
-      ...(name === 'student_id' ? { first_name: '', middle_name: '', last_name: '', year_level: '', section: '', college_id: '', program_id: '', hte_id: '', internship_semester: '', internship_year: '' } : {}),
+      ...(name === 'college_id' ? { program_id: '', hte_id: '', hte_department_id: '' } : {}),
+      ...(name === 'program_id' ? { hte_id: '', hte_department_id: '' } : {}),
+      ...(name === 'hte_id' ? { hte_department_id: '' } : {}),
+      ...(name === 'student_id' ? { first_name: '', middle_name: '', last_name: '', year_level: '', section: '', college_id: '', program_id: '', hte_id: '', hte_department_id: '', internship_semester: '', internship_year: '' } : {}),
       [name]: type === 'checkbox' ? checked : value,
     }));
     if (name === 'student_id') setEnrollmentVerified(false);
@@ -173,11 +176,12 @@ function RegisterPage() {
         internship_semester: response.data.internship_semester || '',
         internship_year: response.data.internship_year || '',
         hte_id: '',
+        hte_department_id: '',
       }));
       setEnrollmentVerified(true);
       toast.success('Student found in the official student list.');
     } catch (error) {
-      setFormData((current) => ({ ...current, first_name: '', middle_name: '', last_name: '', year_level: '', section: '', college_id: '', program_id: '', hte_id: '', internship_semester: '', internship_year: '' }));
+      setFormData((current) => ({ ...current, first_name: '', middle_name: '', last_name: '', year_level: '', section: '', college_id: '', program_id: '', hte_id: '', hte_department_id: '', internship_semester: '', internship_year: '' }));
       toast.error(error.response?.data?.message || 'Your School No. was not found in the official student list.');
     } finally {
       setEnrollmentLoading(false);
@@ -244,6 +248,8 @@ function RegisterPage() {
   const selectedCollege = colleges.find((college) => String(college.id) === String(formData.college_id));
   const selectedProgram = programs.find((program) => String(program.id) === String(formData.program_id));
   const selectedHte = htes.find((hte) => String(hte.id) === String(formData.hte_id));
+  const availableDepartments = selectedHte?.departments || [];
+  const selectedDepartment = availableDepartments.find((department) => String(department.id) === String(formData.hte_department_id));
   const passwordStrength = getPasswordStrength(formData.password);
   const passwordRequirements = [
     { label: '8–12 characters', met: formData.password.length >= 8 && formData.password.length <= 12 },
@@ -366,8 +372,16 @@ function RegisterPage() {
                   <option value="">No preference / To be assigned</option>
                   {htes.map((hte) => <option key={hte.id} value={hte.id}>{hte.name} — {hte.address}</option>)}
                 </select>
-                <p className="mt-2 text-xs leading-5 text-slate-400">Final placement remains subject to coordinator review and HTE availability.</p>
               </Field>
+              {formData.hte_id && (
+                <Field label="Preferred Department / Unit" hint="Optional" className="sm:col-span-2">
+                  <select name="hte_department_id" value={formData.hte_department_id} onChange={handleChange} className={inputClass} disabled={!availableDepartments.length}>
+                    <option value="">{availableDepartments.length ? 'No department preference' : 'No departments available for your program'}</option>
+                    {availableDepartments.map((department) => <option key={department.id} value={department.id}>{department.department_name}</option>)}
+                  </select>
+                </Field>
+              )}
+              <p className="text-xs leading-5 text-slate-400 sm:col-span-2">These are preferences only. Your coordinator will confirm the final HTE and department based on availability.</p>
             </div>
           </>
         );
@@ -498,6 +512,7 @@ function RegisterPage() {
                   ['Program', selectedProgram?.name || 'Not selected'],
                   ['Internship term', formData.internship_semester && formData.internship_year ? `${formData.internship_semester}, ${formData.internship_year}` : 'Not selected'],
                   ['Preferred HTE', selectedHte?.name || 'To be assigned'],
+                  ['Preferred department', selectedDepartment?.department_name || 'No preference'],
                 ].map(([label, value]) => (
                   <div key={label}><dt className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</dt><dd className="mt-1 font-bold text-slate-700">{value}</dd></div>
                 ))}

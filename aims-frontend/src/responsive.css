@@ -376,12 +376,10 @@
   .coordinator-hte[data-hte-tab='moas'] > section > .overflow-x-auto > table td:nth-child(5)::before { content: 'Action'; }
 
   .portal-card-table--document-review td:nth-child(1)::before { content: 'Student'; }
-  .portal-card-table--document-review td:nth-child(2)::before { content: 'Requirement'; }
-  .portal-card-table--document-review td:nth-child(3)::before { content: 'File'; }
-  .portal-card-table--document-review td:nth-child(4)::before { content: 'Submitted'; }
-  .portal-card-table--document-review td:nth-child(5)::before { content: 'Review status'; }
-  .portal-card-table--document-review td:nth-child(6)::before { content: 'Reviewer'; }
-  .portal-card-table--document-review td:nth-child(7)::before { content: 'Actions'; }
+  .portal-card-table--document-review td:nth-child(2)::before { content: 'Submitted'; }
+  .portal-card-table--document-review td:nth-child(3)::before { content: 'Status'; }
+  .portal-card-table--document-review td:nth-child(4)::before { content: 'Reviewer'; }
+  .portal-card-table--document-review td:nth-child(5)::before { content: 'Action'; }
 
   .portal-card-table--student-monitoring td:nth-child(1)::before { content: 'Student'; }
   .portal-card-table--student-monitoring td:nth-child(2)::before { content: 'Deployment'; }

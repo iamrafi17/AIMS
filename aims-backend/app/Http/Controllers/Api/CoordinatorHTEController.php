@@ -11,15 +11,21 @@ use App\Models\HTE;
 use App\Models\HteBatchSchedule;
 use App\Models\HteDepartment;
 use App\Models\MOA;
+use App\Models\Program;
+use App\Models\ProgramOjtSetting;
+use App\Models\Role;
 use App\Models\Student;
 use App\Models\Supervisor;
 use App\Models\SystemNotification;
 use App\Models\User;
 use App\Support\HolidayCalendar;
+use App\Support\OjtCompletion;
 use App\Support\HteScheduleNormalizer;
 use App\Support\ProgramAccess;
 use App\Support\StudentRecordNormalizer;
+use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -35,7 +41,7 @@ class CoordinatorHTEController extends Controller
             ->where('hte_programs.is_active', true))
             ->with([
                 'moas' => fn ($query) => $query->where('program_id', $programId),
-                'moas.college',
+                'moas.program.college',
                 'moas.approver',
                 'schedules',
                 'batchSchedules' => fn ($query) => $query->whereHas(
@@ -49,24 +55,25 @@ class CoordinatorHTEController extends Controller
                         ->whereKey($programId)
                         ->where('hte_department_programs.is_active', true),
                 ),
-                'departments.supervisors.user:id,name,email,user_id,is_active',
+                'departments.supervisors.user:id,email,username,is_active',
             ])
             ->orderBy('name')
             ->get();
-        $moas = MOA::with(['hte', 'college', 'program', 'approver'])
+        $moas = MOA::with(['hte', 'program.college', 'approver', 'vpaaReviewer', 'approvalRecord'])
             ->where('program_id', $programId)
             ->latest('expiration_date')->get();
         $today = now()->startOfDay();
         $validMoas = $moas->filter(fn (MOA $moa) => $moa->status === 'approved' && $moa->expiration_date->gte($today));
-        $deployments = Student::with([
+        $deployments = ProgramAccess::studentQuery($request->user())->with([
             'user', 'college', 'program', 'hte', 'hteDepartment',
-            'supervisor:id,name,email', 'supervisorRecord.user:id,name,email,user_id,is_active',
+            'supervisor:id,email', 'supervisorRecord.user:id,email,username,is_active',
             'currentInternship.currentPlacement.hteProgram',
             'currentInternship.currentPlacement.departmentProgram.department',
             'currentInternship.currentPlacement.supervisor',
+            'currentInternship.preferredHte:id,name',
+            'currentInternship.preferredDepartment:id,department_name',
             'currentInternship.scheduleOverrides',
         ])
-            ->forProgram($programId)
             ->orderBy('last_name')
             ->get();
 
@@ -87,9 +94,11 @@ class CoordinatorHTEController extends Controller
                 ->get(),
             'holiday_forecast' => HolidayCalendar::forecastForProgram($programId),
             'moas' => $moas->map(fn (MOA $moa) => $this->moaPayload($moa)),
+            'programs' => Program::whereKey($programId)->get(['id', 'name', 'code', 'college_id']),
+            'ojt_settings' => ProgramOjtSetting::query()->where('program_id', $programId)
+                ->where('status', 'published')->get(['id', 'program_id', 'academic_period_id', 'required_hours', 'ojt_start_date']),
             'colleges' => College::whereKey($request->user()->college_id)->where('is_active', true)->get(['id', 'name', 'code']),
-            'batches' => AcademicSection::with('program:id,code')
-                ->where('program_id', $programId)
+            'batches' => ProgramAccess::sectionQuery($request->user())->with('program:id,code')
                 ->where('is_active', true)
                 ->newestPeriodFirst()
                 ->orderBy('year_level')
@@ -126,8 +135,7 @@ class CoordinatorHTEController extends Controller
         $programId = ProgramAccess::programId($request->user());
         ProgramAccess::authorizeHte($request->user(), $hte);
 
-        $students = Student::with(['user', 'program', 'college'])
-            ->forProgram($programId)
+        $students = ProgramAccess::studentQuery($request->user())->with(['user', 'program', 'college'])
             ->forHte($hte->id)
             ->orderBy('last_name')
             ->get();
@@ -143,7 +151,7 @@ class CoordinatorHTEController extends Controller
                         ->whereKey($programId)
                         ->where('hte_department_programs.is_active', true),
                 ),
-                'moas.college', 'moas.approver', 'departments.supervisors.user:id,name,email,user_id,is_active',
+                'moas.program.college', 'moas.approver', 'departments.supervisors.user:id,email,username,is_active',
                 'schedules',
             ])
         ));
@@ -164,7 +172,7 @@ class CoordinatorHTEController extends Controller
                     ->orWhere('address', 'like', '%'.$term.'%')
                     ->orWhere('contact_person', 'like', '%'.$term.'%');
             })
-            ->with(['departments.supervisors.user:id,name,email,user_id,is_active', 'schedules'])
+            ->with(['departments.supervisors.user:id,email,username,is_active', 'schedules'])
             ->orderBy('name')
             ->limit(20)
             ->get()
@@ -215,7 +223,7 @@ class CoordinatorHTEController extends Controller
             'message' => $existing?->is_active
                 ? 'HTE is already available to this program.'
                 : 'Existing HTE, departments, and supervisors linked to your program.',
-            'hte' => $this->htePayload($hte->fresh()->load(['departments.supervisors.user:id,name,email,user_id,is_active', 'schedules'])),
+            'hte' => $this->htePayload($hte->fresh()->load(['departments.supervisors.user:id,email,username,is_active', 'schedules'])),
         ]);
     }
 
@@ -242,7 +250,7 @@ class CoordinatorHTEController extends Controller
                 : ($supervisor->wasRecentlyCreated
                     ? 'Existing department reused and supervisor added.'
                     : 'Existing department and supervisor reused.'),
-            'department' => $department->fresh()->load('supervisors.user:id,name,email,user_id,is_active'),
+            'department' => $department->fresh()->load('supervisors.user:id,email,username,is_active'),
         ], $department->wasRecentlyCreated || $supervisor->wasRecentlyCreated ? 201 : 200);
     }
 
@@ -260,9 +268,12 @@ class CoordinatorHTEController extends Controller
         unset($validated['departments'], $validated['schedule']);
         if ($schedule) {
             $this->ensureWorkingDay($schedule['days'], 'schedule.days');
+            $this->ensureNonOverlappingDays($schedule['days'], 'schedule.days');
             foreach ($this->legacyHteScheduleKeys() as $key) {
                 unset($validated[$key]);
             }
+        } elseif (($validated['default_am_end'] ?? null) > ($validated['default_pm_start'] ?? null)) {
+            throw ValidationException::withMessages(['default_am_end' => 'AM end must be at or before PM start.']);
         }
         $hteData = $validated;
         $batchSchedule = null;
@@ -280,6 +291,7 @@ class CoordinatorHTEController extends Controller
                 ...$this->batchScheduleRules('batch_schedule.days'),
             ])['batch_schedule'];
             $this->ensureWorkingDay($batchSchedule['days'], 'batch_schedule.days');
+            $this->ensureNonOverlappingDays($batchSchedule['days'], 'batch_schedule.days');
         }
 
         $normalizedName = $this->normalizeName($hteData['name']);
@@ -335,8 +347,8 @@ class CoordinatorHTEController extends Controller
             return $hte;
         });
 
-        $hte->load(['moas.college', 'schedules', 'batchSchedules.academicSection.program', 'departments.supervisors.user']);
-        $this->hydrateHteStudents($hte, $programId);
+        $hte->load(['moas.program.college', 'schedules', 'batchSchedules.academicSection.program', 'departments.supervisors.user']);
+        $this->hydrateHteStudents($hte, $request->user());
 
         return response()->json([
             'message' => $batchSchedule ? 'HTE record and batch schedule created successfully.' : 'HTE record created successfully.',
@@ -353,9 +365,12 @@ class CoordinatorHTEController extends Controller
         unset($validated['schedule']);
         if ($schedule) {
             $this->ensureWorkingDay($schedule['days'], 'schedule.days');
+            $this->ensureNonOverlappingDays($schedule['days'], 'schedule.days');
             foreach ($this->legacyHteScheduleKeys() as $key) {
                 unset($validated[$key]);
             }
+        } elseif (($validated['default_am_end'] ?? null) > ($validated['default_pm_start'] ?? null)) {
+            throw ValidationException::withMessages(['default_am_end' => 'AM end must be at or before PM start.']);
         }
         $normalizedName = $this->normalizeName($validated['name']);
 
@@ -376,8 +391,8 @@ class CoordinatorHTEController extends Controller
             }
         });
 
-        $hte = $hte->fresh()->load(['moas.college', 'schedules']);
-        $this->hydrateHteStudents($hte, $programId);
+        $hte = $hte->fresh()->load(['moas.program.college', 'schedules']);
+        $this->hydrateHteStudents($hte, $request->user());
 
         return response()->json([
             'message' => 'HTE record updated successfully.',
@@ -441,6 +456,7 @@ class CoordinatorHTEController extends Controller
             ...$this->batchScheduleRules(),
         ]);
         $this->ensureWorkingDay($validated['days']);
+        $this->ensureNonOverlappingDays($validated['days']);
 
         DB::transaction(function () use ($hte, $academicSection, $validated): void {
             $this->persistBatchSchedule($hte, $academicSection->id, $validated['days'], (int) ($validated['grace_period_minutes'] ?? 10));
@@ -460,14 +476,23 @@ class CoordinatorHTEController extends Controller
     {
         $programId = ProgramAccess::programId($request->user());
         ProgramAccess::authorizeStudent($request->user(), $student);
+        $officialSetting = $student->academic_period_id
+            ? ProgramOjtSetting::publishedFor($programId, $student->academic_period_id)
+            : null;
         $validated = $request->validate([
             'hte_id' => ['nullable', 'exists:htes,id'],
             'hte_department_id' => ['nullable', 'exists:hte_departments,id'],
-            'supervisor_record_id' => ['nullable', 'exists:supervisors,id'],
-            'supervisor_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'supervisor')],
+            'supervisor_record_id' => ['nullable', 'exists:hte_supervisor_assignments,id'],
+            'supervisor_id' => [
+                'nullable',
+                Rule::exists('users', 'id')->where(
+                    'role_id',
+                    Role::query()->where('code', 'supervisor')->value('id'),
+                ),
+            ],
             'ojt_start_date' => ['nullable', 'date'],
-            'ojt_end_date' => ['nullable', 'date', 'after_or_equal:ojt_start_date'],
-            'required_ojt_hours' => ['required', 'numeric', 'between:1,2000'],
+            'ojt_end_date' => $officialSetting ? ['nullable', 'date'] : ['nullable', 'date', 'after_or_equal:ojt_start_date'],
+            'required_ojt_hours' => [$officialSetting && $request->input('hte_id') ? 'nullable' : 'required', 'numeric', 'between:1,2000'],
             'schedule_mode' => ['nullable', 'in:batch,custom'],
             'official_am_start' => ['nullable', 'required_if:schedule_mode,custom', 'required_without:schedule_mode', 'date_format:H:i'],
             'official_am_end' => ['nullable', 'required_if:schedule_mode,custom', 'required_without:schedule_mode', 'date_format:H:i', 'after:official_am_start'],
@@ -481,6 +506,12 @@ class CoordinatorHTEController extends Controller
         $scheduleMode = $validated['schedule_mode'] ?? 'legacy';
         unset($validated['schedule_mode']);
 
+        if ($officialSetting && $validated['hte_id']) {
+            $validated['required_ojt_hours'] = $officialSetting->required_hours;
+            $validated['ojt_start_date'] = $officialSetting->ojt_start_date->toDateString();
+            $validated['ojt_end_date'] = null;
+        }
+
         if (in_array($scheduleMode, ['custom', 'legacy'], true)) {
             $scheduleErrors = [];
             if (($validated['official_am_end'] ?? '00:00') >= '13:00') {
@@ -488,6 +519,9 @@ class CoordinatorHTEController extends Controller
             }
             if (($validated['official_pm_start'] ?? '23:59') < '12:00') {
                 $scheduleErrors['official_pm_start'] = ['PM Start must be 12:00 PM or later.'];
+            }
+            if (($validated['official_am_end'] ?? null) > ($validated['official_pm_start'] ?? null)) {
+                $scheduleErrors['official_am_end'] = ['AM end must be at or before PM start.'];
             }
             if ($scheduleErrors) {
                 throw ValidationException::withMessages($scheduleErrors);
@@ -517,6 +551,7 @@ class CoordinatorHTEController extends Controller
         $supervisorRecord = isset($validated['supervisor_record_id'])
             ? Supervisor::whereKey($validated['supervisor_record_id'])
                 ->where('hte_department_id', $department?->id)
+                ->where('is_active', true)
                 ->first()
             : null;
         if (($validated['supervisor_record_id'] ?? null) && ! $supervisorRecord) {
@@ -576,7 +611,7 @@ class CoordinatorHTEController extends Controller
                 $student->id,
                 $request->user()->id,
             );
-            User::query()->where('role', 'program_head')->where('is_active', true)->where('program_id', $programId)->pluck('id')
+            User::query()->forRole('program_head')->where('is_active', true)->forAssignedProgram($programId)->pluck('id')
                 ->each(fn (int $userId) => SystemNotification::sendToUser($userId, 'Deployment request submitted', $student->student_id.' deployment is ready for Program Head review.', 'approval', '/program-head/reports'));
         } else {
             $student->placementAssignedBy = $request->user()->id;
@@ -602,10 +637,17 @@ class CoordinatorHTEController extends Controller
             'message' => $validated['hte_id'] ? 'Student deployment and schedule updated.' : 'Student undeployed successfully.',
             'student' => $student->fresh()->load([
                 'user', 'college', 'program', 'hte', 'hteDepartment',
-                'supervisor:id,name,email', 'supervisorRecord.user:id,name,email,user_id,is_active',
+                'supervisor:id,email', 'supervisorRecord.user:id,email,username,is_active',
                 'currentInternship.scheduleOverrides',
             ]),
         ]);
+    }
+
+    public function completion(Request $request, Student $student)
+    {
+        ProgramAccess::authorizeStudent($request->user(), $student);
+
+        return response()->json(['completion' => OjtCompletion::forStudent($student)]);
     }
 
     public function storeHoliday(Request $request)
@@ -658,43 +700,71 @@ class CoordinatorHTEController extends Controller
         $programId = ProgramAccess::programId($request->user());
         $validated = $request->validate([
             'hte_id' => ['required', Rule::exists('hte_programs', 'hte_id')->where(fn ($query) => $query->where('program_id', $programId)->where('is_active', true))],
+            'program_id' => ['required', 'integer', Rule::in([$programId])],
             'effective_date' => ['required', 'date'],
             'expiration_date' => ['required', 'date', 'after:effective_date'],
             'file' => ['required', 'file', 'mimes:pdf', 'max:10240'],
         ]);
+        if (MOA::query()->where('hte_id', $validated['hte_id'])
+            ->where('program_id', $programId)
+            ->where('expiration_date', '>=', today())
+            ->where(function ($query) {
+                $query->where('status', 'approved')
+                    ->orWhere(fn ($pending) => $pending->where('status', 'pending')->whereIn('program_status', ['pending', 'endorsed']));
+            })->exists()) {
+            throw ValidationException::withMessages(['hte_id' => 'An MOA for this HTE and program is already active or under review.']);
+        }
         $path = $request->file('file')->store('moas', 'local');
 
         $moa = MOA::create([
             ...collect($validated)->except('file')->all(),
-            'college_id' => $request->user()->college_id,
             'program_id' => $programId,
             'file_path' => $path,
             'status' => 'pending',
+            'program_status' => 'pending',
         ]);
 
         return response()->json([
-            'message' => 'MOA uploaded and submitted for approval.',
-            'moa' => $this->moaPayload($moa->load(['hte', 'college', 'approver'])),
+            'message' => 'MOA uploaded and sent to the Program Head for review.',
+            'moa' => $this->moaPayload($moa->load(['hte', 'program.college', 'approver'])),
         ], 201);
     }
 
     public function updateMoa(Request $request, MOA $moa)
     {
         ProgramAccess::authorizeMoa($request->user(), $moa);
+        $returned = $moa->status === 'returned' || $moa->program_status === 'returned';
+        $unreviewed = $moa->status === 'pending' && $moa->program_status === 'pending' && ! $moa->program_reviewed_at;
+        if (! $returned && ! $unreviewed) {
+            return response()->json(['message' => 'MOA under review or already approved cannot be edited.'], 422);
+        }
         $validated = $request->validate([
             'effective_date' => ['required', 'date'],
             'expiration_date' => ['required', 'date', 'after:effective_date'],
+            'file' => ['nullable', 'file', 'mimes:pdf', 'max:10240'],
         ]);
+        $path = $request->hasFile('file') ? $request->file('file')->store('moas', 'local') : $moa->file_path;
         $moa->update([
-            ...$validated,
+            'effective_date' => $validated['effective_date'],
+            'expiration_date' => $validated['expiration_date'],
+            'file_path' => $path,
             'status' => 'pending',
+            'program_status' => 'pending',
+            'program_feedback' => null,
+            'program_reviewed_by' => null,
+            'program_reviewed_at' => null,
+            'dean_endorsed_by' => null,
+            'dean_endorsed_at' => null,
+            'dean_remarks' => null,
             'approved_by' => null,
             'approved_at' => null,
+            'vpaa_reviewed_by' => null,
+            'vpaa_reviewed_at' => null,
         ]);
 
         return response()->json([
-            'message' => 'MOA details updated and returned to pending approval.',
-            'moa' => $this->moaPayload($moa->fresh()->load(['hte', 'college', 'approver'])),
+            'message' => $returned ? 'MOA revised and resubmitted to the Program Head.' : 'MOA details updated and returned to pending approval.',
+            'moa' => $this->moaPayload($moa->fresh()->load(['hte', 'program.college', 'approver'])),
         ]);
     }
 
@@ -712,6 +782,20 @@ class CoordinatorHTEController extends Controller
         $hteName = Str::slug($moa->hte?->name ?? 'agreement') ?: 'agreement';
 
         return $this->privateDisk()->download($path, "MOA-{$hteName}-{$moa->id}.pdf");
+    }
+
+    public function destroyMoa(Request $request, MOA $moa)
+    {
+        ProgramAccess::authorizeMoa($request->user(), $moa);
+
+        if ($moa->status !== 'pending' || $moa->program_status !== 'pending'
+            || $moa->program_reviewed_at !== null || $moa->approved_at !== null) {
+            return response()->json(['message' => 'Reviewed or approved MOAs cannot be deleted.'], 422);
+        }
+
+        $moa->delete();
+
+        return response()->json(['message' => 'Pending MOA deleted.']);
     }
 
     private function hteRules(Request $request, ?HTE $hte = null): array
@@ -797,6 +881,18 @@ class CoordinatorHTEController extends Controller
         }
     }
 
+    private function ensureNonOverlappingDays(array $days, string $field = 'days'): void
+    {
+        foreach ($days as $day => $schedule) {
+            if (($schedule['is_working'] ?? false)
+                && ($schedule['am_end'] ?? null) > ($schedule['pm_start'] ?? null)) {
+                throw ValidationException::withMessages([
+                    "{$field}.{$day}.am_end" => 'AM end must be at or before PM start.',
+                ]);
+            }
+        }
+    }
+
     private function persistBatchSchedule(HTE $hte, int $academicSectionId, array $days, int $gracePeriodMinutes): void
     {
         foreach ($this->weekdays() as $day) {
@@ -841,13 +937,22 @@ class CoordinatorHTEController extends Controller
 
         $this->linkDepartmentToProgram($department->id, $programId, $linkedBy);
 
-        $supervisor = Supervisor::firstOrCreate(
-            [
+        $supervisor = Supervisor::where('hte_department_id', $department->id)
+            ->with('supervisorProfile')
+            ->get()
+            ->first(fn (Supervisor $assignment) => $assignment->normalized_name === $this->normalizeName($supervisorName));
+
+        if ($supervisor) {
+            if (! $supervisor->is_active) {
+                $supervisor->update(['is_active' => true]);
+            }
+        } else {
+            $supervisor = Supervisor::create([
                 'hte_department_id' => $department->id,
-                'normalized_name' => $this->normalizeName($supervisorName),
-            ],
-            ['full_name' => $supervisorName],
-        );
+                'full_name' => $supervisorName,
+                'is_active' => true,
+            ]);
+        }
 
         return [$department, $supervisor];
     }
@@ -885,10 +990,9 @@ class CoordinatorHTEController extends Controller
         ];
     }
 
-    private function hydrateHteStudents(HTE $hte, int $programId): void
+    private function hydrateHteStudents(HTE $hte, User $user): void
     {
-        $students = Student::with(['user', 'program', 'college'])
-            ->forProgram($programId)
+        $students = ProgramAccess::studentQuery($user)->with(['user', 'program', 'college'])
             ->forHte($hte->id)
             ->orderBy('last_name')
             ->get();
@@ -945,9 +1049,12 @@ class CoordinatorHTEController extends Controller
         ];
     }
 
-    private function batchSchedulePayload(HTE $hte, AcademicSection $batch, $scheduleRows): array
+    /**
+     * @param Collection<int, HteBatchSchedule> $scheduleRows
+     */
+    private function batchSchedulePayload(HTE $hte, AcademicSection $batch, Collection $scheduleRows): array
     {
-        $rows = collect($scheduleRows)->keyBy('day_of_week');
+        $rows = $scheduleRows->keyBy('day_of_week');
         $hteRows = ($hte->relationLoaded('schedules') ? $hte->schedules : $hte->schedules()->get())
             ->keyBy('day_of_week');
 
@@ -966,6 +1073,7 @@ class CoordinatorHTEController extends Controller
             ),
             'has_saved_schedule' => $rows->isNotEmpty(),
             'days' => collect($this->weekdays())->mapWithKeys(function (string $day) use ($rows, $hteRows): array {
+                /** @var HteBatchSchedule|null $row */
                 $row = $rows->get($day);
                 $hteRow = $hteRows->get($day);
 
@@ -1013,7 +1121,7 @@ class CoordinatorHTEController extends Controller
         return ['default_am_start', 'default_am_end', 'default_pm_start', 'default_pm_end', 'work_days'];
     }
 
-    private function shortTime($value, ?string $fallback = null): ?string
+    private function shortTime(?string $value, ?string $fallback = null): ?string
     {
         return $value ? substr((string) $value, 0, 5) : $fallback;
     }
@@ -1024,12 +1132,17 @@ class CoordinatorHTEController extends Controller
 
         return [
             ...$moa->toArray(),
+            'dean_approved_by' => $moa->approver?->role === 'dean' ? $moa->approver->name : null,
+            'dean_approved_at' => $moa->approver?->role === 'dean' ? $moa->approved_at?->toIso8601String() : null,
+            'vpaa_reviewed_by' => $moa->vpaaReviewer?->name,
+            'remarks' => $moa->program_status === 'pending' ? null : $moa->approvalRecord?->remarks,
             'computed_status' => $expired ? 'expired' : $moa->status,
+            'validity' => $expired ? 'expired' : ($moa->effective_date->gt(today()) ? 'upcoming' : ($moa->expiration_date->lte(today()->addDays(60)) ? 'expiring soon' : 'valid')),
             'days_remaining' => (int) now()->startOfDay()->diffInDays($moa->expiration_date, false),
         ];
     }
 
-    private function moaAlert(MOA $moa, $today): array
+    private function moaAlert(MOA $moa, CarbonInterface $today): array
     {
         $days = (int) $today->diffInDays($moa->expiration_date, false);
 

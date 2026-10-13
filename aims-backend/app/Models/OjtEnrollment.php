@@ -8,6 +8,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OjtEnrollment extends Model
 {
+    private const IMPORT_SNAPSHOT_COLUMNS = [
+        'school_id',
+        'full_name',
+        'source',
+    ];
+
     private const DERIVED_CONTEXT_ATTRIBUTES = [
         'section', 'college_id', 'program_id', 'academic_period_id',
     ];
@@ -43,6 +49,10 @@ class OjtEnrollment extends Model
     protected static function booted(): void
     {
         static::saving(function (OjtEnrollment $enrollment): void {
+            if ($enrollment->exists && $enrollment->isDirty(self::IMPORT_SNAPSHOT_COLUMNS)) {
+                throw new \LogicException('Imported enrollment identity fields are immutable snapshots.');
+            }
+
             if (! $enrollment->academic_section_id) {
                 throw new \LogicException('An OJT enrollment requires an academic section.');
             }
@@ -65,9 +75,20 @@ class OjtEnrollment extends Model
                     throw new \LogicException("The enrollment {$key} does not match its academic section.");
                 }
             }
+
+            if ($enrollment->student_record_id) {
+                $student = Student::find($enrollment->student_record_id);
+                if (! $student || strcasecmp(trim($enrollment->school_id), trim($student->student_id)) !== 0) {
+                    throw new \LogicException('The enrollment school ID does not match the linked student record.');
+                }
+            }
         });
 
         static::saved(function (OjtEnrollment $enrollment): void {
+            if ($enrollment->student_record_id) {
+                Student::syncAcademicForeignKeysFor($enrollment->student_record_id);
+            }
+
             $enrollment->contextInput = [];
             foreach (['academicSection', 'program', 'academicPeriod'] as $relation) {
                 $enrollment->unsetRelation($relation);

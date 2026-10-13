@@ -129,11 +129,6 @@ class HTE extends Model
         return $this->hasMany(HteDepartment::class, 'hte_id');
     }
 
-    public function colleges()
-    {
-        return $this->belongsToMany(College::class, 'moas', 'hte_id', 'college_id');
-    }
-
     public function moas()
     {
         return $this->hasMany(MOA::class, 'hte_id');

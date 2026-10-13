@@ -1221,6 +1221,10 @@ html:not(.dark) {
   letter-spacing: -0.018em;
 }
 
+.dashboard-shell main .dean-dashboard-header h1 {
+  color: #fff;
+}
+
 .dashboard-shell .font-black {
   font-weight: 700;
 }
@@ -1356,6 +1360,16 @@ html:not(.dark) {
   width: 100%;
   max-width: 1480px;
   margin-inline: auto;
+}
+
+/* Keep the Dean dashboard and its header beside the docked navigation on wide screens. */
+.dashboard-shell main > .portal-page:has(> .dean-dashboard-page) {
+  max-width: none;
+  margin-inline: 0;
+}
+
+.dashboard-shell:has(.dean-dashboard-page) .portal-header-inner {
+  max-width: none;
 }
 
 .dark .portal-header {

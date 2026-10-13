@@ -6,6 +6,7 @@ use Dompdf\Dompdf;
 use Dompdf\Options;
 use Illuminate\Http\Response;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Common\Entity\Style\Style;
@@ -32,7 +33,7 @@ class ReportExportService
             'travel_monitoring' => [
                 'title' => 'Travel Monitoring Report',
                 'source' => 'travel',
-                'headers' => ['Travel Reference', 'Travel Date', 'Program', 'HTE / Destination', 'Students Involved', 'Departure', 'Arrival', 'Route / Checkpoints', 'Photo Evidence', 'Coordinator Remarks', 'Program Head Review', 'VPAA Validation', 'Report Status'],
+                'headers' => ['Travel Reference', 'Travel Date', 'Program', 'HTE / Destination', 'Students Involved', 'Departure', 'Arrival', 'Route / Checkpoints', 'Photo Evidence', 'Coordinator Remarks', 'Program Head Review', 'Final Validation', 'Report Status'],
                 'fields' => ['id', 'date', 'program', 'destination', 'participants', 'departureTime', 'arrivalTime', 'checkpointSummary', 'photoEvidence', 'coordinatorRemarks', 'programHeadReview', 'vpaaValidation', 'reportStatus'],
             ],
         ];
@@ -109,12 +110,12 @@ class ReportExportService
         $compliance = $data['compliance'] ?? [];
         if ($report === 'hte_deployment_validation') {
             $title = 'HTE Deployment Validation Report';
-            $headers = ['Deployment Batch', 'Program', 'HTE', 'School Number', 'Student', 'Proposed Date', 'Working Schedule', 'Coordinator Submission', 'Program Head Review', 'Program Head Remarks', 'VPAA Validation', 'Final Deployment Status'];
+            $headers = ['Deployment Batch', 'Program', 'HTE', 'School Number', 'Student', 'Proposed Date', 'Working Schedule', 'Coordinator Submission', 'Program Head Review', 'Program Head Remarks', 'Final Validation', 'Final Deployment Status'];
             $fields = ['batch', 'program', 'hte', 'student_id', 'student', 'proposed_date', 'working_schedule', 'coordinator_submission', 'program_head_review', 'program_head_remarks', 'vpaa_validation', 'deployment_status'];
             $rows = collect($data['deployment_validations'] ?? [])->map(fn (array $row) => $this->row($row, $fields))->all();
         } elseif ($report === 'travel_monitoring_validation') {
             $title = 'Travel Monitoring Validation Report';
-            $headers = ['Travel Reference', 'Program', 'HTE / Destination', 'Students', 'Travel Date', 'Departure / Arrival', 'Route / Checkpoints', 'Photo Evidence', 'Coordinator Submission', 'Program Head Review', 'Program Head Remarks', 'VPAA Validation', 'Approval Status'];
+            $headers = ['Travel Reference', 'Program', 'HTE / Destination', 'Students', 'Travel Date', 'Departure / Arrival', 'Route / Checkpoints', 'Photo Evidence', 'Coordinator Submission', 'Program Head Review', 'Program Head Remarks', 'Final Validation', 'Approval Status'];
             $fields = ['reference', 'program', 'destination', 'students', 'travel_date', 'departure_arrival', 'route_checkpoints', 'photo_evidence', 'coordinator_submission', 'program_head_review', 'program_head_remarks', 'vpaa_validation', 'approval_status'];
             $rows = collect($data['travel_validations'] ?? [])->map(fn (array $row) => $this->row($row, $fields))->all();
         } else {
@@ -189,15 +190,15 @@ class ReportExportService
     private function xlsx(array $dataset, string $filename): BinaryFileResponse
     {
         $path = $this->temporaryPath('xlsx');
-        $writer = new Writer();
+        $writer = new Writer;
         $writer->openToFile($path);
         $sheet = $writer->getCurrentSheet();
         $sheet->setName(Str::limit($dataset['sheet_name'], 31, ''));
 
-        $titleStyle = (new Style())->setFontBold()->setFontSize(16)->setFontColor('FFFFFF')->setBackgroundColor('690016');
-        $sectionStyle = (new Style())->setFontBold()->setFontColor('690016')->setBackgroundColor('F7E8EC');
-        $headerStyle = (new Style())->setFontBold()->setFontColor('FFFFFF')->setBackgroundColor('7D001D');
-        $metadataStyle = (new Style())->setFontColor('475569');
+        $titleStyle = (new Style)->setFontBold()->setFontSize(16)->setFontColor('FFFFFF')->setBackgroundColor('690016');
+        $sectionStyle = (new Style)->setFontBold()->setFontColor('690016')->setBackgroundColor('F7E8EC');
+        $headerStyle = (new Style)->setFontBold()->setFontColor('FFFFFF')->setBackgroundColor('7D001D');
+        $metadataStyle = (new Style)->setFontColor('475569');
 
         $writer->addRow(Row::fromValues([$dataset['title']], $titleStyle));
         $writer->addRow(Row::fromValues([$dataset['subtitle']], $metadataStyle));
@@ -226,7 +227,7 @@ class ReportExportService
 
     private function pdf(array $dataset, string $filename): Response
     {
-        $options = new Options();
+        $options = new Options;
         $options->set('defaultFont', 'DejaVu Sans');
         $options->set('isRemoteEnabled', false);
         $dompdf = new Dompdf($options);
@@ -271,7 +272,7 @@ class ReportExportService
         })->all();
     }
 
-    private function coordinatorDeploymentGroups(array $students): \Illuminate\Support\Collection
+    private function coordinatorDeploymentGroups(array $students): Collection
     {
         return collect($students)
             ->filter(fn (array $student) => ($student['hte'] ?? 'Not assigned') !== 'Not assigned')

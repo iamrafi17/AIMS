@@ -5,8 +5,8 @@
 | Product | Academic Internship Monitoring System (AIMS) |
 | Institution | Marinduque State University - Santa Cruz Campus |
 | Document status | Draft for stakeholder review |
-| Version | 3.1 |
-| Date | September 1, 2026 |
+| Version | 3.4 |
+| Date | October 13, 2026 |
 | Basis | Direct inspection of the AIMS Laravel backend (routes, models, migrations, controllers) and React frontend (pages, routes, services, components) |
 | Stack | Laravel 12 + Sanctum API backend; React (Vite) + React Router + Tailwind + Recharts + Leaflet frontend; MySQL/MariaDB-compatible schema |
 | Product owner | To be assigned by the University |
@@ -15,6 +15,9 @@
 
 | Version | Date | Summary |
 |---|---|---|
+| 3.4 | October 13, 2026 | MOA workflow: Coordinator upload, Program Head review and endorsement, Dean final approval or return, then VPAA review acknowledgment without approval or rejection. |
+| 3.3 | October 12, 2026 | Student requirements remain individually uploaded and reviewed in per-student folders by the Coordinator and Program Head. Program Head folder endorsement now goes to the college Dean for final approval; the VPAA receives Dean-approved folders for review acknowledgment. |
+| 3.2 | October 9, 2026 | Added a college-scoped Dean role. MOA, deployment, and travel-report final decisions move from the VPAA to the Dean of the relevant college. The Dean gains a live map of actively timed-in interns in the assigned college. |
 | 2.0 | August 10, 2026 | Repository-derived baseline covering the six-role internship lifecycle. |
 | 2.1 | August 15, 2026 | Documented the revised student-controlled travel and multi-stage report-validation workflow, workday-aware attendance behavior, student academic assignments in Admin User Management, configurable server-side page sizing, login readability/branding fixes, and related dashboard, notification, audit, schema, and automated-test updates. Corrected the backend framework version to Laravel 12. |
 | 2.2 | August 15, 2026 | Added HTE batch schedule configuration by Academic Section, reusable common schedule tools for selected days, and a final editable Monday-to-Sunday schedule with program-scoped persistence and validation. |
@@ -230,7 +233,15 @@ Backend: `SupervisorDashboardController`, `SupervisorManagementController`. Fron
 | SUP-04 | P0 | Supervisors shall create/update evaluations (`POST /supervisor/evaluations`, `evaluations` table) of type `midterm` or `final`, rating 6 criteria (work quality, communication, professionalism, attendance, technical skills, teamwork) on a 1-5 scale, plus recommendations/feedback, saved as `draft`, `submitted`, or `finalized`. |
 | SUP-05 | P0 | `GET /supervisor/dashboard` shall summarize assigned interns, tasks, pending attendance reviews, and evaluation counts (midterm/final remaining). |
 
-### 8.6 VPAA approvals and communications
+### 8.6 Current Dean final approval and VPAA oversight
+
+This section supersedes older VPAA final-approval statements below for MOAs, deployments, travel reports, and student document folders. After Program Head endorsement, the Dean assigned to the subject's college makes the final decision. Student files remain individually uploaded and reviewed in one folder per student. A complete Program Head-endorsed folder enters `for_dean_review`; Dean approval sends it to VPAA as `for_review`, where VPAA can only mark it `reviewed`. Dean returns require remarks and allow Program Head re-endorsement. The Dean may view only that college's requests and active live locations. Returned travel reports become editable drafts for a new version. VPAA may view university-wide MOA, deployment, and travel records but cannot submit those final decisions. Historical VPAA folder final decisions remain attributed to their original reviewer.
+
+For MOAs, the Coordinator uploads a PDF for one HTE and program. The Program Head reviews it and either endorses it to the Dean or returns it to the Coordinator. The Dean gives final approval or returns it with remarks. Dean-approved MOAs enter the VPAA review queue; `POST /vpaa/moas/{approval}/review` records acknowledgment and reviewer details without changing the Dean's final decision. The Coordinator may edit an unreviewed pending or returned MOA; a returned edit resubmits it to the Program Head. Previously completed VPAA final decisions remain in history.
+
+Dean API: `GET /dean/dashboard`, `GET /dean/live-locations`, `GET|PUT /dean/approvals`, `GET|PUT /dean/moas`, and `GET|PUT /dean/travel` with the corresponding record paths. The Admin must assign a college when creating a Dean account. Live map locations are returned only for active timed-in sessions with a location captured within the last 60 seconds; the screen refreshes every 15 seconds.
+
+### 8.6.1 Historical VPAA approval specification
 
 Backend: `VPAADashboardController`, `VPAAApprovalController`, `VPAAMOAController`, `AnnouncementController`, `ProgramHeadTravelController` (shared). Frontend: `pages/vpaa/{Dashboard, Approvals, MOAApproval, Reports, Announcements}`.
 

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -15,8 +16,9 @@ class ProfileAvatarTest extends TestCase
 
     public function test_authenticated_user_can_upload_and_remove_a_profile_photo(): void
     {
-        Storage::fake('public');
-        $user = User::factory()->create();
+        /** @var FilesystemAdapter $publicDisk */
+        $publicDisk = Storage::fake('public');
+        $user = User::factory()->create(['role' => 'admin']);
         Sanctum::actingAs($user);
 
         $response = $this->postJson('/api/profile/avatar', [
@@ -28,14 +30,14 @@ class ProfileAvatarTest extends TestCase
             ->assertJsonPath('message', 'Profile photo updated successfully.');
 
         $path = $response->json('avatar');
-        Storage::disk('public')->assertExists($path);
+        $publicDisk->assertExists($path);
         $this->assertNotNull($user->fresh()->avatar);
 
         $this->deleteJson('/api/profile/avatar')
             ->assertOk()
             ->assertJsonPath('avatar', null);
 
-        Storage::disk('public')->assertMissing($path);
+        $publicDisk->assertMissing($path);
         $this->assertNull($user->fresh()->avatar);
     }
 }

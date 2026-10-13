@@ -7,12 +7,14 @@ use App\Models\Holiday;
 use App\Models\HTE;
 use App\Models\InternshipRequirement;
 use App\Models\MOA;
+use App\Models\OjtEnrollment;
 use App\Models\Program;
 use App\Models\Student;
 use App\Models\TravelCheckpoint;
 use App\Models\TravelLog;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 final class ProgramAccess
 {
@@ -24,38 +26,77 @@ final class ProgramAccess
             'This account does not have program-scoped access.'
         );
 
+        $programId = $user->normalizedProgramId();
+        $collegeId = $user->normalizedCollegeId();
+
         abort_unless(
-            $user->college_id && $user->program_id,
+            $collegeId && $programId,
             403,
             'No academic program is assigned to this account. Ask an administrator to assign a college and program.'
         );
 
         $validAssignment = Program::query()
-            ->whereKey($user->program_id)
-            ->where('college_id', $user->college_id)
+            ->whereKey($programId)
+            ->where('college_id', $collegeId)
             ->exists();
 
         abort_unless($validAssignment, 403, 'The academic program assignment for this account is invalid.');
 
-        return (int) $user->program_id;
+        return $programId;
     }
 
     public static function studentQuery(User $user): Builder
     {
         $programId = self::programId($user);
+        $query = Student::query()->forProgram($programId);
+        return $user->role === 'coordinator'
+            ? $query->whereHas('currentInternship', fn (Builder $internship) => $internship->whereIn('student_internships.academic_section_id', self::sectionIds($user)))
+            : $query;
+    }
 
-        return Student::query()->forProgram($programId);
+    public static function sectionIds(User $user): array
+    {
+        $programId = self::programId($user);
+        return DB::table('coordinator_section_assignments as assignments')
+            ->join('academic_sections as sections', 'sections.id', '=', 'assignments.academic_section_id')
+            ->where('assignments.coordinator_id', $user->id)
+            ->where('sections.program_id', $programId)
+            ->where('sections.is_active', true)
+            ->pluck('sections.id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    public static function sectionQuery(User $user): Builder
+    {
+        $programId = self::programId($user);
+        $query = \App\Models\AcademicSection::query()->where('program_id', $programId);
+        return $user->role === 'coordinator' ? $query->whereIn('id', self::sectionIds($user)) : $query;
+    }
+
+    public static function enrollmentQuery(User $user): Builder
+    {
+        $query = OjtEnrollment::query()->forProgram(self::programId($user));
+        return $user->role === 'coordinator'
+            ? $query->whereIn('academic_section_id', self::sectionIds($user)) : $query;
+    }
+
+    public static function authorizeSection(User $user, int $sectionId): void
+    {
+        abort_unless(in_array($sectionId, self::sectionIds($user), true), 404);
     }
 
     public static function authorizeStudent(User $user, Student $student): void
     {
         abort_unless((int) $student->program_id === self::programId($user), 404);
+        if ($user->role === 'coordinator') {
+            abort_unless(self::studentQuery($user)->whereKey($student->id)->exists(), 404);
+        }
     }
 
     public static function authorizeAttendance(User $user, Attendance $attendance): void
     {
         $attendance->loadMissing('student');
-        abort_unless((int) $attendance->student?->program_id === self::programId($user), 404);
+        abort_unless($attendance->student, 404);
+        self::authorizeStudent($user, $attendance->student);
     }
 
     public static function authorizeRequirement(User $user, InternshipRequirement $requirement): void

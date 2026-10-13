@@ -137,6 +137,10 @@ class AcademicPeriodManagementTest extends TestCase
         $program = Program::create(['college_id' => $college->id, 'name' => 'Information Systems', 'code' => 'BSIS']);
         $section = AcademicSection::create(['program_id' => $program->id, 'name' => '4A', 'year_level' => 4, 'academic_year' => '2026-2027']);
         $coordinator = User::factory()->create(['role' => 'coordinator', 'college_id' => $college->id, 'program_id' => $program->id]);
+        \Illuminate\Support\Facades\DB::table('coordinator_section_assignments')->insert([
+            'academic_section_id' => $section->id, 'coordinator_id' => $coordinator->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
         Sanctum::actingAs($coordinator);
         $enrollmentId = $this->postJson('/api/coordinator/students', [
             'school_id' => 'PERIOD-001', 'full_name' => 'Student Period', 'academic_section_id' => $section->id,

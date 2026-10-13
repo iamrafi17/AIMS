@@ -70,5 +70,4 @@ class TravelLog extends Model
     {
         return $this->hasOne(TravelReport::class);
     }
-
 }

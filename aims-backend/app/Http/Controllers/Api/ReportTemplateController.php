@@ -29,7 +29,7 @@ class ReportTemplateController extends Controller
         $user = $request->user();
         $reportTypes = ReportTemplateService::reportTypesForRole($user->role);
         $query = ReportTemplate::query()
-            ->with(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name'])
+            ->with(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id'])
             ->whereIn('report_type', [...array_keys($reportTypes), ReportTemplateService::SHARED_REPORT_TYPE]);
 
         if ($user->role === 'coordinator') {
@@ -70,7 +70,7 @@ class ReportTemplateController extends Controller
             'description' => ['nullable', 'string', 'max:2000'],
             'activate' => ['sometimes', 'boolean'],
             'file' => [
-                'required', 'file', 'max:10240',
+                'required', 'file', 'max:15360',
                 function (string $attribute, mixed $value, \Closure $fail) {
                     if (strtolower((string) $value->getClientOriginalExtension()) !== 'docx') {
                         $fail('Only DOCX report templates are allowed.');
@@ -144,7 +144,7 @@ class ReportTemplateController extends Controller
                 : ($inspection['is_valid']
                     ? 'Template uploaded and validated successfully. Preview and activate it before use.'
                     : 'Template uploaded, but validation found issues that must be corrected before activation.'),
-            'template' => $this->resource($template->fresh(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name'])),
+            'template' => $this->resource($template->fresh(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id'])),
         ], 201);
     }
 
@@ -162,7 +162,7 @@ class ReportTemplateController extends Controller
         return response()->json([
             'message' => $inspection['is_valid'] ? 'Template validation passed.' : 'Template validation failed.',
             'validation' => $inspection,
-            'template' => $this->resource($reportTemplate->fresh(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name'])),
+            'template' => $this->resource($reportTemplate->fresh(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id'])),
         ], $inspection['is_valid'] ? 200 : 422);
     }
 
@@ -174,7 +174,7 @@ class ReportTemplateController extends Controller
         $bindingSet = $this->datasets->bindings($dataset, $reportTemplate->academic_year, $reportTemplate->semester);
 
         return response()->json([
-            'template' => $this->resource($reportTemplate->loadMissing(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name'])),
+            'template' => $this->resource($reportTemplate->loadMissing(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id'])),
             'html' => $this->templates->renderHtml(
                 Storage::disk('local')->path($reportTemplate->file_path),
                 $bindingSet['values'], $bindingSet['rows'], $bindingSet['headers'], $bindingSet['summary'],
@@ -198,7 +198,7 @@ class ReportTemplateController extends Controller
             'message' => $replaced
                 ? 'New template activated. The previous template has been marked as inactive.'
                 : ReportTemplateService::label($reportTemplate->report_type).' template is now active.',
-            'template' => $this->resource($reportTemplate->fresh(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name'])),
+            'template' => $this->resource($reportTemplate->fresh(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id'])),
         ]);
     }
 
@@ -207,7 +207,7 @@ class ReportTemplateController extends Controller
         $this->authorizeManage($request, $reportTemplate);
         $reportTemplate->update(['is_active' => false, 'active_key' => null, 'deactivated_at' => now()]);
 
-        return response()->json(['message' => 'Template deactivated successfully.', 'template' => $this->resource($reportTemplate->fresh(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name']))]);
+        return response()->json(['message' => 'Template deactivated successfully.', 'template' => $this->resource($reportTemplate->fresh(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id']))]);
     }
 
     public function download(Request $request, ReportTemplate $reportTemplate)
@@ -215,7 +215,7 @@ class ReportTemplateController extends Controller
         $this->authorizeView($request, $reportTemplate);
         $this->ensureFileExists($reportTemplate);
 
-        return Storage::disk('local')->download($reportTemplate->file_path, $reportTemplate->original_filename);
+        return $this->privateDisk()->download($reportTemplate->file_path, $reportTemplate->original_filename);
     }
 
     public function destroy(Request $request, ReportTemplate $reportTemplate)
@@ -245,7 +245,7 @@ class ReportTemplateController extends Controller
         );
 
         return response()->json([
-            'template' => $this->resource($template->loadMissing(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id,name'])),
+            'template' => $this->resource($template->loadMissing(['program:id,name,code', 'academicPeriod:id,academic_year,semester', 'uploader:id'])),
             'html' => $this->templates->renderHtml(
                 Storage::disk('local')->path($template->file_path),
                 $bindings['values'],
@@ -285,7 +285,7 @@ class ReportTemplateController extends Controller
         abort_unless(in_array($user->role, ['coordinator', 'program_head', 'vpaa', 'admin'], true), 403);
         abort_unless(Storage::disk('local')->exists($generatedReport->file_path), 404, 'The generated report file is no longer available.');
 
-        return Storage::disk('local')->download($generatedReport->file_path, $generatedReport->filename);
+        return $this->privateDisk()->download($generatedReport->file_path, $generatedReport->filename);
     }
 
     private function activeTemplate(Request $request): array

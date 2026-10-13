@@ -1,8 +1,8 @@
 <?php
 
 use App\Http\Middleware\CheckRole;
-use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\EnsureStaffSecuritySetupComplete;
+use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\RecordActivityLog;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;

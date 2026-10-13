@@ -7,6 +7,9 @@ use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class Student extends Model
 {
@@ -85,7 +88,44 @@ class Student extends Model
 
     protected static function booted(): void
     {
-        static::saved(fn (Student $student) => StudentRecordNormalizer::sync($student));
+        static::saved(function (Student $student): void {
+            StudentRecordNormalizer::sync($student);
+
+            self::syncAcademicForeignKeysFor($student->id);
+
+            User::query()->forRole('student')->whereKey($student->user_id)
+                ->update(['username' => $student->student_id]);
+            $student->unsetRelation('user');
+        });
+    }
+
+    public static function syncAcademicForeignKeysFor(int $studentId): void
+    {
+        if (! Schema::hasColumns('students', ['college_id', 'program_id'])) {
+            return;
+        }
+
+        $sectionId = StudentInternship::query()
+            ->where('student_id', $studentId)
+            ->where('is_current', true)
+            ->latest('id')
+            ->value('academic_section_id');
+
+        $sectionId ??= OjtEnrollment::query()
+            ->where('student_record_id', $studentId)
+            ->latest('registered_at')
+            ->latest('id')
+            ->value('academic_section_id');
+
+        $program = $sectionId ? DB::table('academic_sections')
+            ->join('programs', 'programs.id', '=', 'academic_sections.program_id')
+            ->where('academic_sections.id', $sectionId)
+            ->first(['programs.id', 'programs.college_id']) : null;
+
+        DB::table('students')->where('id', $studentId)->update([
+            'program_id' => $program?->id,
+            'college_id' => $program?->college_id,
+        ]);
     }
 
     public function attributesToArray(): array
@@ -222,7 +262,7 @@ class Student extends Model
         return $this->contextCache[$key];
     }
 
-    private function scheduleContext($internship): array
+    private function scheduleContext(?StudentInternship $internship): array
     {
         return $this->contextRecord('schedule', function () use ($internship): array {
             if (! $internship) {
@@ -274,7 +314,7 @@ class Student extends Model
         });
     }
 
-    private function orderedWorkDays($rows): array
+    private function orderedWorkDays(Collection $rows): array
     {
         return collect(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
             ->filter(fn (string $day) => $rows->contains('day_of_week', $day))
@@ -423,7 +463,9 @@ class Student extends Model
     {
         return $query->whereHas(
             'currentInternship.currentPlacement.supervisor',
-            fn (Builder $supervisors) => $supervisors->where('user_id', $userId),
+            fn (Builder $supervisors) => $supervisors->whereHas(
+                'supervisorProfile', fn (Builder $profiles) => $profiles->where('user_id', $userId),
+            ),
         );
     }
 
@@ -471,6 +513,9 @@ class Student extends Model
 
     public function getFullNameAttribute()
     {
-        return $this->first_name.' '.$this->middle_name.' '.$this->last_name;
+        return collect([$this->first_name, $this->middle_name, $this->last_name])
+            ->filter(fn ($part) => filled($part))
+            ->map(fn ($part) => trim((string) $part))
+            ->implode(' ');
     }
 }

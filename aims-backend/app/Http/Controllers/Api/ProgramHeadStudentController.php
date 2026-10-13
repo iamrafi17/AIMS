@@ -9,6 +9,7 @@ use App\Models\InternshipRequirement;
 use App\Models\Student;
 use App\Support\AttendanceHours;
 use App\Support\ProgramAccess;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -25,7 +26,7 @@ class ProgramHeadStudentController extends Controller
                 ->where('is_active', true))],
         ]);
         $sectionId = isset($filters['academic_section_id']) ? (int) $filters['academic_section_id'] : null;
-        $query = Student::with(['user', 'college', 'program', 'hte', 'supervisor:id,name', 'attendance', 'requirements'])
+        $query = Student::with(['user', 'college', 'program', 'hte', 'supervisor:id,role_id', 'attendance', 'requirements'])
             ->forProgram($programId)
             ->when($sectionId, fn ($studentQuery) => $studentQuery->forAcademicSection($sectionId))
             ->orderBy('last_name');
@@ -34,8 +35,15 @@ class ProgramHeadStudentController extends Controller
             $search = trim((string) $filters['search']);
             $query->where(function ($builder) use ($search) {
                 $builder->where('student_id', 'like', "%{$search}%")
-                    ->orWhere('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%");
+                    ->orWhere(function ($nameQuery) use ($search) {
+                        foreach (preg_split('/\s+/', $search) as $part) {
+                            $nameQuery->where(function ($partQuery) use ($part) {
+                                $partQuery->where('first_name', 'like', "%{$part}%")
+                                    ->orWhere('middle_name', 'like', "%{$part}%")
+                                    ->orWhere('last_name', 'like', "%{$part}%");
+                            });
+                        }
+                    });
             });
         }
         if (filled($filters['status'] ?? null)) {
@@ -59,9 +67,9 @@ class ProgramHeadStudentController extends Controller
             'summary' => [
                 'total' => $students->count(),
                 'active' => $students->where('internship_status', 'active')->count(),
-                'near_completion' => $students->where('progress', '>=', 80)->where('progress', '<', 100)->count(),
+                'near_completion' => $students->where('internship_status', 'active')->where('progress', '>=', 80)->where('progress', '<', 100)->count(),
                 'completed' => $students->where('internship_status', 'completed')->count(),
-                'needs_attention' => $students->where('progress', '<', 40)->where('internship_status', 'active')->count(),
+                'needs_attention' => $students->where('needs_attention', true)->count(),
             ],
         ]);
     }
@@ -72,6 +80,7 @@ class ProgramHeadStudentController extends Controller
             return AttendanceHours::total($record);
         });
         $required = max((float) $student->required_ojt_hours, 1);
+        $progress = round(min(($hours / $required) * 100, 100), 1);
         InternshipRequirement::ensureForStudent($student->id);
         $activeRequirements = InternshipRequirement::activeChecklistForStudent($student->id);
 
@@ -79,6 +88,7 @@ class ProgramHeadStudentController extends Controller
             'id' => $student->id,
             'student_id' => $student->student_id,
             'name' => trim(collect([$student->first_name, $student->middle_name, $student->last_name])->filter()->join(' ')),
+            'display_name' => trim(collect([$student->first_name, $student->last_name])->filter()->join(' ')),
             'avatar_url' => $student->user?->avatar_url,
             'college' => $student->college?->code,
             'program' => $student->program?->code,
@@ -90,10 +100,36 @@ class ProgramHeadStudentController extends Controller
             'schedule_status' => $student->schedule_status,
             'rendered_hours' => round($hours, 1),
             'required_hours' => round($required, 1),
-            'progress' => round(min(($hours / $required) * 100, 100), 1),
+            'progress' => $progress,
+            'needs_attention' => $this->needsAttention($student, $progress),
             'attendance_days' => $student->attendance->whereIn('status', ['present', 'late'])->count(),
             'requirements_approved' => $activeRequirements->where('status', 'approved')->count(),
             'requirements_total' => $activeRequirements->count(),
         ];
+    }
+
+    private function needsAttention(Student $student, float $progress): bool
+    {
+        if ($student->internship_status !== 'active' || $progress >= 100
+            || ! $student->ojt_start_date || ! $student->ojt_end_date) {
+            return false;
+        }
+
+        $start = Carbon::parse($student->ojt_start_date)->startOfDay();
+        $end = Carbon::parse($student->ojt_end_date)->startOfDay();
+        $today = today();
+
+        if ($end->lt($today)) {
+            return true;
+        }
+        if ($end->lte($start) || $today->lt($start->copy()->addDays(7))) {
+            return false;
+        }
+
+        $scheduledDays = $start->diffInDays($end);
+        $elapsedDays = min($scheduledDays, $start->diffInDays($today));
+        $expectedProgress = $elapsedDays / $scheduledDays * 100;
+
+        return $expectedProgress - $progress > 20;
     }
 }

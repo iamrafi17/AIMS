@@ -18,7 +18,7 @@ class VPAAApprovalManagementTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_program_head_endorsement_can_be_reviewed_and_tracked_by_vpaa(): void
+    public function test_complete_student_folder_goes_from_program_head_to_dean_then_vpaa_review(): void
     {
         Storage::fake('local');
         [$student] = $this->studentContext();
@@ -27,59 +27,99 @@ class VPAAApprovalManagementTest extends TestCase
             'college_id' => $student->college_id,
             'program_id' => $student->program_id,
         ]);
-        $vpaa = User::factory()->create(['role' => 'vpaa']);
-        Storage::disk('local')->put('requirements/endorsed.pdf', 'endorsed document');
-
-        $requirement = InternshipRequirement::create([
-            'student_id' => $student->id,
-            'requirement_name' => 'Curriculum Vitae',
-            'file_path' => 'requirements/endorsed.pdf',
-            'file_type' => 'pdf',
-            'status' => 'pending',
+        $coordinator = User::factory()->create([
+            'role' => 'coordinator',
+            'college_id' => $student->college_id,
+            'program_id' => $student->program_id,
         ]);
+        \Illuminate\Support\Facades\DB::table('coordinator_section_assignments')->insert([
+            'academic_section_id' => $student->academic_section_id,
+            'coordinator_id' => $coordinator->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $vpaa = User::factory()->create(['role' => 'vpaa']);
+        $dean = User::factory()->create(['role' => 'dean', 'college_id' => $student->college_id]);
+        InternshipRequirement::ensureForStudent($student->id);
+        $internship = $student->fresh()->currentInternship;
+        $requirements = InternshipRequirement::where('student_internship_id', $internship->id)->get();
+        $this->assertCount(10, $requirements);
 
         Sanctum::actingAs($programHead);
-        $this->postJson("/api/program-head/documents/requirements/{$requirement->id}/review", [
-            'decision' => 'approved',
-            'feedback' => 'Endorsed for final approval.',
-        ])->assertOk();
+        $this->postJson("/api/program-head/student-internships/{$internship->id}/endorse")
+            ->assertUnprocessable();
 
-        $approval = ApprovalRecord::where('subject_type', 'document')
-            ->where('subject_id', $requirement->id)
-            ->firstOrFail();
+        foreach ($requirements as $requirement) {
+            Sanctum::actingAs($student->user);
+            $this->post("/api/student/requirements/{$requirement->id}/upload", [
+                'file' => \Illuminate\Http\UploadedFile::fake()->create("requirement-{$requirement->id}.pdf", 1, 'application/pdf'),
+            ])->assertOk();
+            if ($requirement->id === $requirements->first()->id) {
+                Sanctum::actingAs($programHead);
+                $this->postJson("/api/program-head/documents/requirements/{$requirement->id}/review", ['decision' => 'approved'])
+                    ->assertUnprocessable();
+            }
+            Sanctum::actingAs($coordinator);
+            $this->postJson("/api/coordinator/students/{$student->id}/requirements/{$requirement->id}/review", ['decision' => 'approved'])
+                ->assertOk();
+        }
 
+        Sanctum::actingAs($programHead);
+        $this->postJson("/api/program-head/student-internships/{$internship->id}/endorse")
+            ->assertUnprocessable();
+        foreach ($requirements as $requirement) {
+            $this->postJson("/api/program-head/documents/requirements/{$requirement->id}/review", ['decision' => 'approved'])
+                ->assertOk();
+        }
+
+        $this->postJson("/api/program-head/student-internships/{$internship->id}/endorse")
+            ->assertOk()->assertJsonPath('approval.status', 'for_dean_review');
+        $this->postJson("/api/program-head/student-internships/{$internship->id}/endorse")
+            ->assertUnprocessable();
+        $this->assertDatabaseCount('student_document_approvals', 1);
+        $this->assertDatabaseMissing('approval_records', ['subject_type' => 'document', 'subject_id' => $requirements->first()->id]);
+
+        $this->postJson("/api/program-head/documents/requirements/{$requirements->first()->id}/review", ['decision' => 'rejected', 'feedback' => 'Changed after endorsement'])
+            ->assertUnprocessable();
+        Sanctum::actingAs($coordinator);
+        $this->postJson("/api/coordinator/students/{$student->id}/requirements/{$requirements->first()->id}/review", ['decision' => 'rejected'])
+            ->assertUnprocessable();
+        Sanctum::actingAs($student->user);
+        $this->post("/api/student/requirements/{$requirements->first()->id}/upload", [
+            'file' => \Illuminate\Http\UploadedFile::fake()->create('replacement.pdf', 1, 'application/pdf'),
+        ])->assertUnprocessable();
+
+        $approval = \App\Models\StudentDocumentApproval::firstOrFail();
         Sanctum::actingAs($vpaa);
-        $this->getJson('/api/vpaa/approvals')
-            ->assertOk()
-            ->assertJsonPath('summary.pending_documents', 1)
-            ->assertJsonPath('documents.0.document_name', 'Curriculum Vitae')
-            ->assertJsonPath('documents.0.student.student_id', $student->student_id);
+        $this->getJson('/api/vpaa/student-document-approvals')
+            ->assertOk()->assertJsonPath('summary.for_review', 0);
+        $this->getJson("/api/vpaa/student-document-approvals/{$approval->id}")->assertNotFound();
+        $this->postJson("/api/vpaa/student-document-approvals/{$approval->id}/review")->assertNotFound();
 
-        $this->get("/api/vpaa/approvals/{$approval->id}/download")
+        Sanctum::actingAs($dean->fresh());
+        $this->getJson('/api/dean/documents')
+            ->assertOk()->assertJsonPath('summary.for_dean_review', 1)
+            ->assertJsonPath('folders.0.approved_count', 10)
+            ->assertJsonPath('folders.0.required_count', 10);
+        $this->getJson("/api/dean/documents/{$approval->id}")
+            ->assertOk()->assertJsonCount(10, 'requirements');
+        $this->get("/api/dean/documents/{$approval->id}/requirements/{$requirements->first()->id}/view")
             ->assertOk();
-
-        $this->putJson("/api/vpaa/approvals/{$approval->id}", [
-            'decision' => 'rejected',
-            'remarks' => 'Please replace the unsigned document.',
-        ])->assertOk()
-            ->assertJsonPath('approval.status', 'rejected');
-
-        $this->assertDatabaseHas('approval_records', [
-            'id' => $approval->id,
-            'status' => 'rejected',
-            'decided_by' => $vpaa->id,
-        ]);
-        $this->assertDatabaseHas('internship_requirements', [
-            'id' => $requirement->id,
-            'status' => 'rejected',
-            'feedback' => 'Please replace the unsigned document.',
-        ]);
-
-        $this->getJson('/api/vpaa/approvals')
-            ->assertOk()
-            ->assertJsonPath('summary.pending_documents', 0)
-            ->assertJsonPath('history.0.status', 'rejected')
-            ->assertJsonPath('history.0.decided_by', $vpaa->name);
+        $this->postJson("/api/dean/documents/{$approval->id}/approve")
+            ->assertOk()->assertJsonPath('approval.status', 'for_review');
+        $this->postJson("/api/dean/documents/{$approval->id}/return", ['remarks' => 'Too late'])
+            ->assertUnprocessable();
+        Sanctum::actingAs($vpaa);
+        $this->getJson('/api/vpaa/student-document-approvals')
+            ->assertOk()->assertJsonPath('summary.for_review', 1);
+        $this->postJson("/api/vpaa/student-document-approvals/{$approval->id}/review")
+            ->assertOk()->assertJsonPath('approval.status', 'reviewed');
+        $this->postJson("/api/vpaa/student-document-approvals/{$approval->id}/review")->assertUnprocessable();
+        $this->getJson('/api/vpaa/student-document-approvals')
+            ->assertOk()->assertJsonPath('summary.for_review', 0)
+            ->assertJsonPath('summary.reviewed', 1)
+            ->assertJsonPath('history.0.dean_decided_by', $dean->name)
+            ->assertJsonPath('history.0.vpaa_reviewed_by', $vpaa->name);
     }
 
     public function test_deployment_request_requires_program_head_review_before_vpaa_validation(): void
@@ -89,6 +129,10 @@ class VPAAApprovalManagementTest extends TestCase
             'role' => 'coordinator',
             'college_id' => $student->college_id,
             'program_id' => $student->program_id,
+        ]);
+        \Illuminate\Support\Facades\DB::table('coordinator_section_assignments')->insert([
+            'academic_section_id' => $student->academic_section_id, 'coordinator_id' => $coordinator->id,
+            'created_at' => now(), 'updated_at' => now(),
         ]);
         $programHead = User::factory()->create([
             'role' => 'program_head',
@@ -151,7 +195,16 @@ class VPAAApprovalManagementTest extends TestCase
             ->assertJsonPath('summary.pending_deployments', 1)
             ->assertJsonPath('deployments.0.hte.name', $hte->name);
 
-        $this->putJson("/api/vpaa/approvals/{$vpaaApproval->id}", [
+        $this->putJson("/api/vpaa/approvals/{$vpaaApproval->id}", ['decision' => 'approved'])->assertForbidden();
+        $otherCollege = College::create(['name' => 'Education', 'code' => 'CED', 'is_active' => true]);
+        $otherDean = User::factory()->create(['role' => 'dean', 'college_id' => $otherCollege->id]);
+        Sanctum::actingAs($otherDean->fresh());
+        $this->getJson('/api/dean/approvals')->assertOk()->assertJsonPath('summary.pending_deployments', 0);
+        $this->putJson("/api/dean/approvals/{$vpaaApproval->id}", ['decision' => 'approved'])->assertNotFound();
+        $dean = User::factory()->create(['role' => 'dean', 'college_id' => $student->college_id]);
+        Sanctum::actingAs($dean->fresh());
+        $this->getJson('/api/dean/approvals')->assertOk()->assertJsonPath('summary.pending_deployments', 1);
+        $this->putJson("/api/dean/approvals/{$vpaaApproval->id}", [
             'decision' => 'approved',
             'remarks' => 'Deployment schedule verified.',
         ])->assertOk()
@@ -164,8 +217,103 @@ class VPAAApprovalManagementTest extends TestCase
         $this->assertDatabaseHas('approval_records', [
             'id' => $vpaaApproval->id,
             'status' => 'approved',
-            'decided_by' => $vpaa->id,
+            'decided_by' => $dean->id,
         ]);
+    }
+
+    public function test_return_and_reendorsement_reuse_one_current_folder_record(): void
+    {
+        Storage::fake('local');
+        [$student] = $this->studentContext();
+        $programHead = User::factory()->create(['role' => 'program_head', 'college_id' => $student->college_id, 'program_id' => $student->program_id]);
+        $vpaa = User::factory()->create(['role' => 'vpaa']);
+        $dean = User::factory()->create(['role' => 'dean', 'college_id' => $student->college_id]);
+        InternshipRequirement::ensureForStudent($student->id);
+        $internship = $student->fresh()->currentInternship;
+        $requirements = InternshipRequirement::where('student_internship_id', $internship->id)->get();
+        foreach ($requirements as $requirement) {
+            $path = "requirements/{$requirement->id}.pdf";
+            Storage::disk('local')->put($path, 'approved file');
+            $requirement->update(['file_path' => $path, 'status' => 'approved', 'reviewed_by' => $programHead->id, 'reviewed_at' => now()]);
+        }
+
+        Sanctum::actingAs($programHead);
+        $this->postJson("/api/program-head/student-internships/{$internship->id}/endorse")->assertOk();
+        $approval = \App\Models\StudentDocumentApproval::firstOrFail();
+
+        Sanctum::actingAs($dean->fresh());
+        $this->postJson("/api/dean/documents/{$approval->id}/return", ['remarks' => 'Please recheck the folder.'])
+            ->assertOk()->assertJsonPath('approval.status', 'returned');
+        $this->getJson('/api/dean/documents')
+            ->assertJsonPath('summary.returned', 1)
+            ->assertJsonPath('summary.for_dean_review', 0);
+
+        Sanctum::actingAs($programHead);
+        $this->postJson("/api/program-head/student-internships/{$internship->id}/re-endorse")
+            ->assertOk()->assertJsonPath('approval.status', 'for_dean_review');
+        $this->assertDatabaseCount('student_document_approvals', 1);
+        $this->assertDatabaseHas('student_document_approvals', ['id' => $approval->id, 'decided_by' => null, 'decided_at' => null]);
+
+        $requirements->last()->update(['status' => 'rejected']);
+        Sanctum::actingAs($dean->fresh());
+        $this->postJson("/api/dean/documents/{$approval->id}/approve")
+            ->assertUnprocessable();
+        $this->getJson("/api/dean/documents/{$approval->id}")
+            ->assertOk()->assertJsonCount(10, 'requirements');
+
+        Storage::disk('local')->delete("requirements/{$requirements->first()->id}.pdf");
+        $requirements->last()->update(['status' => 'approved']);
+        $this->postJson("/api/dean/documents/{$approval->id}/approve")
+            ->assertUnprocessable();
+        $this->getJson("/api/dean/documents/{$approval->id}")
+            ->assertOk()->assertJsonPath('requirements.0.file_available', false);
+        $this->get("/api/dean/documents/{$approval->id}/requirements/{$requirements->first()->id}/view")
+            ->assertNotFound();
+    }
+
+    public function test_only_authorized_roles_can_endorse_or_decide_folders(): void
+    {
+        [$student] = $this->studentContext();
+        $internship = $student->fresh()->currentInternship;
+        $studentUser = $student->user;
+        $programHead = User::factory()->create(['role' => 'program_head', 'college_id' => $student->college_id, 'program_id' => $student->program_id]);
+        $vpaa = User::factory()->create(['role' => 'vpaa']);
+        $approval = \App\Models\StudentDocumentApproval::create([
+            'student_internship_id' => $internship->id,
+            'endorsed_by' => $programHead->id,
+            'endorsed_at' => now(),
+            'status' => 'for_dean_review',
+        ]);
+
+        Sanctum::actingAs($studentUser);
+        $this->postJson("/api/program-head/student-internships/{$internship->id}/endorse")->assertForbidden();
+        $this->getJson('/api/vpaa/student-document-approvals')->assertForbidden();
+
+        foreach (['coordinator', 'supervisor'] as $role) {
+            Sanctum::actingAs(User::factory()->create(['role' => $role]));
+            $this->getJson('/api/vpaa/student-document-approvals')->assertForbidden();
+            $this->postJson("/api/vpaa/student-document-approvals/{$approval->id}/review")->assertForbidden();
+        }
+
+        Sanctum::actingAs($programHead);
+        $this->getJson('/api/vpaa/student-document-approvals')->assertForbidden();
+        $this->postJson("/api/program-head/student-internships/{$internship->id}/endorse")->assertUnprocessable();
+
+        Sanctum::actingAs($vpaa);
+        $this->postJson("/api/program-head/student-internships/{$internship->id}/endorse")->assertForbidden();
+        $this->getJson("/api/vpaa/student-document-approvals/{$approval->id}")->assertNotFound();
+
+        $otherCollege = College::create(['name' => 'Other College', 'code' => 'OTH', 'is_active' => true]);
+        $otherProgram = Program::create(['college_id' => $otherCollege->id, 'name' => 'Other Program', 'code' => 'OTHER', 'is_active' => true]);
+        $otherHead = User::factory()->create(['role' => 'program_head', 'college_id' => $otherCollege->id, 'program_id' => $otherProgram->id]);
+        Sanctum::actingAs($otherHead);
+        $this->postJson("/api/program-head/student-internships/{$internship->id}/endorse")->assertNotFound();
+
+        $otherDean = User::factory()->create(['role' => 'dean', 'college_id' => $otherCollege->id]);
+        Sanctum::actingAs($otherDean->fresh());
+        $this->getJson('/api/dean/documents')->assertOk()->assertJsonPath('summary.for_dean_review', 0);
+        $this->getJson("/api/dean/documents/{$approval->id}")->assertNotFound();
+        $this->postJson("/api/dean/documents/{$approval->id}/approve")->assertNotFound();
     }
 
     private function studentContext(): array

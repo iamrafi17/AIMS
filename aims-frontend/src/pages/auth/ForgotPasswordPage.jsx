@@ -132,7 +132,7 @@ export default function ForgotPasswordPage() {
     identify: {
       icon: UserCircleIcon,
       title: 'Forgot your password?',
-      description: 'Enter your existing Student ID or User ID to continue.',
+      description: 'Enter your existing Student ID or Username to continue.',
     },
     questions: {
       icon: QuestionMarkCircleIcon,
@@ -191,7 +191,7 @@ export default function ForgotPasswordPage() {
           {step === 'identify' && (
             <form onSubmit={requestQuestions} className="mt-8 space-y-5">
               <label className="block">
-                <span className="mb-2 block text-sm font-bold">User ID</span>
+                <span className="mb-2 block text-sm font-bold">Username</span>
                 <div className="relative">
                   <UserCircleIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                   <input
@@ -200,7 +200,7 @@ export default function ForgotPasswordPage() {
                     value={userId}
                     onChange={(event) => setUserId(event.target.value)}
                     className={`${inputClass} pl-12`}
-                    placeholder="Student ID or User ID"
+                    placeholder="Student ID or Username"
                     autoComplete="username"
                   />
                 </div>

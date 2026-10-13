@@ -10,6 +10,7 @@ use App\Models\Program;
 use App\Models\SecurityQuestion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -93,7 +94,7 @@ class SecurityQuestionRecoveryTest extends TestCase
 
         $legacyUser = User::factory()->create(['role' => 'coordinator']);
 
-        $legacy = $this->postJson('/api/forgot-password', ['user_id' => $legacyUser->user_id])
+        $legacy = $this->postJson('/api/forgot-password', ['user_id' => $legacyUser->username])
             ->assertOk()
             ->assertJsonCount(3, 'questions')
             ->assertJsonStructure(['challenge_token', 'questions'])
@@ -194,6 +195,45 @@ class SecurityQuestionRecoveryTest extends TestCase
             ->assertJsonPath('user.id', $user->id);
     }
 
+    public function test_recovery_challenge_expires_after_fifteen_minutes(): void
+    {
+        [, $student, $questions, $answers] = $this->registeredStudent('2026-SEC-EXPIRE');
+        $this->freezeTime();
+        $challenge = $this->postJson('/api/forgot-password', ['user_id' => $student->student_id])
+            ->assertOk()->json('challenge_token');
+        $this->travel(15)->minutes();
+
+        $this->postJson('/api/forgot-password/verify', [
+            'user_id' => $student->student_id,
+            'challenge_token' => $challenge,
+            'answers' => $this->answerPayload($questions, $answers),
+        ])->assertUnprocessable();
+    }
+
+    public function test_verified_reset_token_expires_without_changing_password_or_revoking_sessions(): void
+    {
+        [$user, $student, $questions, $answers, $oldPassword] = $this->registeredStudent('2026-SEC-STALE');
+        $this->freezeTime();
+        $tokenId = $user->createToken('existing-session')->accessToken->id;
+        $challenge = $this->postJson('/api/forgot-password', ['user_id' => $student->student_id])
+            ->assertOk()->json('challenge_token');
+        $resetToken = $this->postJson('/api/forgot-password/verify', [
+            'user_id' => $student->student_id,
+            'challenge_token' => $challenge,
+            'answers' => $this->answerPayload($questions, $answers),
+        ])->assertOk()->json('reset_token');
+        $this->travel(24)->hours();
+
+        $this->postJson('/api/reset-password', [
+            'user_id' => $student->student_id,
+            'token' => $resetToken,
+            'password' => 'NewPassword123!',
+            'password_confirmation' => 'NewPassword123!',
+        ])->assertUnprocessable()->assertJsonValidationErrors('token');
+        $this->assertTrue(Hash::check($oldPassword, $user->fresh()->password));
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $tokenId]);
+    }
+
     private function registeredStudent(string $studentId): array
     {
         [$payload] = $this->registrationContext($studentId);
@@ -214,7 +254,10 @@ class SecurityQuestionRecoveryTest extends TestCase
         return [$user, $student, $questions, $answers, $payload['password']];
     }
 
-    private function answerPayload($questions, array $answers): array
+    /**
+     * @param Collection<int, SecurityQuestion> $questions
+     */
+    private function answerPayload(Collection $questions, array $answers): array
     {
         return $questions->values()->map(
             fn (SecurityQuestion $question, int $index) => [

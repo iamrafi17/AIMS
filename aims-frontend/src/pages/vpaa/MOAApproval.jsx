@@ -1,57 +1,72 @@
-import { useCallback, useEffect, useState } from 'react';
-import {
-  ArrowDownTrayIcon,
-  CheckBadgeIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  DocumentTextIcon,
-  EyeIcon,
-  MagnifyingGlassIcon,
-  ShieldCheckIcon,
-  XCircleIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckBadgeIcon, ClockIcon, DocumentTextIcon, ShieldCheckIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { FiEye } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { EmptyPanel, LoadingPanel, MetricCard, PageIntro } from '../../components/common/PortalUI';
+import MoaReviewModal from '../../components/moa/MoaReviewModal';
+import { moaDate, moaStatus } from '../../components/moa/moaUi';
 
-function format(value) {
-  return value ? new Date(value).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Not set';
-}
+const controlClass = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-white';
 
-function DecisionModal({ item, onClose, onSaved }) {
-  const [decision, setDecision] = useState('approved');
-  const [remarks, setRemarks] = useState('');
-  const [saving, setSaving] = useState(false);
-  const submit = async () => {
-    if (decision === 'rejected' && !remarks.trim()) return toast.error('Explain why the MOA is being rejected.');
-    if (!window.confirm(`${decision === 'approved' ? 'Approve' : 'Reject'} this MOA as the final decision?`)) return;
-    setSaving(true);
-    try { const response = await api.put(`/vpaa/moas/${item.approval_id}`, { decision, remarks }); toast.success(response.data.message); onSaved(); }
-    catch (error) { toast.error(error.response?.data?.message || 'Unable to record the MOA decision.'); }
-    finally { setSaving(false); }
-  };
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={onClose}><div onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-900 sm:p-8"><div className="flex items-start justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-[#a8750b]">Final MOA approval</p><h2 className="mt-1 text-2xl font-black text-slate-900 dark:text-white">{item.hte}</h2><p className="mt-1 text-sm text-slate-500">{item.college}</p></div><button onClick={onClose}><XMarkIcon className="h-6 w-6 text-slate-500" /></button></div><div className="mt-6 grid gap-3 sm:grid-cols-2">{[['approved', CheckCircleIcon, 'Approve MOA', 'Authorize this HTE partnership.'], ['rejected', XCircleIcon, 'Reject MOA', 'Return it with final remarks.']].map(([value, Icon, title, note]) => <button key={value} onClick={() => setDecision(value)} className={`rounded-2xl border p-4 text-left ${decision === value ? value === 'approved' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-rose-500 bg-rose-50 dark:bg-rose-950/30' : 'border-slate-200 dark:border-slate-700'}`}><div className="flex items-center gap-2"><Icon className={`h-5 w-5 ${value === 'approved' ? 'text-emerald-600' : 'text-rose-600'}`} /><span className="font-black">{title}</span></div><p className="mt-1 text-xs text-slate-500">{note}</p></button>)}</div><label className="mt-5 block"><span className="mb-2 block text-sm font-bold">Decision remarks {decision === 'rejected' && '*'}</span><textarea required={decision === 'rejected'} value={remarks} onChange={(event) => setRemarks(event.target.value)} className="min-h-28 w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" placeholder="Record the basis, conditions, or corrective action..." /></label><div className="mt-6 flex justify-end gap-3"><button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold dark:border-slate-700">Cancel</button><button onClick={submit} disabled={saving} className="rounded-2xl bg-[#7D001D] px-6 py-3 font-bold text-white">{saving ? 'Recording...' : 'Record final decision'}</button></div></div></div>;
-}
-
-export default function VPAAMOA() {
-  const [data, setData] = useState(null);
+export default function MOAApproval({ apiBase = '/vpaa/moas' }) {
+  const isDean = apiBase.startsWith('/dean');
+  const [data, setData] = useState({ pending: [], history: [], summary: {} });
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('pending');
   const [search, setSearch] = useState('');
+  const [program, setProgram] = useState('all');
+  const [status, setStatus] = useState('all');
+  const [validity, setValidity] = useState('all');
   const [selected, setSelected] = useState(null);
-  const [decision, setDecision] = useState(null);
-  const load = useCallback(async () => { setLoading(true); try { setData((await api.get('/vpaa/moas')).data); } catch { toast.error('Unable to load MOA approvals.'); } finally { setLoading(false); } }, []);
+  const [remarks, setRemarks] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setData((await api.get(apiBase)).data); }
+    catch (error) { toast.error(error.response?.data?.message || 'Unable to load MOAs.'); }
+    finally { setLoading(false); }
+  }, [apiBase]);
   useEffect(() => { load(); }, [load]);
-  const items = (data?.[tab] || []).filter((item) => `${item.hte} ${item.college} ${item.endorsed_by}`.toLowerCase().includes(search.toLowerCase()));
-  const download = async (item) => { try { const response = await api.get(`/vpaa/moas/${item.approval_id}/download`, { responseType: 'blob' }); const url = URL.createObjectURL(response.data); const link = document.createElement('a'); link.href = url; link.download = `MOA-${item.hte}.pdf`; link.click(); URL.revokeObjectURL(url); } catch { toast.error('The MOA file could not be downloaded.'); } };
-  if (loading && !data) return <LoadingPanel />;
+
+  const programs = useMemo(() => [...new Map([...data.pending, ...data.history]
+    .map((moa) => [moa.program_id, { id: moa.program_id, label: moa.program }])).values()], [data]);
+  const items = useMemo(() => data[tab].filter((moa) => {
+    return `${moa.hte} ${moa.program} ${moa.college}`.toLowerCase().includes(search.toLowerCase())
+      && (program === 'all' || String(moa.program_id) === program)
+      && (status === 'all' || (status === 'reviewed' ? Boolean(moa.vpaa_reviewed_at) : moa.approval_status === status))
+      && (validity === 'all' || moa.validity === validity);
+  }), [data, tab, search, program, status, validity]);
+
+  const review = async (decision) => {
+    if (!selected || busy) return;
+    setBusy(true);
+    try {
+      if (decision === 'returned' && !remarks.trim()) { toast.error('Enter a reason for returning this MOA.'); setBusy(false); return; }
+      const response = isDean
+        ? await api.put(`${apiBase}/${selected.approval_id}`, { decision, remarks: remarks.trim() || null })
+        : await api.post(`${apiBase}/${selected.approval_id}/review`);
+      toast.success(response.data.message);
+      setSelected(null);
+      setRemarks('');
+      await load();
+    } catch (error) { toast.error(error.response?.data?.message || 'Unable to record the review.'); }
+    finally { setBusy(false); }
+  };
+
+  if (loading && !data.pending.length && !data.history.length) return <LoadingPanel />;
+
   return <div className="space-y-6">
-    <PageIntro eyebrow="Executive approval workspace" title="MOA Final Approval" description="Review Program Head-endorsed HTE agreements, inspect partnership validity, and record the final university decision." icon={ShieldCheckIcon} />
-    <div className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><MetricCard label="Pending final review" value={data?.summary.pending} icon={ClockIcon} tone="gold" /><MetricCard label="Approved MOAs" value={data?.summary.approved} icon={CheckBadgeIcon} tone="green" /><MetricCard label="Rejected MOAs" value={data?.summary.rejected} icon={XCircleIcon} /><MetricCard label="Expiring in 60 days" value={data?.summary.expiring} icon={DocumentTextIcon} tone="violet" /></div>
-    <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"><div className="flex flex-col gap-3 md:flex-row"><div className="flex rounded-2xl bg-slate-100 p-1 dark:bg-slate-800">{['pending', 'history'].map((name) => <button key={name} onClick={() => setTab(name)} className={`rounded-xl px-4 py-2.5 text-sm font-black capitalize ${tab === name ? 'bg-white text-[#7D001D] shadow-sm dark:bg-slate-700 dark:text-red-300' : 'text-slate-500'}`}>{name}</button>)}</div><label className="relative flex-1"><MagnifyingGlassIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 dark:border-slate-700" placeholder="Search HTE, college, or endorser..." /></label></div></section>
-    {items.length === 0 ? <EmptyPanel icon={DocumentTextIcon} title={`No ${tab} MOA records`} description={tab === 'pending' ? 'Program Head-endorsed MOAs will appear here for final review.' : 'Final approval decisions will appear here.'} /> : <div className="grid gap-5 xl:grid-cols-2">{items.map((item) => <article key={item.approval_id} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-wider text-[#a8750b]">{item.college_code} · HTE partnership</p><h2 className="mt-1 text-xl font-black text-slate-900 dark:text-white">{item.hte}</h2><p className="mt-1 text-sm text-slate-500">{item.hte_address}</p></div><span className={`rounded-full px-3 py-1 text-xs font-black capitalize ${item.approval_status === 'approved' ? 'bg-emerald-100 text-emerald-700' : item.approval_status === 'rejected' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>{item.approval_status}</span></div><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-800"><p className="text-xs text-slate-500">Effective</p><p className="mt-1 text-sm font-black">{format(item.effective_date)}</p></div><div className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-800"><p className="text-xs text-slate-500">Expiration</p><p className="mt-1 text-sm font-black">{format(item.expiration_date)}</p></div></div><p className="mt-4 text-xs text-slate-500">Endorsed by <span className="font-bold text-slate-700 dark:text-slate-200">{item.endorsed_by || 'Program Head'}</span> on {format(item.endorsed_at)}</p>{item.remarks && <p className="mt-3 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">{item.remarks}</p>}<div className="mt-5 flex flex-wrap gap-2"><button onClick={() => setSelected(item)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold dark:border-slate-700"><EyeIcon className="h-4 w-4" />Details</button><button onClick={() => download(item)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold dark:border-slate-700"><ArrowDownTrayIcon className="h-4 w-4" />Download MOA</button>{tab === 'pending' && <button onClick={() => setDecision(item)} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-4 py-2 text-sm font-bold text-white"><ShieldCheckIcon className="h-4 w-4" />Review</button>}</div></article>)}</div>}
-    {selected && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" onMouseDown={() => setSelected(null)}><div onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-xl rounded-3xl bg-white p-7 shadow-2xl dark:bg-slate-900"><div className="flex justify-between"><h2 className="text-2xl font-black">MOA details</h2><button onClick={() => setSelected(null)}><XMarkIcon className="h-6 w-6" /></button></div><dl className="mt-6 grid grid-cols-2 gap-4">{[['HTE', selected.hte], ['College', selected.college], ['Effective date', format(selected.effective_date)], ['Expiration date', format(selected.expiration_date)], ['Endorsed by', selected.endorsed_by], ['Final reviewer', selected.decided_by || 'Pending']].map(([label, value]) => <div key={label} className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-800"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 font-black">{value || '—'}</dd></div>)}</dl></div></div>}
-    {decision && <DecisionModal item={decision} onClose={() => setDecision(null)} onSaved={() => { setDecision(null); load(); }} />}
+    <PageIntro eyebrow={isDean ? 'Dean workspace' : 'VPAA workspace'} title={isDean ? 'MOA Final Approval' : 'MOA Review'} description={isDean ? 'Make the final decision on Program Head-endorsed MOAs.' : 'Acknowledge MOAs after final Dean approval.'} icon={ShieldCheckIcon} />
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><MetricCard label={isDean ? 'Pending final approval' : 'Awaiting review'} value={data.summary.pending} icon={ClockIcon} tone="gold" /><MetricCard label={isDean ? 'Approved' : 'Reviewed'} value={isDean ? data.summary.approved : data.summary.reviewed} icon={CheckBadgeIcon} tone="green" /><MetricCard label="Expiring soon" value={data.summary.expiring} icon={DocumentTextIcon} tone="violet" /><MetricCard label="Expired" value={data.summary.expired} icon={XCircleIcon} /></div>
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex gap-2 border-b border-slate-200 p-4 dark:border-slate-700"><button type="button" onClick={() => { setTab('pending'); setStatus('all'); }} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === 'pending' ? 'bg-[#7D001D] text-white' : 'text-slate-600 dark:text-slate-300'}`}>{isDean ? 'Pending Final Approval' : 'Awaiting Review'}</button><button type="button" onClick={() => { setTab('history'); setStatus('all'); }} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === 'history' ? 'bg-[#7D001D] text-white' : 'text-slate-600 dark:text-slate-300'}`}>History</button></div>
+      <div className="grid gap-3 border-b border-slate-200 p-4 dark:border-slate-700 md:grid-cols-[minmax(0,1fr)_repeat(3,10rem)]"><input aria-label="Search MOAs" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search HTE or program" className={controlClass} /><select aria-label="Program" value={program} onChange={(event) => setProgram(event.target.value)} className={controlClass}><option value="all">All programs</option>{programs.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select><select aria-label="Approval status" value={status} onChange={(event) => setStatus(event.target.value)} className={controlClass}><option value="all">All statuses</option>{isDean ? <><option value="pending">Pending</option><option value="approved">Approved</option><option value="returned">Returned</option></> : <><option value="approved">Dean approved</option><option value="reviewed">VPAA reviewed</option></>}</select><select aria-label="Validity" value={validity} onChange={(event) => setValidity(event.target.value)} className={controlClass}><option value="all">All validity</option><option value="upcoming">Upcoming</option><option value="valid">Valid</option><option value="expiring soon">Expiring Soon</option><option value="expired">Expired</option></select></div>
+      {items.length ? <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800"><tr><th className="px-5 py-3">HTE</th><th className="px-4 py-3">Program</th><th className="px-4 py-3">College</th><th className="px-4 py-3">Expiration date</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Validity</th><th className="px-5 py-3 text-right">Action</th></tr></thead><tbody>{items.map((moa) => <tr key={moa.approval_id} className="border-t border-slate-100 dark:border-slate-700"><td className="px-5 py-4 font-semibold text-slate-900 dark:text-white">{moa.hte}</td><td className="px-4 py-4">{moa.program}</td><td className="px-4 py-4">{moa.college_code}</td><td className="px-4 py-4">{moaDate(moa.expiration_date)}</td><td className="px-4 py-4">{moaStatus(moa)}</td><td className="px-4 py-4 capitalize">{moa.validity}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => setSelected(moa)} title="View MOA" aria-label={`View MOA for ${moa.hte}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/60"><FiEye aria-hidden="true" /></button></td></tr>)}</tbody></table></div> : <EmptyPanel icon={DocumentTextIcon} title="No MOAs found" description={tab === 'pending' ? (isDean ? 'Program Head-endorsed MOAs will appear here.' : 'Dean-approved MOAs will appear here.') : 'Completed MOA records will appear here.'} />}
+    </section>
+    {selected && <MoaReviewModal moa={selected} url={`${apiBase}/${selected.approval_id}/download`} title={isDean ? 'Dean MOA Final Approval' : 'VPAA MOA Review'} onClose={() => { if (!busy) { setSelected(null); setRemarks(''); } }}>
+      {tab === 'pending' && (isDean ? selected.approval_status === 'pending' : selected.approval_status === 'approved') && (isDean ? <><textarea aria-label="Decision remarks" value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={2} placeholder="Reason required when returning this MOA" className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm dark:border-slate-600 dark:bg-slate-800" /><button type="button" disabled={busy || !remarks.trim()} onClick={() => review('returned')} className="rounded-xl border border-rose-300 px-4 py-2.5 text-sm font-semibold text-rose-700 disabled:opacity-50 dark:text-rose-300">Return</button><button type="button" disabled={busy || selected.validity === 'expired'} onClick={() => review('approved')} className="rounded-xl bg-[#7D001D] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Final Approve</button></> : <button type="button" disabled={busy} onClick={() => review('reviewed')} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Saving...' : 'Mark as Reviewed'}</button>)}
+    </MoaReviewModal>}
   </div>;
 }

@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AcademicPeriodController;
+use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AdminDashboardController;
 use App\Http\Controllers\Api\AdminSystemController;
 use App\Http\Controllers\Api\AdminUserController;
@@ -10,17 +10,23 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CollegeController;
 use App\Http\Controllers\Api\CoordinatorAttendanceController;
 use App\Http\Controllers\Api\CoordinatorDashboardController;
+use App\Http\Controllers\Api\CoordinatorInternshipRequirementController;
 use App\Http\Controllers\Api\CoordinatorHTEController;
+use App\Http\Controllers\Api\CoordinatorHolidayImportController;
 use App\Http\Controllers\Api\CoordinatorReportController;
 use App\Http\Controllers\Api\CoordinatorRequirementController;
 use App\Http\Controllers\Api\CoordinatorStudentController;
 use App\Http\Controllers\Api\CoordinatorTravelController;
+use App\Http\Controllers\Api\ProgramHeadCoordinatorAssignmentController;
 use App\Http\Controllers\Api\DailyJournalTemplateController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramHeadDashboardController;
+use App\Http\Controllers\Api\CoordinatorSmartClockController;
 use App\Http\Controllers\Api\ProgramHeadDeploymentController;
+use App\Http\Controllers\Api\ProgramHeadOjtSettingController;
 use App\Http\Controllers\Api\ProgramHeadDocumentController;
+use App\Http\Controllers\Api\StudentDocumentApprovalController;
 use App\Http\Controllers\Api\ProgramHeadStudentController;
 use App\Http\Controllers\Api\ProgramHeadTravelController;
 use App\Http\Controllers\Api\PublicPortalController;
@@ -35,6 +41,7 @@ use App\Http\Controllers\Api\SupervisorManagementController;
 use App\Http\Controllers\Api\VPAAApprovalController;
 use App\Http\Controllers\Api\VPAADashboardController;
 use App\Http\Controllers\Api\VPAAMOAController;
+use App\Http\Controllers\Api\DeanDashboardController;
 use Illuminate\Support\Facades\Route;
 
 // Public Routes
@@ -106,6 +113,7 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::get('/requirements', [StudentRequirementController::class, 'index']);
         Route::post('/requirements/{id}/upload', [StudentRequirementController::class, 'upload']);
         Route::get('/requirements/{id}/download', [StudentRequirementController::class, 'download']);
+        Route::delete('/requirements/{id}/file', [StudentRequirementController::class, 'removeFile']);
         Route::get('/travel', [StudentTravelController::class, 'index']);
         Route::post('/travel/start', [StudentTravelController::class, 'start']);
         Route::post('/travel/{travel}/departure', [StudentTravelController::class, 'departure']);
@@ -123,6 +131,8 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::get('/reports/preview', [ReportExportController::class, 'coordinatorPreview']);
         Route::get('/reports/export/{format}', [ReportExportController::class, 'coordinator'])->whereIn('format', ['csv', 'xlsx', 'pdf']);
         Route::get('/attendance', [CoordinatorAttendanceController::class, 'index']);
+        Route::get('/attendance/smart-clock-control', [CoordinatorSmartClockController::class, 'show']);
+        Route::put('/attendance/smart-clock-control', [CoordinatorSmartClockController::class, 'update']);
         Route::get('/attendance/live-locations', [CoordinatorAttendanceController::class, 'liveLocations']);
         Route::get('/attendance/{attendance}', [CoordinatorAttendanceController::class, 'show']);
         Route::get('/attendance/{attendance}/journal-preview', [DailyJournalTemplateController::class, 'preview']);
@@ -131,11 +141,15 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::get('/htes/search', [CoordinatorHTEController::class, 'search']);
         Route::post('/htes', [CoordinatorHTEController::class, 'store']);
         Route::put('/htes/deployments/{student}', [CoordinatorHTEController::class, 'deploy']);
+        Route::get('/htes/deployments/{student}/completion', [CoordinatorHTEController::class, 'completion']);
         Route::post('/htes/holidays', [CoordinatorHTEController::class, 'storeHoliday']);
+        Route::get('/htes/holidays/import-preview', [CoordinatorHolidayImportController::class, 'preview']);
+        Route::post('/htes/holidays/import', [CoordinatorHolidayImportController::class, 'import']);
         Route::put('/htes/holidays/{holiday}', [CoordinatorHTEController::class, 'updateHoliday']);
         Route::delete('/htes/holidays/{holiday}', [CoordinatorHTEController::class, 'destroyHoliday']);
         Route::post('/htes/moas', [CoordinatorHTEController::class, 'storeMoa']);
         Route::put('/htes/moas/{moa}', [CoordinatorHTEController::class, 'updateMoa']);
+        Route::delete('/htes/moas/{moa}', [CoordinatorHTEController::class, 'destroyMoa']);
         Route::get('/htes/moas/{moa}/download', [CoordinatorHTEController::class, 'downloadMoa']);
         Route::get('/htes/{hte}/batch-schedules', [CoordinatorHTEController::class, 'batchSchedules']);
         Route::put('/htes/{hte}/batch-schedules/{academicSection}', [CoordinatorHTEController::class, 'saveBatchSchedule']);
@@ -145,6 +159,8 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::put('/htes/{hte}', [CoordinatorHTEController::class, 'update']);
         Route::delete('/htes/{hte}', [CoordinatorHTEController::class, 'destroy']);
         Route::get('/requirements', [CoordinatorRequirementController::class, 'index']);
+        Route::get('/internship-requirements', [CoordinatorInternshipRequirementController::class, 'index']);
+        Route::get('/internship-requirements/{student}', [CoordinatorInternshipRequirementController::class, 'show']);
         Route::post('/requirements', [CoordinatorRequirementController::class, 'store']);
         Route::put('/requirements/order', [CoordinatorRequirementController::class, 'reorder']);
         Route::put('/requirements/{programRequirement}', [CoordinatorRequirementController::class, 'update']);
@@ -156,6 +172,11 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::apiResource('students', CoordinatorStudentController::class);
         Route::post('/students/{student}/requirements/{requirement}/review', [CoordinatorStudentController::class, 'reviewRequirement']);
         Route::get('/students/{student}/requirements/{requirement}/download', [CoordinatorStudentController::class, 'downloadRequirement']);
+        Route::get('/travel/students', [CoordinatorTravelController::class, 'students']);
+        Route::post('/travel/batch', [CoordinatorTravelController::class, 'scheduleBatch']);
+        Route::post('/travel', [CoordinatorTravelController::class, 'schedule']);
+        Route::put('/travel/{travel}/schedule', [CoordinatorTravelController::class, 'reschedule']);
+        Route::post('/travel/{travel}/cancel', [CoordinatorTravelController::class, 'cancelSchedule']);
         Route::get('/travel/{travel}/arrival-photo', [CoordinatorTravelController::class, 'arrivalPhoto']);
         Route::post('/travel/{travel}/reports', [CoordinatorTravelController::class, 'generateReport']);
         Route::put('/travel/reports/{report}', [CoordinatorTravelController::class, 'updateReport']);
@@ -166,12 +187,18 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
 
     // Program Head Routes
     Route::middleware(['role:program_head', 'staff.setup'])->prefix('program-head')->group(function () {
+        Route::get('/ojt-settings', [ProgramHeadOjtSettingController::class, 'index']);
+        Route::post('/ojt-settings/publish', [ProgramHeadOjtSettingController::class, 'publish']);
+        Route::get('/coordinator-assignments', [ProgramHeadCoordinatorAssignmentController::class, 'index']);
+        Route::put('/coordinator-assignments', [ProgramHeadCoordinatorAssignmentController::class, 'update']);
         Route::get('/dashboard', [ProgramHeadDashboardController::class, 'index']);
         Route::get('/reports', [ProgramHeadDashboardController::class, 'index']);
         Route::get('/reports/preview', [ReportExportController::class, 'programHeadPreview']);
         Route::get('/reports/export/{format}', [ReportExportController::class, 'programHead'])->whereIn('format', ['csv', 'xlsx', 'pdf']);
         Route::put('/deployments/{approval}/review', [ProgramHeadDeploymentController::class, 'review']);
         Route::get('/documents', [ProgramHeadDocumentController::class, 'index']);
+        Route::post('/student-internships/{internship}/endorse', [StudentDocumentApprovalController::class, 'endorse']);
+        Route::post('/student-internships/{internship}/re-endorse', [StudentDocumentApprovalController::class, 'reEndorse']);
         Route::post('/documents/requirements/{requirement}/review', [ProgramHeadDocumentController::class, 'reviewRequirement']);
         Route::get('/documents/requirements/{requirement}/download', [ProgramHeadDocumentController::class, 'downloadRequirement']);
         Route::post('/documents/moas/{moa}/review', [ProgramHeadDocumentController::class, 'reviewMoa']);
@@ -224,6 +251,25 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::post('/evaluations', [SupervisorManagementController::class, 'saveEvaluation']);
     });
 
+    // Dean final decisions and college monitoring
+    Route::middleware(['role:dean', 'staff.setup'])->prefix('dean')->group(function () {
+        Route::get('/dashboard', [DeanDashboardController::class, 'index']);
+        Route::get('/live-locations', [DeanDashboardController::class, 'liveLocations']);
+        Route::get('/documents', [StudentDocumentApprovalController::class, 'index']);
+        Route::get('/documents/{approval}', [StudentDocumentApprovalController::class, 'show']);
+        Route::get('/documents/{approval}/requirements/{requirement}/view', [StudentDocumentApprovalController::class, 'viewFile']);
+        Route::post('/documents/{approval}/approve', [StudentDocumentApprovalController::class, 'deanApprove']);
+        Route::post('/documents/{approval}/return', [StudentDocumentApprovalController::class, 'deanReturn']);
+        Route::get('/approvals', [VPAAApprovalController::class, 'index']);
+        Route::put('/approvals/{approval}', [VPAAApprovalController::class, 'review']);
+        Route::get('/moas', [VPAAMOAController::class, 'index']);
+        Route::put('/moas/{approval}', [VPAAMOAController::class, 'review']);
+        Route::get('/moas/{approval}/download', [VPAAMOAController::class, 'download']);
+        Route::get('/travel', [ProgramHeadTravelController::class, 'index']);
+        Route::put('/travel/reports/{report}/review', [ProgramHeadTravelController::class, 'finalReviewReport']);
+        Route::get('/travel/{travel}/arrival-photo', [ProgramHeadTravelController::class, 'arrivalPhoto']);
+    });
+
     // VPAA Routes
     Route::middleware(['role:vpaa', 'staff.setup'])->prefix('vpaa')->group(function () {
         Route::get('/dashboard', [VPAADashboardController::class, 'index']);
@@ -231,10 +277,15 @@ Route::middleware(['auth:sanctum', 'active', 'activity'])->group(function () {
         Route::get('/reports/preview', [ReportExportController::class, 'vpaaPreview']);
         Route::get('/reports/export/{format}', [ReportExportController::class, 'vpaa'])->whereIn('format', ['csv', 'xlsx', 'pdf']);
         Route::get('/approvals', [VPAAApprovalController::class, 'index']);
+        Route::get('/student-document-approvals', [StudentDocumentApprovalController::class, 'index']);
+        Route::get('/student-document-approvals/history', [StudentDocumentApprovalController::class, 'history']);
+        Route::get('/student-document-approvals/{approval}', [StudentDocumentApprovalController::class, 'show']);
+        Route::post('/student-document-approvals/{approval}/review', [StudentDocumentApprovalController::class, 'markReviewed']);
+        Route::get('/student-document-approvals/{approval}/requirements/{requirement}/view', [StudentDocumentApprovalController::class, 'viewFile']);
         Route::put('/approvals/{approval}', [VPAAApprovalController::class, 'review']);
         Route::get('/approvals/{approval}/download', [VPAAApprovalController::class, 'download']);
         Route::get('/moas', [VPAAMOAController::class, 'index']);
-        Route::put('/moas/{approval}', [VPAAMOAController::class, 'review']);
+        Route::post('/moas/{approval}/review', [VPAAMOAController::class, 'markReviewed']);
         Route::get('/moas/{approval}/download', [VPAAMOAController::class, 'download']);
         Route::get('/travel', [ProgramHeadTravelController::class, 'index']);
         Route::put('/travel/reports/{report}/review', [ProgramHeadTravelController::class, 'finalReviewReport']);

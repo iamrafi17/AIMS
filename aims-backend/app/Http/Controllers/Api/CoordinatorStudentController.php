@@ -11,10 +11,13 @@ use App\Models\InternshipRequirement;
 use App\Models\OjtEnrollment;
 use App\Models\Program;
 use App\Models\Student;
+use App\Models\StudentDocumentApproval;
+use App\Models\StudentInternship;
 use App\Models\SystemNotification;
 use App\Models\User;
 use App\Support\AttendanceHours;
 use App\Support\ProgramAccess;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -30,11 +33,10 @@ class CoordinatorStudentController extends Controller
         $programId = ProgramAccess::programId($request->user());
         $filters = $request->validate([
             'per_page' => ['nullable', 'integer', Rule::in([10, 25, 50, 100])],
-            'academic_section_id' => ['nullable', 'integer', ...$this->sectionExistsRule($programId)],
+            'academic_section_id' => ['nullable', 'integer', ...$this->sectionExistsRule($programId, $request->user())],
         ]);
         $sectionId = isset($filters['academic_section_id']) ? (int) $filters['academic_section_id'] : null;
-        $students = Student::with(['user', 'college', 'program', 'hte', 'attendance'])
-            ->forProgram($programId)
+        $students = ProgramAccess::studentQuery($request->user())->with(['user', 'college', 'program', 'hte', 'attendance'])
             ->when($sectionId, fn ($query) => $query->forAcademicSection($sectionId))
             ->when($request->search, function ($query, $search) {
                 $query->where(function ($nested) use ($search) {
@@ -57,11 +59,11 @@ class CoordinatorStudentController extends Controller
         return response()->json([
             ...$students->toArray(),
             'summary' => [
-                'total' => $this->studentScope($programId, $sectionId)->count(),
-                'awaiting_deployment' => $this->studentScope($programId, $sectionId)->forInternshipStatus('pending')->count(),
-                'completed' => $this->studentScope($programId, $sectionId)->forInternshipStatus('completed')->count(),
-                'dropped' => $this->studentScope($programId, $sectionId)->forInternshipStatus('dropped')->count(),
-                'active' => $this->studentScope($programId, $sectionId)->forInternshipStatus('active')->count(),
+                'total' => $this->studentScope($request->user(), $sectionId)->count(),
+                'awaiting_deployment' => $this->studentScope($request->user(), $sectionId)->forInternshipStatus('pending')->count(),
+                'completed' => $this->studentScope($request->user(), $sectionId)->forInternshipStatus('completed')->count(),
+                'dropped' => $this->studentScope($request->user(), $sectionId)->forInternshipStatus('dropped')->count(),
+                'active' => $this->studentScope($request->user(), $sectionId)->forInternshipStatus('active')->count(),
             ],
         ]);
     }
@@ -77,7 +79,7 @@ class CoordinatorStudentController extends Controller
             'htes' => HTE::where('is_active', true)
                 ->whereHas('programs', fn ($query) => $query->whereKey($programId)->where('hte_programs.is_active', true))
                 ->orderBy('name')->get(['id', 'name']),
-            'sections' => AcademicSection::where('program_id', $programId)
+            'sections' => ProgramAccess::sectionQuery($request->user())
                 ->where('is_active', true)
                 ->newestPeriodFirst()
                 ->orderBy('year_level')
@@ -92,16 +94,18 @@ class CoordinatorStudentController extends Controller
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
             'per_page' => ['nullable', 'integer', Rule::in([10, 25, 50, 100])],
-            'academic_section_id' => ['nullable', 'integer', ...$this->sectionExistsRule($programId)],
+            'academic_section_id' => ['nullable', 'integer', ...$this->sectionExistsRule($programId, $request->user())],
+            'registration' => ['nullable', Rule::in(['pending', 'registered'])],
         ]);
         $sectionId = isset($filters['academic_section_id']) ? (int) $filters['academic_section_id'] : null;
         $search = trim((string) ($filters['search'] ?? ''));
-        $enrollments = OjtEnrollment::with([
+        $enrollments = ProgramAccess::enrollmentQuery($request->user())->with([
             'student.user',
             'academicSection.program.college',
             'academicSection.academicPeriod',
         ])
-            ->forProgram($programId)
+            ->when(($filters['registration'] ?? null) === 'pending', fn ($query) => $query->whereNull('registered_at'))
+            ->when(($filters['registration'] ?? null) === 'registered', fn ($query) => $query->whereNotNull('registered_at'))
             ->when($sectionId, fn ($query) => $query->where('academic_section_id', $sectionId))
             ->when($search, function ($query) use ($search) {
                 $query->where(function ($nested) use ($search) {
@@ -117,9 +121,9 @@ class CoordinatorStudentController extends Controller
         return response()->json([
             ...$enrollments->toArray(),
             'summary' => [
-                'total' => $this->enrollmentScope($programId, $sectionId)->count(),
-                'awaiting_registration' => $this->enrollmentScope($programId, $sectionId)->whereNull('registered_at')->count(),
-                'registered' => $this->enrollmentScope($programId, $sectionId)->whereNotNull('registered_at')->count(),
+                'total' => $this->enrollmentScope($request->user(), $sectionId)->count(),
+                'awaiting_registration' => $this->enrollmentScope($request->user(), $sectionId)->whereNull('registered_at')->count(),
+                'registered' => $this->enrollmentScope($request->user(), $sectionId)->whereNotNull('registered_at')->count(),
             ],
         ]);
     }
@@ -129,8 +133,8 @@ class CoordinatorStudentController extends Controller
         $programId = ProgramAccess::programId($request->user());
         $validated = $request->validate([
             'full_name' => ['required', 'string', 'max:255'],
-            'school_id' => ['required', 'string', 'max:20', Rule::unique('ojt_enrollments', 'school_id'), Rule::unique('students', 'student_id')],
-            'academic_section_id' => ['required', 'integer', ...$this->sectionExistsRule($programId)],
+            'school_id' => ['required', 'string', 'max:20', Rule::unique('ojt_enrollments', 'school_id'), Rule::unique('students', 'student_id'), Rule::unique('users', 'username')],
+            'academic_section_id' => ['required', 'integer', ...$this->sectionExistsRule($programId, $request->user())],
         ]);
         $section = AcademicSection::findOrFail($validated['academic_section_id']);
 
@@ -159,18 +163,23 @@ class CoordinatorStudentController extends Controller
     public function update(Request $request, Student $student)
     {
         ProgramAccess::authorizeStudent($request->user(), $student);
-        $validated = $request->validate($this->studentRules($student, $request->user()));
+        $setting = $student->academic_period_id
+            ? \App\Models\ProgramOjtSetting::publishedFor(ProgramAccess::programId($request->user()), $student->academic_period_id)
+            : null;
+        $rules = $this->studentRules($student, $request->user());
+        if ($setting) {
+            $rules['ojt_end_date'] = ['nullable', 'date'];
+        }
+        $validated = $request->validate($rules);
+        if ($setting) {
+            $validated['required_ojt_hours'] = $setting->required_hours;
+            $validated['ojt_start_date'] = $setting->ojt_start_date->toDateString();
+            $validated['ojt_end_date'] = null;
+        }
 
         DB::transaction(function () use ($validated, $student, $request) {
             $student->user->update([
-                'name' => collect([
-                    $validated['first_name'],
-                    $validated['middle_name'] ?? null,
-                    $validated['last_name'],
-                ])->filter()->implode(' '),
                 'email' => $validated['email'],
-                'contact_number' => $validated['contact_number'],
-                'address' => $validated['address'],
                 ...(! empty($validated['password']) ? ['password' => Hash::make($validated['password'])] : []),
             ]);
             $student->update($this->studentAttributes($validated, $student->user_id, $request->user()));
@@ -185,21 +194,35 @@ class CoordinatorStudentController extends Controller
     public function destroy(Request $request, Student $student)
     {
         ProgramAccess::authorizeStudent($request->user(), $student);
-        DB::transaction(function () use ($student) {
-            $user = $student->user;
+        try {
+            DB::transaction(function () use ($student) {
+                Student::query()->whereKey($student->id)->lockForUpdate()->firstOrFail();
+                $user = $student->user;
 
-            foreach ($student->travelLogs()->get() as $travelLog) {
-                $travelLog->delete();
+                $hasHistory = $student->attendance()->exists()
+                    || $student->requirements()->where(fn ($query) => $query->whereNotNull('file_path')->orWhereNotNull('reviewed_at'))->exists()
+                    || $student->tasks()->exists()
+                    || $student->evaluations()->exists()
+                    || $student->travelLogs()->exists()
+                    || $student->internships()->whereHas('documentApproval')->exists();
+                abort_if($hasHistory, 422, 'This student has internship history and cannot be deleted. Deactivate the account instead.');
+
+                // Empty checklist rows still reference internships with RESTRICT.
+                $student->requirements()->delete();
+                OjtEnrollment::where('student_record_id', $student->id)->delete();
+                $student->delete();
+
+                if ($user) {
+                    $user->tokens()->delete();
+                    $user->delete();
+                }
+            });
+        } catch (QueryException $exception) {
+            if (! in_array((string) $exception->getCode(), ['23000', '23503'], true)) {
+                throw $exception;
             }
-
-            OjtEnrollment::where('student_record_id', $student->id)->delete();
-            $student->delete();
-
-            if ($user) {
-                $user->tokens()->delete();
-                $user->delete();
-            }
-        });
+            abort(422, 'This student is referenced by another record and cannot be deleted. Deactivate the account instead.');
+        }
 
         return response()->json(['message' => 'Student record deleted successfully.']);
     }
@@ -218,15 +241,28 @@ class CoordinatorStudentController extends Controller
 
         $validated = $request->validate([
             'decision' => ['required', 'in:approved,rejected'],
-            'feedback' => ['nullable', 'required_if:decision,rejected', 'string', 'max:2000'],
+            'feedback' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $requirement->update([
-            'status' => $validated['decision'],
-            'feedback' => $validated['feedback'] ?? null,
-            'reviewed_by' => $request->user()->id,
-            'reviewed_at' => now(),
-        ]);
+        DB::transaction(function () use ($requirement, $validated, $request, $student): void {
+            StudentInternship::query()->whereKey($requirement->student_internship_id)->lockForUpdate()->firstOrFail();
+            $folderStatus = StudentDocumentApproval::query()
+                ->where('student_internship_id', $requirement->student_internship_id)->value('status');
+            abort_if(in_array($folderStatus, [StudentDocumentApproval::FOR_DEAN_REVIEW, StudentDocumentApproval::FOR_REVIEW,
+                StudentDocumentApproval::REVIEWED, StudentDocumentApproval::FINAL_APPROVED], true),
+                422, 'This student folder is locked during final approval and VPAA review.');
+
+            $requirement->update([
+                'status' => $validated['decision'],
+                'feedback' => $validated['feedback'] ?? null,
+                'reviewed_by' => $request->user()->id,
+                'reviewed_at' => now(),
+            ]);
+            if ($requirement->isConsent()) {
+                $student->update(['consent_status' => $validated['decision'] === 'approved' ? 'done' : 'rejected']);
+            }
+        });
+
         SystemNotification::sendToUser($student->user_id, 'Requirement '.$validated['decision'], $requirement->requirement_name.' was '.$validated['decision'].'.'.(! empty($validated['feedback']) ? ' '.$validated['feedback'] : ''), 'requirement', '/student/requirements');
 
         return response()->json([
@@ -240,7 +276,8 @@ class CoordinatorStudentController extends Controller
         ProgramAccess::authorizeStudent($request->user(), $student);
         ProgramAccess::authorizeRequirement($request->user(), $requirement);
         $path = $this->privateStoragePath($requirement->file_path);
-        if ($requirement->student_id !== $student->id || ! $path || ! $this->privateDisk()->exists($path)) {
+        if ($requirement->student_id !== $student->id || ! $path
+            || ! $this->privateDisk()->exists($path)) {
             return response()->json(['message' => 'Requirement file not found.'], 404);
         }
 
@@ -252,7 +289,7 @@ class CoordinatorStudentController extends Controller
         $programId = ProgramAccess::programId($request->user());
         $validated = $request->validate([
             'file' => ['required', 'file', 'mimes:csv', 'max:5120'],
-            'academic_section_id' => ['required', 'integer', ...$this->sectionExistsRule($programId)],
+            'academic_section_id' => ['required', 'integer', ...$this->sectionExistsRule($programId, $request->user())],
         ]);
         $section = AcademicSection::findOrFail($validated['academic_section_id']);
         $students = $this->analyzePredefinedCsv($request->file('file'));
@@ -271,7 +308,7 @@ class CoordinatorStudentController extends Controller
         $programId = ProgramAccess::programId($request->user());
         $validated = $request->validate([
             'file' => ['required', 'file', 'mimes:csv', 'max:5120'],
-            'academic_section_id' => ['required', 'integer', ...$this->sectionExistsRule($programId)],
+            'academic_section_id' => ['required', 'integer', ...$this->sectionExistsRule($programId, $request->user())],
         ]);
         $section = AcademicSection::findOrFail($validated['academic_section_id']);
         $students = $this->analyzePredefinedCsv($request->file('file'));
@@ -430,10 +467,11 @@ class CoordinatorStudentController extends Controller
         ]);
     }
 
-    private function sectionExistsRule(int $programId): array
+    private function sectionExistsRule(int $programId, User $user): array
     {
         return [Rule::exists('academic_sections', 'id')->where(fn ($query) => $query
             ->where('program_id', $programId)
+            ->whereIn('id', ProgramAccess::sectionIds($user))
             ->where('is_active', true))];
     }
 
@@ -447,24 +485,22 @@ class CoordinatorStudentController extends Controller
         ];
     }
 
-    private function studentScope(int $programId, ?int $sectionId)
+    private function studentScope(User $coordinator, ?int $sectionId)
     {
-        return Student::query()
-            ->forProgram($programId)
+        return ProgramAccess::studentQuery($coordinator)
             ->when($sectionId, fn ($query) => $query->forAcademicSection($sectionId));
     }
 
-    private function enrollmentScope(int $programId, ?int $sectionId)
+    private function enrollmentScope(User $coordinator, ?int $sectionId)
     {
-        return OjtEnrollment::query()
-            ->forProgram($programId)
+        return ProgramAccess::enrollmentQuery($coordinator)
             ->when($sectionId, fn ($query) => $query->where('academic_section_id', $sectionId));
     }
 
     private function studentRules(?Student $student, User $coordinator): array
     {
         return [
-            'student_id' => ['required', 'string', 'max:20', Rule::unique('students')->ignore($student?->id)],
+            'student_id' => ['required', 'string', 'max:20', Rule::unique('students')->ignore($student?->id), Rule::unique('users', 'username')->ignore($student?->user_id)],
             'first_name' => ['required', 'string', 'max:100'], 'last_name' => ['required', 'string', 'max:100'], 'middle_name' => ['nullable', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($student?->user_id)], 'password' => [$student ? 'nullable' : 'nullable', 'string', 'min:8', 'max:255'],
             'gender' => ['required', 'in:male,female'], 'birth_date' => ['required', 'date', 'before:today'], 'address' => ['required', 'string', 'max:1000'], 'contact_number' => ['required', 'string', 'digits:11'],
@@ -472,7 +508,8 @@ class CoordinatorStudentController extends Controller
             'parent_name' => ['required', 'string', 'max:255'], 'parent_relationship' => ['nullable', 'string', 'max:50'], 'parent_address' => ['required', 'string', 'max:1000'], 'parent_contact_number' => ['required', 'string', 'digits:11'],
             'hte_id' => ['nullable', Rule::exists('hte_programs', 'hte_id')->where(fn ($query) => $query->where('program_id', $coordinator->program_id)->where('is_active', true))], 'internship_semester' => ['nullable', 'string', 'max:30'], 'internship_year' => ['nullable', 'string', 'max:20'],
             'internship_status' => ['nullable', 'in:pending,active,completed,dropped'],
-            'consent_status' => ['nullable', 'in:pending,rejected,done'], 'schedule_status' => ['nullable', 'in:pending,rejected,approved'],
+            'consent_status' => ['nullable', 'in:pending,rejected,done'],
+            'schedule_status' => ['nullable', 'in:pending,rejected,approved'],
             'ojt_start_date' => ['nullable', 'date'], 'ojt_end_date' => ['nullable', 'date', 'after_or_equal:ojt_start_date'], 'required_ojt_hours' => ['nullable', 'numeric', 'between:1,2000'], 'allow_past_attendance' => ['nullable', 'boolean'],
         ];
     }
@@ -503,10 +540,14 @@ class CoordinatorStudentController extends Controller
     {
         $hours = $student->attendance->sum(fn (Attendance $record) => $this->renderedHours($record));
         $required = max((float) $student->required_ojt_hours, 0);
+        InternshipRequirement::ensureForStudent($student->id);
         $activeRequirements = InternshipRequirement::activeChecklistForStudent($student->id);
         $approvedRequirements = $activeRequirements->where('status', 'approved')->count();
         $requirementTotal = $activeRequirements->count();
         $studentData = $student->toArray();
+        $studentData['official_ojt_setting'] = $student->program_id && $student->academic_period_id
+            ? \App\Models\ProgramOjtSetting::publishedFor($student->program_id, $student->academic_period_id)?->only(['required_hours', 'ojt_start_date'])
+            : null;
         $studentData['requirements'] = $activeRequirements->toArray();
 
         return [

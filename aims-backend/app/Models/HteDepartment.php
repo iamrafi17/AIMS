@@ -19,7 +19,7 @@ class HteDepartment extends Model
 
     public function supervisors()
     {
-        return $this->hasMany(Supervisor::class, 'hte_department_id');
+        return $this->hasMany(Supervisor::class, 'hte_department_id')->where('is_active', true);
     }
 
     public function programs()

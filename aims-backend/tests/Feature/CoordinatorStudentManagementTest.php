@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\AcademicSection;
+use App\Models\ApprovalRecord;
+use App\Models\Attendance;
 use App\Models\College;
 use App\Models\HTE;
 use App\Models\InternshipRequirement;
@@ -10,9 +12,14 @@ use App\Models\OjtEnrollment;
 use App\Models\Program;
 use App\Models\ProgramRequirement;
 use App\Models\Student;
+use App\Models\StudentDocumentApproval;
+use App\Models\StudentInternship;
 use App\Models\User;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -43,8 +50,13 @@ class CoordinatorStudentManagementTest extends TestCase
 
         $this->assertDatabaseHas('users', [
             'id' => $student->user_id,
-            'name' => 'Updated Middle Intern',
             'email' => 'updated.intern@example.com',
+        ]);
+        $this->assertDatabaseHas('students', [
+            'id' => $student->id,
+            'first_name' => 'Updated',
+            'middle_name' => 'Middle',
+            'last_name' => 'Intern',
             'contact_number' => '09179999999',
             'address' => 'Updated Address',
         ]);
@@ -167,7 +179,6 @@ class CoordinatorStudentManagementTest extends TestCase
             'student_id' => $student->id,
             'requirement_name' => 'Consent Form',
             'file_path' => 'requirements/consent.pdf',
-            'file_type' => 'pdf',
         ]);
         Sanctum::actingAs($coordinator);
 
@@ -186,6 +197,10 @@ class CoordinatorStudentManagementTest extends TestCase
             'feedback' => 'Please upload the signed copy.',
             'reviewed_by' => $coordinator->id,
         ]);
+
+        $this->postJson("/api/coordinator/students/{$student->id}/requirements/{$requirement->id}/review", [
+            'decision' => 'rejected',
+        ])->assertOk()->assertJsonPath('requirement.feedback', null);
     }
 
     public function test_coordinator_can_view_the_complete_official_requirement_checklist(): void
@@ -249,8 +264,13 @@ class CoordinatorStudentManagementTest extends TestCase
 
         $requirementId = collect($studentChecklist->json())->firstWhere('program_requirement_id', $definitionId)['id'];
         $this->post('/api/student/requirements/'.$requirementId.'/upload', [
+            'file' => UploadedFile::fake()->create('clearance.docx', 100, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+        ], ['Accept' => 'application/json'])->assertUnprocessable()->assertJsonValidationErrors('file');
+
+        $this->post('/api/student/requirements/'.$requirementId.'/upload', [
             'file' => UploadedFile::fake()->create('clearance.pdf', 100, 'application/pdf'),
-        ], ['Accept' => 'application/json'])->assertOk();
+        ], ['Accept' => 'application/json'])->assertOk()
+            ->assertJsonPath('requirement.file_type', 'pdf');
 
         Sanctum::actingAs($coordinator);
         $this->deleteJson('/api/coordinator/requirements/'.$definitionId)
@@ -270,6 +290,71 @@ class CoordinatorStudentManagementTest extends TestCase
             ->assertOk()
             ->assertJsonCount(10)
             ->assertJsonMissing(['requirement_name' => 'Barangay Clearance']);
+    }
+
+    public function test_student_can_remove_own_submitted_file_and_reset_review(): void
+    {
+        /** @var FilesystemAdapter $privateDisk */
+        $privateDisk = Storage::fake('local');
+        [, $college, $program, $hte] = $this->managementContext();
+        $student = $this->createStudent($college, $program, $hte);
+        InternshipRequirement::ensureForStudent($student->id);
+        $requirement = InternshipRequirement::where('student_id', $student->id)->firstOrFail();
+        Sanctum::actingAs($student->user);
+
+        $this->post('/api/student/requirements/'.$requirement->id.'/upload', [
+            'file' => UploadedFile::fake()->create('consent.pdf', 100, 'application/pdf'),
+        ], ['Accept' => 'application/json'])->assertOk();
+        $path = $requirement->fresh()->file_path;
+        $privateDisk->assertExists($path);
+        $requirement->update(['status' => 'rejected', 'feedback' => 'Try again', 'reviewed_at' => now()]);
+
+        $this->deleteJson('/api/student/requirements/'.$requirement->id.'/file')
+            ->assertOk()
+            ->assertJsonPath('requirement.file_path', null)
+            ->assertJsonPath('requirement.status', 'pending');
+
+        $this->assertDatabaseHas('internship_requirements', [
+            'id' => $requirement->id,
+            'file_path' => null,
+            'status' => 'pending',
+            'feedback' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+        ]);
+        $privateDisk->assertMissing($path);
+        $this->deleteJson('/api/student/requirements/'.$requirement->id.'/file')->assertNotFound();
+    }
+
+    public function test_student_cannot_remove_another_students_file_or_one_under_approval(): void
+    {
+        /** @var FilesystemAdapter $privateDisk */
+        $privateDisk = Storage::fake('local');
+        [$coordinator, $college, $program, $hte] = $this->managementContext();
+        $student = $this->createStudent($college, $program, $hte);
+        InternshipRequirement::ensureForStudent($student->id);
+        $requirement = InternshipRequirement::where('student_id', $student->id)->firstOrFail();
+        $path = UploadedFile::fake()->create('consent.pdf', 100, 'application/pdf')
+            ->store('requirements/'.$student->id, 'local');
+        $requirement->update(['file_path' => $path]);
+
+        $otherStudent = User::factory()->create(['role' => 'student']);
+        Student::create([
+            'user_id' => $otherStudent->id,
+            'student_id' => '2026-OTHER',
+            'first_name' => 'Other',
+            'last_name' => 'Student',
+            'college_id' => $college->id,
+            'program_id' => $program->id,
+        ]);
+        Sanctum::actingAs($otherStudent);
+        $this->deleteJson('/api/student/requirements/'.$requirement->id.'/file')->assertNotFound();
+
+        ApprovalRecord::submit(ApprovalRecord::TYPE_DOCUMENT, $requirement->id, $coordinator->id);
+        Sanctum::actingAs($student->user);
+        $this->deleteJson('/api/student/requirements/'.$requirement->id.'/file')->assertUnprocessable();
+        $privateDisk->assertExists($path);
+        $this->assertDatabaseHas('internship_requirements', ['id' => $requirement->id, 'file_path' => $path]);
     }
 
     public function test_coordinator_cannot_customize_another_programs_requirement(): void
@@ -470,6 +555,119 @@ class CoordinatorStudentManagementTest extends TestCase
         $this->assertDatabaseCount('ojt_enrollments', 2);
     }
 
+    public function test_coordinator_cannot_review_a_locked_student_folder(): void
+    {
+        [$coordinator, $college, $program, $hte] = $this->managementContext();
+        $student = $this->createStudent($college, $program, $hte);
+        InternshipRequirement::ensureForStudent($student->id);
+        $requirement = $student->requirements()->firstOrFail();
+        $requirement->update(['file_path' => 'review.pdf', 'status' => 'approved']);
+        $approval = StudentDocumentApproval::create([
+            'student_internship_id' => $requirement->student_internship_id,
+            'endorsed_by' => $coordinator->id,
+            'endorsed_at' => now(),
+            'status' => StudentDocumentApproval::FOR_REVIEW,
+        ]);
+        Sanctum::actingAs($coordinator);
+
+        foreach ([StudentDocumentApproval::FOR_REVIEW, StudentDocumentApproval::FINAL_APPROVED] as $status) {
+            $approval->update(['status' => $status]);
+            $this->postJson("/api/coordinator/students/{$student->id}/requirements/{$requirement->id}/review", [
+                'decision' => 'rejected', 'feedback' => 'Requires revision',
+            ])->assertUnprocessable();
+            $this->assertSame('approved', $requirement->fresh()->status);
+            $this->assertSame($status, $approval->fresh()->status);
+        }
+
+        $approval->update(['status' => StudentDocumentApproval::RETURNED]);
+        $this->postJson("/api/coordinator/students/{$student->id}/requirements/{$requirement->id}/review", [
+            'decision' => 'rejected', 'feedback' => 'Requires revision',
+        ])->assertOk();
+        $this->assertSame('rejected', $requirement->fresh()->status);
+    }
+
+    public function test_new_internship_has_its_own_checklist_and_cannot_edit_historical_uploads(): void
+    {
+        [, $college, $program, $hte] = $this->managementContext();
+        $student = $this->createStudent($college, $program, $hte);
+        InternshipRequirement::ensureForStudent($student->id);
+        $old = $student->currentInternship;
+        $oldCount = $old->requirements()->count();
+        $oldRequirement = $old->requirements()->firstOrFail();
+        $oldRequirement->update(['file_path' => 'historical.pdf', 'status' => 'approved']);
+        $section = AcademicSection::create([
+            'academic_period_id' => $old->academicSection->academic_period_id,
+            'program_id' => $program->id, 'name' => '4B', 'year_level' => 4, 'is_active' => true,
+        ]);
+        $old->update(['is_current' => false]);
+        $new = StudentInternship::create([
+            'student_id' => $student->id, 'academic_section_id' => $section->id,
+            'status' => 'pending', 'is_current' => true,
+        ]);
+        InternshipRequirement::ensureForStudent($student->id);
+        InternshipRequirement::ensureForStudent($student->id);
+        $this->assertGreaterThan(0, $oldCount);
+        $this->assertSame($oldCount, $new->requirements()->count());
+        $this->assertSame($oldCount, $old->requirements()->count());
+        $this->assertSame('historical.pdf', $oldRequirement->fresh()->file_path);
+        $this->assertSame('approved', $oldRequirement->fresh()->status);
+        $this->assertSame(0, $new->requirements()->whereNotNull('file_path')->count());
+
+        Sanctum::actingAs($student->user);
+        $this->getJson('/api/student/requirements')->assertOk()->assertJsonCount($oldCount)
+            ->assertJsonPath('0.student_internship_id', $new->id);
+        $this->deleteJson("/api/student/requirements/{$oldRequirement->id}/file")->assertNotFound();
+        $this->getJson("/api/student/requirements/{$oldRequirement->id}/download")->assertNotFound();
+        $this->post("/api/student/requirements/{$oldRequirement->id}/upload", [
+            'file' => UploadedFile::fake()->create('replacement.pdf', 1, 'application/pdf'),
+        ], ['Accept' => 'application/json'])->assertNotFound();
+        $this->assertSame('historical.pdf', $oldRequirement->fresh()->file_path);
+    }
+
+    public function test_checklist_sync_skips_students_without_a_current_internship(): void
+    {
+        [, $college, $program, $hte] = $this->managementContext();
+        $student = $this->createStudent($college, $program, $hte);
+        $student->currentInternship->update(['is_current' => false]);
+        InternshipRequirement::ensureForStudent($student->id);
+        $this->assertSame(0, $student->requirements()->count());
+    }
+
+    public function test_deleting_student_with_empty_checklist_cleans_up_restricting_rows(): void
+    {
+        [$coordinator, $college, $program, $hte] = $this->managementContext();
+        $student = $this->createStudent($college, $program, $hte);
+        InternshipRequirement::ensureForStudent($student->id);
+        $this->assertGreaterThan(0, $student->requirements()->count());
+        Sanctum::actingAs($coordinator);
+        $this->deleteJson("/api/coordinator/students/{$student->id}")->assertOk();
+        $this->assertDatabaseMissing('internship_requirements', ['student_id' => $student->id]);
+        $this->assertDatabaseMissing('student_internships', ['student_id' => $student->id]);
+        $this->assertDatabaseMissing('users', ['id' => $student->user_id]);
+    }
+
+    public function test_student_deletion_preserves_attendance_and_submitted_documents(): void
+    {
+        [$coordinator, $college, $program, $hte] = $this->managementContext();
+        $student = $this->createStudent($college, $program, $hte);
+        InternshipRequirement::ensureForStudent($student->id);
+        $requirement = $student->requirements()->firstOrFail();
+        $requirement->update(['file_path' => 'submitted.pdf']);
+        Sanctum::actingAs($coordinator);
+        $this->deleteJson("/api/coordinator/students/{$student->id}")->assertUnprocessable();
+        $this->assertSame('submitted.pdf', $requirement->fresh()->file_path);
+
+        $requirement->update(['file_path' => null]);
+        $attendance = Attendance::create([
+            'student_id' => $student->id, 'date' => '2026-10-08', 'status' => 'absent',
+            'work_mode' => 'wfo', 'session_type' => 'full_day',
+        ]);
+        $this->deleteJson("/api/coordinator/students/{$student->id}")->assertUnprocessable();
+        $this->assertDatabaseHas('attendance', ['id' => $attendance->id]);
+        $this->assertDatabaseHas('students', ['id' => $student->id]);
+        $this->assertDatabaseHas('users', ['id' => $student->user_id]);
+    }
+
     private function managementContext(): array
     {
         $coordinator = User::factory()->create(['role' => 'coordinator']);
@@ -485,6 +683,11 @@ class CoordinatorStudentManagementTest extends TestCase
             'is_active' => true,
         ]);
         $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
+        DB::table('coordinator_section_assignments')->insert([
+            'academic_section_id' => $section->id,
+            'coordinator_id' => $coordinator->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
         $hte = HTE::create([
             'name' => 'Partner HTE',
             'address' => 'Santa Cruz, Marinduque',

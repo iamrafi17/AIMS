@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicPeriod;
 use App\Models\ActivityLog;
 use App\Models\HTE;
+use App\Models\HteDepartment;
 use App\Models\InternshipRequirement;
 use App\Models\OjtEnrollment;
+use App\Models\ProgramOjtSetting;
 use App\Models\SecurityQuestion;
 use App\Models\Student;
 use App\Models\User;
@@ -37,7 +39,7 @@ class AuthController extends Controller
             ->with(['student', 'supervisorProfile.department.hte'])
             ->where(function ($query) use ($identifier) {
                 $query->where('email', $identifier)
-                    ->orWhere('user_id', strtoupper($identifier))
+                    ->orWhere('username', strtoupper($identifier))
                     ->orWhereHas('student', function ($studentQuery) use ($identifier) {
                         $studentQuery->where('student_id', $identifier);
                     });
@@ -85,7 +87,7 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $validated = $request->validate([
-            'student_id' => 'required|string|unique:students,student_id',
+            'student_id' => ['required', 'string', 'max:20', Rule::unique('students', 'student_id'), Rule::unique('users', 'username')],
             'first_name' => 'required|string|max:100',
             'last_name' => 'required|string|max:100',
             'middle_name' => 'nullable|string|max:100',
@@ -102,6 +104,7 @@ class AuthController extends Controller
             'parent_address' => 'required|string|max:1000',
             'parent_contact_number' => ['required', 'string', 'digits:11'],
             'hte_id' => 'nullable|exists:htes,id',
+            'hte_department_id' => 'nullable|exists:hte_departments,id',
             'agree_terms' => 'accepted',
             'agree_privacy' => 'accepted',
             'password' => 'required|string|min:8|max:12|confirmed',
@@ -145,12 +148,24 @@ class AuthController extends Controller
             $academicPeriod = $this->registrationAcademicPeriod($enrollment);
 
             if ($request->hte_id && ! HTE::whereKey($request->hte_id)
+                ->where('is_active', true)
                 ->whereHas('programs', fn ($query) => $query
                     ->whereKey($enrollment->program_id)
                     ->where('hte_programs.is_active', true))
                 ->exists()) {
                 throw ValidationException::withMessages([
                     'hte_id' => ['The selected HTE is not available for your enrolled program.'],
+                ]);
+            }
+
+            if ($request->hte_department_id && (! $request->hte_id || ! HteDepartment::whereKey($request->hte_department_id)
+                ->where('hte_id', $request->hte_id)
+                ->whereHas('programs', fn ($query) => $query
+                    ->whereKey($enrollment->program_id)
+                    ->where('hte_department_programs.is_active', true))
+                ->exists())) {
+                throw ValidationException::withMessages([
+                    'hte_department_id' => ['The selected department is not available for your preferred HTE and enrolled program.'],
                 ]);
             }
 
@@ -183,15 +198,20 @@ class AuthController extends Controller
                 'academic_section_id' => $enrollment->academic_section_id,
                 'year_level' => $yearLevel,
                 'section' => $enrollment->section,
-                'required_ojt_hours' => $enrollment->college?->required_ojt_hours ?? 486,
+                'required_ojt_hours' => ProgramOjtSetting::publishedFor($enrollment->program_id, $academicPeriod->id)?->required_hours
+                    ?? $enrollment->college?->required_ojt_hours ?? 486,
                 'parent_name' => $request->parent_name,
                 'parent_relationship' => $request->parent_relationship,
                 'parent_address' => $request->parent_address,
                 'parent_contact_number' => $request->parent_contact_number,
-                'hte_id' => $request->hte_id,
                 'academic_period_id' => $academicPeriod->id,
                 'internship_semester' => $academicPeriod->legacySemester(),
                 'internship_year' => $academicPeriod->academic_year,
+            ]);
+
+            $student->currentInternship()->firstOrFail()->update([
+                'preferred_hte_id' => $request->hte_id,
+                'preferred_hte_department_id' => $request->hte_department_id,
             ]);
 
             foreach ($validated['security_questions'] as $index => $securityQuestion) {
@@ -270,7 +290,8 @@ class AuthController extends Controller
             'academic_period' => $academicPeriod->only(['id', 'academic_year', 'semester']),
             'internship_semester' => $academicPeriod->legacySemester(),
             'internship_year' => $academicPeriod->academic_year,
-            'required_ojt_hours' => (float) ($enrollment->college?->required_ojt_hours ?? 486),
+            'required_ojt_hours' => (float) (ProgramOjtSetting::publishedFor($enrollment->program_id, $academicPeriod->id)?->required_hours
+                ?? $enrollment->college?->required_ojt_hours ?? 486),
         ]);
     }
 
@@ -670,7 +691,7 @@ class AuthController extends Controller
         $identifier = trim($identifier);
 
         return User::query()
-            ->where('user_id', strtoupper($identifier))
+            ->where('username', strtoupper($identifier))
             ->orWhereHas('student', fn ($query) => $query->where('student_id', $identifier))
             ->first();
     }
@@ -687,7 +708,9 @@ class AuthController extends Controller
         if (
             ! $record
             || ! str_starts_with($record->token, $stage.':')
-            || now()->diffInMinutes(Carbon::parse($record->created_at)) > 15
+            || ! $record->created_at
+            || Carbon::parse($record->created_at)->isFuture()
+            || Carbon::parse($record->created_at)->lte(now()->subMinutes(15))
         ) {
             return false;
         }
@@ -705,11 +728,11 @@ class AuthController extends Controller
                 ? $this->studentFullName($student->first_name, $student->middle_name, $student->last_name)
                 : $user->name,
             'email' => $user->email,
-            'user_id' => $user->user_id,
+            'username' => $user->username,
             'contact_number' => $student?->contact_number ?? $user->contact_number,
             'address' => $student?->address ?? $user->address,
             'role' => $user->role,
-            'college' => $student?->college ?? $user->college,
+            'college' => $student?->college ?? ($user->role === 'dean' ? $user->employeeProfile?->college : $user->college),
             'program' => $student?->program ?? $user->program,
             'avatar' => $user->avatar,
             'avatar_url' => $user->avatar_url,

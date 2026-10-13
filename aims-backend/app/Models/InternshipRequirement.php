@@ -30,12 +30,28 @@ class InternshipRequirement extends Model
         'program_requirement_id',
         'requirement_name',
         'file_path',
-        'file_type',
         'status',
         'feedback',
         'reviewed_by',
         'reviewed_at',
     ];
+
+    protected $appends = ['file_type'];
+
+    public function getFileTypeAttribute(): ?string
+    {
+        if (! $this->file_path) {
+            return null;
+        }
+
+        $extension = strtolower(pathinfo($this->file_path, PATHINFO_EXTENSION));
+
+        return match (true) {
+            $extension === 'pdf' => 'pdf',
+            in_array($extension, ['jpg', 'jpeg', 'png'], true) => 'image',
+            default => 'document',
+        };
+    }
 
     protected function casts(): array
     {
@@ -66,6 +82,7 @@ class InternshipRequirement extends Model
                 ->whereKey($this->student_internship_id)
                 ->value('student_id');
         }
+
     }
 
     public function internship(): BelongsTo
@@ -88,12 +105,22 @@ class InternshipRequirement extends Model
         return $this->belongsTo(User::class, 'reviewed_by');
     }
 
+    public function isConsent(): bool
+    {
+        return str_contains(mb_strtolower($this->requirement_name), 'consent');
+    }
+
     public function scopeActiveDefinitionOrLegacy(Builder $query): Builder
     {
         return $query->where(function (Builder $nested) {
             $nested->whereNull('program_requirement_id')
                 ->orWhereHas('definition', fn (Builder $definition) => $definition->where('is_active', true));
         });
+    }
+
+    public function scopeForCurrentInternship(Builder $query): Builder
+    {
+        return $query->whereHas('internship', fn (Builder $internship) => $internship->where('is_current', true));
     }
 
     public static function ensureForStudent(int $studentId): void
@@ -112,7 +139,7 @@ class InternshipRequirement extends Model
             ->whereIn('id', $studentIds)
             ->with('currentInternship.academicSection:id,program_id')
             ->get(['id'])
-            ->filter(fn (Student $student) => $student->program_id)
+            ->filter(fn (Student $student) => $student->currentInternship?->academicSection?->program_id)
             ->groupBy(fn (Student $student) => (int) $student->program_id);
 
         foreach ($students as $programId => $programStudents) {
@@ -127,6 +154,7 @@ class InternshipRequirement extends Model
                 foreach ($definitions as $definition) {
                     $requirement = static::query()
                         ->where('student_id', $student->id)
+                        ->where('student_internship_id', $student->currentInternship->id)
                         ->where(function ($query) use ($definition) {
                             $query->where('program_requirement_id', $definition->id)
                                 ->orWhere(function ($legacy) use ($definition) {
@@ -146,6 +174,7 @@ class InternshipRequirement extends Model
 
                     static::query()->create([
                         'student_id' => $student->id,
+                        'student_internship_id' => $student->currentInternship->id,
                         'program_requirement_id' => $definition->id,
                         'requirement_name' => $definition->name,
                         'status' => 'pending',
@@ -160,6 +189,7 @@ class InternshipRequirement extends Model
         return static::query()
             ->with(['definition', 'reviewer'])
             ->where('student_id', $studentId)
+            ->forCurrentInternship()
             ->whereHas('definition', fn ($query) => $query->where('is_active', true))
             ->join('program_requirements', 'program_requirements.id', '=', 'internship_requirements.program_requirement_id')
             ->orderBy('program_requirements.sort_order')

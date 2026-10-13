@@ -29,8 +29,4 @@ class College extends Model
         return $this->hasMany(Program::class);
     }
 
-    public function htes()
-    {
-        return $this->belongsToMany(HTE::class, 'moas', 'college_id', 'hte_id');
-    }
 }

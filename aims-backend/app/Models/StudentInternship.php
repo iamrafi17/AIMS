@@ -7,6 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class StudentInternship extends Model
 {
+    protected static function booted(): void
+    {
+        static::saved(fn (StudentInternship $internship) => Student::syncAcademicForeignKeysFor($internship->student_id));
+        static::deleted(fn (StudentInternship $internship) => Student::syncAcademicForeignKeysFor($internship->student_id));
+    }
+
     private const PLACEMENT_ATTRIBUTES = [
         'hte_program_id',
         'hte_id',
@@ -21,6 +27,8 @@ class StudentInternship extends Model
         'student_id',
         'ojt_enrollment_id',
         'academic_section_id',
+        'preferred_hte_id',
+        'preferred_hte_department_id',
         'status',
         'consent_status',
         'deployment_status',
@@ -73,6 +81,16 @@ class StudentInternship extends Model
         return $this->belongsTo(HTE::class, 'hte_id');
     }
 
+    public function preferredHte()
+    {
+        return $this->belongsTo(HTE::class, 'preferred_hte_id');
+    }
+
+    public function preferredDepartment()
+    {
+        return $this->belongsTo(HteDepartment::class, 'preferred_hte_department_id');
+    }
+
     public function hteProgram()
     {
         return $this->belongsTo(HteProgram::class, 'hte_program_id');
@@ -106,6 +124,11 @@ class StudentInternship extends Model
     public function requirements()
     {
         return $this->hasMany(InternshipRequirement::class, 'student_internship_id');
+    }
+
+    public function documentApproval()
+    {
+        return $this->hasOne(StudentDocumentApproval::class, 'student_internship_id');
     }
 
     public function tasks()

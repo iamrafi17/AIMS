@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AcademicSection;
+use App\Models\ApprovalRecord;
 use App\Models\Attendance;
 use App\Models\College;
 use App\Models\HTE;
@@ -17,6 +18,7 @@ use App\Models\TravelLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Tests\TestCase;
 
 class CoordinatorDashboardTest extends TestCase
@@ -107,13 +109,20 @@ class CoordinatorDashboardTest extends TestCase
             'student_id' => $student->id,
             'requirement_name' => 'Consent Form',
             'file_path' => 'requirements/consent.pdf',
-            'file_type' => 'pdf',
             'status' => 'approved',
+            'reviewed_by' => $coordinator->id,
+        ]);
+
+        ApprovalRecord::create([
+            'subject_type' => ApprovalRecord::TYPE_DEPLOYMENT,
+            'subject_id' => $student->id,
+            'status' => 'approved',
+            'submitted_by' => $coordinator->id,
+            'submitted_at' => now(),
         ]);
 
         MOA::create([
             'hte_id' => $hte->id,
-            'college_id' => $college->id,
             'program_id' => $program->id,
             'file_path' => 'moas/partner.pdf',
             'effective_date' => now()->subMonth(),
@@ -155,6 +164,10 @@ class CoordinatorDashboardTest extends TestCase
             ]);
         }
 
+        \Illuminate\Support\Facades\DB::table('coordinator_section_assignments')->insert([
+            'academic_section_id' => $student->academic_section_id, 'coordinator_id' => $coordinator->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
         Sanctum::actingAs($coordinator);
 
         $this->getJson('/api/coordinator/dashboard')
@@ -169,12 +182,43 @@ class CoordinatorDashboardTest extends TestCase
             ->assertJsonPath('journals.submitted', 2)
             ->assertJsonPath('journals.completion_rate', 100)
             ->assertJsonPath('requirements.approved', 1)
-            ->assertJsonPath('requirements.completion_rate', 100)
+            ->assertJsonPath('requirements.completion_rate', 9.1)
             ->assertJsonPath('hte_moa.active_htes', 1)
             ->assertJsonPath('hte_moa.moa_approved', 1)
             ->assertJsonPath('travel.active', 1)
             ->assertJsonPath('active_interns.0.student_id', '2026-0001')
             ->assertJsonPath('active_interns.0.progress_percent', 1.6);
+
+        $this->getJson('/api/coordinator/dashboard')
+            ->assertJsonPath('internship_status.active', 1)
+            ->assertJsonPath('attendance_today.present', 1)
+            ->assertJsonPath('attendance_today.no_log', 0)
+            ->assertJsonPath('ojt_progress.0_25', 1)
+            ->assertJsonPath('requirement_summary.incomplete', 1);
+
+        $this->getJson('/api/coordinator/internship-requirements')
+            ->assertOk()
+            ->assertJsonPath('summary.total', 1)
+            ->assertJsonPath('summary.completed', 0)
+            ->assertJsonPath('data.0.id', $student->id);
+
+        $this->getJson('/api/coordinator/internship-requirements/'.$student->id)
+            ->assertOk()
+            ->assertJsonPath('overview.status', 'incomplete');
+
+        $this->getJson('/api/coordinator/internship-requirements?status=incomplete')
+            ->assertJsonPath('total', 1);
+        $this->getJson('/api/coordinator/internship-requirements?status=completed')
+            ->assertJsonPath('total', 0);
+        $this->getJson('/api/coordinator/internship-requirements?search=not-a-student')
+            ->assertJsonPath('total', 0);
+
+        $unassignedCoordinator = User::factory()->create(['role' => 'coordinator']);
+        $unassignedCoordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
+        Sanctum::actingAs($unassignedCoordinator);
+        $this->getJson('/api/coordinator/internship-requirements')->assertJsonPath('summary.total', 0);
+        $this->getJson('/api/coordinator/internship-requirements/'.$student->id)->assertNotFound();
+        Sanctum::actingAs($coordinator);
 
         $this->getJson('/api/coordinator/reports?date_from='.now()->toDateString().'&date_to='.now()->toDateString())
             ->assertOk()
@@ -187,12 +231,16 @@ class CoordinatorDashboardTest extends TestCase
             ->assertJsonPath('students.0.remaining', 478)
             ->assertJsonPath('journals.0.submitted', 2)
             ->assertJsonPath('requirements.0.requirement', 'Consent Form')
+            ->assertJsonPath('requirements.0.reviewedBy', $coordinator->name)
             ->assertJsonPath('deployments.0.hte', 'Partner Company')
             ->assertJsonPath('travel.0.id', 'TRAVEL-001');
 
         $export = $this->get('/api/coordinator/reports/export/csv?report=student_internship&date_from='.now()->toDateString().'&date_to='.now()->toDateString())
             ->assertOk();
-        $exportPath = $export->baseResponse->getFile()->getPathname();
+        /** @var BinaryFileResponse $exportResponse */
+        $exportResponse = $export->baseResponse;
+        $this->assertInstanceOf(BinaryFileResponse::class, $exportResponse);
+        $exportPath = $exportResponse->getFile()->getPathname();
         $this->assertStringContainsString('Student Internship Report', file_get_contents($exportPath));
         $this->assertStringContainsString('"Student Number","Student Name","Academic Year",Semester,HTE,"Working Schedule",Supervisor', file_get_contents($exportPath));
         $this->assertStringContainsString('2026-0001', file_get_contents($exportPath));
@@ -201,7 +249,10 @@ class CoordinatorDashboardTest extends TestCase
 
         $hteExport = $this->get('/api/coordinator/reports/export/csv?report=hte_deployment')
             ->assertOk();
-        $hteExportPath = $hteExport->baseResponse->getFile()->getPathname();
+        /** @var BinaryFileResponse $hteExportResponse */
+        $hteExportResponse = $hteExport->baseResponse;
+        $this->assertInstanceOf(BinaryFileResponse::class, $hteExportResponse);
+        $hteExportPath = $hteExportResponse->getFile()->getPathname();
         $hteContents = file_get_contents($hteExportPath);
         $this->assertStringContainsString('Host Training Establishment Report', $hteContents);
         $this->assertStringContainsString('HTE,"HTE Address",Department,"Student Count","Working Schedule",Supervisor', $hteContents);

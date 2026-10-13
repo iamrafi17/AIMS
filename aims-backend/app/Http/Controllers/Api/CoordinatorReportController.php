@@ -23,8 +23,8 @@ class CoordinatorReportController extends Controller
         $filters = $request->validate([
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
-            'student_id' => ['nullable', 'integer', function (string $attribute, mixed $value, \Closure $fail) use ($programId): void {
-                if (! Student::forProgram($programId)->whereKey($value)->exists()) {
+            'student_id' => ['nullable', 'integer', function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                if (! ProgramAccess::studentQuery($request->user())->whereKey($value)->exists()) {
                     $fail('The selected student does not belong to your program.');
                 }
             }],
@@ -36,11 +36,12 @@ class CoordinatorReportController extends Controller
             'semester' => ['nullable', 'string', 'max:30'],
             'academic_section_id' => ['nullable', 'integer', Rule::exists('academic_sections', 'id')->where(fn ($query) => $query
                 ->where('program_id', $programId)
+                ->whereIn('id', ProgramAccess::sectionIds($request->user()))
                 ->where('is_active', true))],
         ]);
         $sectionId = isset($filters['academic_section_id']) ? (int) $filters['academic_section_id'] : null;
         $program = $request->user()->program()->first(['programs.id', 'programs.name', 'programs.code']);
-        $sections = AcademicSection::where('program_id', $programId)
+        $sections = ProgramAccess::sectionQuery($request->user())
             ->where('is_active', true)
             ->newestPeriodFirst()
             ->orderBy('year_level')
@@ -49,8 +50,7 @@ class CoordinatorReportController extends Controller
         $from = isset($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : null;
         $to = isset($filters['date_to']) ? Carbon::parse($filters['date_to'])->endOfDay() : null;
 
-        $students = Student::query()
-            ->forProgram($programId)
+        $students = ProgramAccess::studentQuery($request->user())
             ->when($sectionId, fn ($query) => $query->forAcademicSection($sectionId))
             ->when($filters['student_id'] ?? null, fn ($query, $value) => $query->whereKey($value))
             ->when($filters['hte_id'] ?? null, fn ($query, $value) => $query->forHte($value))
@@ -63,9 +63,11 @@ class CoordinatorReportController extends Controller
                 'academicSection.academicPeriod:id,academic_year,semester',
                 'hte:id,name,address,latitude,longitude,geofence_radius,geofence_enabled',
                 'hteDepartment:id,hte_id,department_name',
-                'requirements.reviewer:id,name',
-                'supervisor:id,name',
-                'supervisorRecord:id,hte_department_id,full_name',
+                'requirements.reviewer.roleDefinition:id,code',
+                'requirements.reviewer.employeeProfile:id,user_id,first_name,middle_name,last_name',
+                'supervisor.roleDefinition:id,code',
+                'supervisor.normalizedSupervisorProfile:id,user_id,full_name',
+                'currentInternship.currentPlacement.supervisor.supervisorProfile:id,full_name,user_id',
             ])
             ->orderBy('last_name')
             ->get();
@@ -85,7 +87,12 @@ class CoordinatorReportController extends Controller
         $deploymentApprovals = ApprovalRecord::query()
             ->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)
             ->whereIn('subject_id', $studentIds)
-            ->with(['submitter:id,name,role', 'decisionMaker:id,name,role'])
+            ->with([
+                'submitter.roleDefinition:id,code',
+                'submitter.employeeProfile:id,user_id,first_name,middle_name,last_name',
+                'decisionMaker.roleDefinition:id,code',
+                'decisionMaker.employeeProfile:id,user_id,first_name,middle_name,last_name',
+            ])
             ->latest('created_at')
             ->get()
             ->groupBy('subject_id');
@@ -145,7 +152,8 @@ class CoordinatorReportController extends Controller
                 'hte' => $student->hte?->name ?? 'Not assigned',
                 'hteAddress' => $student->hte?->address,
                 'department' => $student->hteDepartment?->department_name ?? 'Not assigned',
-                'supervisor' => $student->supervisorRecord?->full_name ?? $student->supervisor?->name ?? 'Not assigned',
+                'supervisor' => $student->currentInternship?->currentPlacement?->supervisor?->full_name
+                    ?? $student->supervisor?->name ?? 'Not assigned',
                 'deploymentDate' => $student->ojt_start_date?->toDateString(),
                 'academicYear' => $student->internship_year,
                 'semester' => $student->internship_semester,
@@ -230,7 +238,8 @@ class CoordinatorReportController extends Controller
                     'programs' => $students->pluck('program.code')->filter()->unique()->values(),
                     'departments' => $students->pluck('hteDepartment.department_name')->filter()->unique()->values(),
                     'workingSchedules' => $students->map(fn (Student $student) => $this->studentSchedule($student))->filter()->unique()->values(),
-                    'supervisors' => $students->map(fn (Student $student) => $student->supervisorRecord?->full_name ?? $student->supervisor?->name)->filter()->unique()->values(),
+                    'supervisors' => $students->map(fn (Student $student) => $student->currentInternship?->currentPlacement?->supervisor?->full_name
+                        ?? $student->supervisor?->name)->filter()->unique()->values(),
                     'moa' => $moa, 'moaExpiry' => $latestMoa?->expiration_date?->format('M j, Y') ?? 'Not set'];
             })->values();
 
@@ -253,7 +262,7 @@ class CoordinatorReportController extends Controller
             ->map(function (TravelLog $travel) {
                 $student = $travel->participants->first();
                 $programHeadReview = $travel->report?->validations->where('reviewer_role', 'program_head')->sortByDesc('reviewed_at')->first();
-                $vpaaValidation = $travel->report?->validations->where('reviewer_role', 'vpaa')->sortByDesc('reviewed_at')->first();
+                $vpaaValidation = $travel->report?->validations->whereIn('reviewer_role', ['dean', 'vpaa'])->sortByDesc('reviewed_at')->first();
                 $checkpointSummary = $travel->checkpoints->sortBy('sequence')->map(fn ($checkpoint) => collect([
                     $checkpoint->checkpoint_name ?: $checkpoint->readable_location ?: ucfirst($checkpoint->point_type),
                     $checkpoint->captured_at?->format('g:i A'),
