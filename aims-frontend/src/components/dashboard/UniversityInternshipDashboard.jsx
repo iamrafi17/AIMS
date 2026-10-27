@@ -13,7 +13,6 @@ import {
   FiMapPin,
   FiRefreshCw,
   FiShield,
-  FiStar,
   FiTrendingUp,
   FiUserCheck,
   FiUsers,
@@ -27,14 +26,15 @@ const emptyDashboard = {
     active: 0,
     completed: 0,
     pending: 0,
+    awaiting_assignment: 0,
+    pending_deployment_approval: 0,
+    approved_awaiting_start: 0,
     deployed: 0,
     partner_htes: 0,
     average_progress: 0,
   },
   analytics: {
     average_progress: 0,
-    average_rating: 0,
-    evaluations_completed: 0,
     internship_status: [],
     program_performance: [],
   },
@@ -335,18 +335,20 @@ function UniversityInternshipDashboard({
             </p>
           )}
         </div>
-         <div className="portal-metric-grid grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-5">
+         <div className="portal-metric-grid grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
           <MetricCard label="Total interns" value={overview.total_students} note="Registered university interns" icon={FiUsers} />
           <MetricCard label="Active interns" value={overview.active} note="Currently completing OJT" icon={FiUserCheck} tone="green" />
           <MetricCard label="Completed" value={overview.completed} note="Internships successfully finished" icon={FiCheckCircle} tone="blue" />
-          <MetricCard label="Awaiting deployment" value={overview.pending} note="Pending internship start" icon={FiClock} tone="amber" />
+          <MetricCard label="Awaiting HTE assignment" value={overview.awaiting_assignment} note="No final HTE assigned" icon={FiClock} tone="amber" />
+          <MetricCard label="Awaiting approval" value={overview.pending_deployment_approval} note="Deployment under review" icon={FiClock} tone="amber" />
+          <MetricCard label="Approved, awaiting start" value={overview.approved_awaiting_start} note="Before the OJT start date" icon={FiClock} tone="amber" />
           <MetricCard label="Average progress" value={`${overview.average_progress}%`} note="Rendered against required hours" icon={FiTrendingUp} tone="violet" />
         </div>
       </section>
 
       <Panel
         title="Internship Analytics"
-        subtitle="Internship status, evaluation results, and program-level performance"
+        subtitle="Internship status and program-level performance"
         icon={FiBarChart2}
         action={(
           <Link to={routes.analytics} className="inline-flex items-center gap-1 text-xs font-black text-[#7D001D] dark:text-rose-300">
@@ -356,17 +358,10 @@ function UniversityInternshipDashboard({
       >
         <div className="grid gap-6 xl:grid-cols-[0.75fr_1.25fr]">
           <div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-[#7D001D]/5 p-4 dark:bg-rose-950/20">
-                <FiTrendingUp className="text-xl text-[#7D001D] dark:text-rose-300" />
-                <p className="mt-3 text-2xl font-black text-[#690016] dark:text-white">{analytics.average_progress}%</p>
-                <p className="mt-1 text-[9px] font-black uppercase tracking-wide text-slate-400">Average OJT progress</p>
-              </div>
-              <div className="rounded-2xl bg-amber-50 p-4 dark:bg-amber-950/20">
-                <FiStar className="text-xl text-amber-600" />
-                <p className="mt-3 text-2xl font-black text-[#690016] dark:text-white">{analytics.average_rating}<span className="text-xs text-slate-400"> / 5</span></p>
-                <p className="mt-1 text-[9px] font-black uppercase tracking-wide text-slate-400">{analytics.evaluations_completed} reviewed evaluations</p>
-              </div>
+            <div className="rounded-2xl bg-[#7D001D]/5 p-4 dark:bg-rose-950/20">
+              <FiTrendingUp className="text-xl text-[#7D001D] dark:text-rose-300" />
+              <p className="mt-3 text-2xl font-black text-[#690016] dark:text-white">{analytics.average_progress}%</p>
+              <p className="mt-1 text-[9px] font-black uppercase tracking-wide text-slate-400">Average OJT progress</p>
             </div>
             <div className="mt-5 space-y-3">
               {statusTotal ? analytics.internship_status.map((item) => (
@@ -386,14 +381,13 @@ function UniversityInternshipDashboard({
 
           {analytics.program_performance.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[650px] text-left">
+              <table className="w-full min-w-[550px] text-left">
                 <thead>
                   <tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700">
                     <th className="pb-3 font-black">Program</th>
                     <th className="pb-3 font-black">Interns</th>
                     <th className="pb-3 font-black">OJT progress</th>
                     <th className="pb-3 font-black">Attendance</th>
-                    <th className="pb-3 text-right font-black">Rating</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -409,7 +403,6 @@ function UniversityInternshipDashboard({
                         <div className="mb-1 text-right text-[9px] font-black text-emerald-600">{item.attendance_rate}%</div>
                         <ProgressBar value={item.attendance_rate} color="bg-emerald-500" />
                       </td>
-                      <td className="py-4 text-right text-xs font-black text-amber-600">{item.average_rating} / 5</td>
                     </tr>
                   ))}
                 </tbody>

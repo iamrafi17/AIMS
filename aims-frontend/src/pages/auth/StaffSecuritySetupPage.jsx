@@ -16,9 +16,11 @@ import useAuth from '../../context/useAuth';
 import api from '../../services/api';
 import marsuLogo from '../../assets/marsu-logo.png';
 import ContactNumberInput from '../../components/forms/ContactNumberInput';
-import { getPasswordStrength } from '../../utils/passwordStrength';
+import PsgcAddressSelect from '../../components/forms/PsgcAddressSelect';
+import { getPasswordStrength, usePasswordMinimum } from '../../utils/passwordStrength';
 
 const roleRoutes = {
+  admin: '/admin/dashboard',
   coordinator: '/coordinator/dashboard',
   program_head: '/program-head/dashboard',
   vpaa: '/vpaa/dashboard',
@@ -27,6 +29,7 @@ const roleRoutes = {
 };
 
 const roleLabels = {
+  admin: 'Admin',
   coordinator: 'Coordinator',
   program_head: 'Program Head',
   vpaa: 'VPAA',
@@ -65,6 +68,7 @@ function assignmentLabel(assignment, fallback) {
 }
 
 export default function StaffSecuritySetupPage() {
+  const passwordMinimum = usePasswordMinimum();
   const { user, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(() => deriveStep(user));
@@ -81,8 +85,7 @@ export default function StaffSecuritySetupPage() {
   });
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  const activeIndex = currentStep === 'complete_profile' ? 0 : 1;
+  const [addressValid, setAddressValid] = useState(false);
 
   useEffect(() => {
     setCurrentStep(deriveStep(user));
@@ -127,6 +130,10 @@ export default function StaffSecuritySetupPage() {
 
   const submitProfile = async (event) => {
     event.preventDefault();
+    if (!addressValid) {
+      toast.error('Select a province, municipality or city, and barangay.');
+      return;
+    }
     setSaving(true);
     try {
       const response = await api.post('/staff/profile-setup', {
@@ -205,7 +212,7 @@ export default function StaffSecuritySetupPage() {
 
   const passwordStrength = getPasswordStrength(password);
   const passwordRequirements = [
-    { label: '8–12 characters', met: password.length >= 8 && password.length <= 12 },
+    { label: `At least ${passwordMinimum} characters`, met: password.length >= passwordMinimum && password.length <= 255 },
     { label: 'Matches Confirm new password', met: Boolean(password) && password === passwordConfirmation },
   ];
   const passwordFields = (
@@ -213,7 +220,7 @@ export default function StaffSecuritySetupPage() {
       <div>
         <label htmlFor="staff-new-password" className="mb-2 block text-sm font-bold">New password</label>
         <div className="relative">
-          <input id="staff-new-password" required minLength="8" maxLength="12" type={showPassword ? 'text' : 'password'} autoComplete="new-password" aria-describedby="new-password-strength new-password-requirements" value={password} onChange={(event) => setPassword(event.target.value)} className={`${inputClass} pr-12`} />
+          <input id="staff-new-password" required minLength={passwordMinimum} maxLength={255} type={showPassword ? 'text' : 'password'} autoComplete="new-password" aria-describedby="new-password-strength new-password-requirements" value={password} onChange={(event) => setPassword(event.target.value)} className={`${inputClass} pr-12`} />
           <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#7D001D]" aria-label={showPassword ? 'Hide new password' : 'Show new password'} aria-pressed={showPassword}>
             {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
           </button>
@@ -235,13 +242,13 @@ export default function StaffSecuritySetupPage() {
             </li>)}
           </ul>
           <p className="mt-2 text-slate-500 dark:text-slate-400">Your new password must be different from your temporary password.</p>
-          <p className="mt-2 text-slate-500 dark:text-slate-400">For a stronger password, use 12 characters with uppercase and lowercase letters, numbers, and symbols.</p>
+          <p className="mt-2 text-slate-500 dark:text-slate-400">For a stronger password, use uppercase and lowercase letters, numbers, and symbols.</p>
         </div>
       </div>
       <label>
         <span className="mb-2 block text-sm font-bold">Confirm new password</span>
         <div className="relative">
-          <input required minLength="8" maxLength="12" type={showPasswordConfirmation ? 'text' : 'password'} autoComplete="new-password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} className={`${inputClass} pr-12`} />
+          <input required minLength={passwordMinimum} maxLength={255} type={showPasswordConfirmation ? 'text' : 'password'} autoComplete="new-password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} className={`${inputClass} pr-12`} />
           <button type="button" onClick={() => setShowPasswordConfirmation((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#7D001D]" aria-label={showPasswordConfirmation ? 'Hide confirm new password' : 'Show confirm new password'} aria-pressed={showPasswordConfirmation}>
             {showPasswordConfirmation ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
           </button>
@@ -261,7 +268,7 @@ export default function StaffSecuritySetupPage() {
         <div className="relative max-w-lg">
           <ShieldCheckIcon className="h-16 w-16 text-[#d4af37]" />
           <p className="mt-6 text-sm font-black uppercase tracking-[0.2em] text-[#e5c351]">First login setup</p>
-          <h1 className="mt-4 text-5xl font-black leading-tight">Complete your staff account.</h1>
+          <h1 className="mt-4 text-5xl font-black leading-tight">Complete your account.</h1>
           <p className="mt-5 text-lg leading-8 text-white/70">Confirm your profile first, then protect the account with recovery questions and a personal password.</p>
         </div>
         <p className="relative text-sm text-white/45">Academic Internship Monitoring System · Santa Cruz Campus</p>
@@ -278,9 +285,16 @@ export default function StaffSecuritySetupPage() {
             <ol className="my-7 grid grid-cols-2 gap-3" aria-label="Account setup progress">
               {steps.map((step, index) => {
                 const Icon = step.icon;
-                const completed = index < activeIndex;
-                const active = index === activeIndex;
-                return <li key={step.key} className={`rounded-xl border p-3 text-center ${active ? 'border-[#7D001D] bg-[#7D001D]/5 text-[#7D001D] dark:text-rose-300' : completed ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300' : 'border-slate-200 text-slate-400 dark:border-slate-700'}`}>{completed ? <CheckCircleIcon className="mx-auto h-5 w-5" /> : <Icon className="mx-auto h-5 w-5" />}<span className="mt-1 block text-xs font-black sm:text-sm">{index + 1}. {step.label}</span></li>;
+                const completed = index === 0 && !user?.requires_profile_setup;
+                const active = step.key === currentStep;
+                const canVisit = step.key === 'complete_profile' || !user?.requires_profile_setup;
+                return <li key={step.key}><button
+                  type="button"
+                  disabled={!canVisit || saving}
+                  aria-current={active ? 'step' : undefined}
+                  onClick={() => setCurrentStep(step.key)}
+                  className={`w-full rounded-xl border p-3 text-center transition disabled:cursor-not-allowed ${active ? 'border-[#7D001D] bg-[#7D001D]/5 text-[#7D001D] dark:text-rose-300' : completed ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300' : 'border-slate-200 text-slate-400 dark:border-slate-700'} ${canVisit && !active ? 'hover:border-[#7D001D]' : ''}`}
+                >{completed ? <CheckCircleIcon className="mx-auto h-5 w-5" /> : <Icon className="mx-auto h-5 w-5" />}<span className="mt-1 block text-xs font-black sm:text-sm">{index + 1}. {step.label}</span></button></li>;
               })}
             </ol>
           )}
@@ -301,9 +315,9 @@ export default function StaffSecuritySetupPage() {
                 </>}
                 <label><span className="mb-2 block text-sm font-bold">Email address</span><input required type="email" maxLength="255" autoComplete="email" value={profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value })} className={inputClass} /></label>
                 <label><span className="mb-2 block text-sm font-bold">Contact Number</span><ContactNumberInput required autoComplete="tel" value={profile.contact_number} onValueChange={(contact_number) => setProfile((current) => ({ ...current, contact_number }))} className={inputClass} placeholder="09XX XXX XXXX" /></label>
-                <label className="sm:col-span-2"><span className="mb-2 block text-sm font-bold">Personal Address</span><textarea required rows="3" maxLength="1000" autoComplete="street-address" value={profile.address} onChange={(event) => setProfile({ ...profile, address: event.target.value })} className={inputClass} /></label>
+                <div className="sm:col-span-2"><p className="mb-2 text-sm font-bold">Personal Address</p><PsgcAddressSelect value={profile.address} onChange={(address) => setProfile((current) => ({ ...current, address }))} onValidityChange={setAddressValid} className={inputClass} /></div>
               </div>
-              <SubmitRow saving={saving} savingText="Saving profile..." label="Save Profile & Next" />
+              <SubmitRow saving={saving} savingText="Saving profile..." label={user?.requires_profile_setup ? 'Save Profile & Next' : 'Save Profile & Return to Security'} />
             </form>
           )}
 
@@ -317,7 +331,7 @@ export default function StaffSecuritySetupPage() {
                     return (
                       <div key={`security-${index + 1}`} className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-800/50 sm:grid-cols-[1.15fr_0.85fr]">
                         <label><span className="mb-2 block text-xs font-black uppercase">Question {index + 1}</span><select required value={item.security_question_id} disabled={loadingQuestions} onChange={(event) => updateQuestion(index, 'security_question_id', event.target.value)} className={inputClass}><option value="">{loadingQuestions ? 'Loading questions...' : 'Select a question'}</option>{availableQuestions.map((question) => <option key={question.id} value={question.id} disabled={selectedElsewhere.includes(String(question.id))}>{question.question}</option>)}</select></label>
-                        <label><span className="mb-2 block text-xs font-black uppercase">Your answer</span><input required maxLength="255" autoComplete="off" value={item.answer} onChange={(event) => updateQuestion(index, 'answer', event.target.value)} className={inputClass} /></label>
+                        <label><span className="mb-2 block text-xs font-black uppercase">Your answer</span><input required minLength="2" maxLength="255" autoComplete="off" value={item.answer} onChange={(event) => updateQuestion(index, 'answer', event.target.value)} className={inputClass} /></label>
                       </div>
                     );
                   })}

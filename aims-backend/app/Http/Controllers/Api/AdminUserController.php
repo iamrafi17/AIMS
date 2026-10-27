@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Program;
 use App\Models\Supervisor;
+use App\Models\SystemSetting;
 use App\Models\User;
 use App\Support\UserId;
 use Illuminate\Database\QueryException;
@@ -33,7 +34,7 @@ class AdminUserController extends Controller
             'normalizedSupervisorProfile.activeAssignment.department.hte',
             'college:id,name,code',
             'program:id,college_id,name,code',
-            'student:id,user_id',
+            'student:id,user_id,first_name,middle_name,last_name',
             'student.college:id,name,code',
             'student.program:id,college_id,name,code',
             'supervisorProfile.department.hte:id,name,address',
@@ -156,7 +157,7 @@ class AdminUserController extends Controller
         $term = trim($validated['search']);
 
         $supervisors = Supervisor::query()
-            ->with(['department.hte:id,name,address', 'user:id,email,username,is_active'])
+            ->with(['department.hte:id,name,address', 'supervisorProfile', 'user:id,email,username,is_active'])
             ->where(function ($query) use ($term) {
                 $query->whereHas('supervisorProfile', fn ($profile) => $profile->where('full_name', 'like', '%'.$term.'%'))
                     ->orWhereHas('department', fn ($departmentQuery) => $departmentQuery
@@ -169,6 +170,7 @@ class AdminUserController extends Controller
             ->map(fn (Supervisor $supervisor) => [
                 'id' => $supervisor->id,
                 'full_name' => $supervisor->full_name,
+                'contact_email' => $supervisor->contact_email,
                 'department' => $supervisor->department,
                 'hte' => $supervisor->department?->hte,
                 'has_account' => (bool) $supervisor->user_id,
@@ -298,7 +300,7 @@ class AdminUserController extends Controller
     public function resetPassword(Request $request, User $user)
     {
         $request->validate([
-            'password' => 'required|string|min:8|max:255',
+            'password' => SystemSetting::passwordRules(),
         ]);
 
         $user->update([
@@ -324,8 +326,9 @@ class AdminUserController extends Controller
 
     private function generateTemporaryPassword(): string
     {
+        $length = SystemSetting::minimumPasswordLength();
         do {
-            $password = Str::password(12, true, true, true, false);
+            $password = Str::password($length, true, true, true, false);
         } while (
             ! preg_match('/[A-Z]/', $password)
             || ! preg_match('/[a-z]/', $password)

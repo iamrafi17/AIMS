@@ -1,64 +1,479 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 import {
+  StarIcon,
   CheckBadgeIcon,
   ClockIcon,
-  MagnifyingGlassIcon,
-  PencilSquareIcon,
-  StarIcon,
   UserGroupIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
-import toast from 'react-hot-toast';
-import api from '../../services/api';
-import { EmptyPanel, LoadingPanel, MetricCard, PageIntro } from '../../components/common/PortalUI';
+} from "@heroicons/react/24/outline";
+import toast from "react-hot-toast";
+import api from "../../services/api";
+import { PageIntro, MetricCard } from "../../components/common/PortalUI";
+import {
+  Button,
+  ErrorBox,
+  Field,
+  LegacyResult,
+  Pagination,
+  Rubric,
+  ScaleGuide,
+  Summary,
+} from "../../components/evaluations/EvaluationUI";
+import {
+  errorText,
+  periodLabel,
+  statusLabel,
+  useUnsavedWarning,
+} from "../../components/evaluations/evaluationUtils";
 
-const criteria = [
-  ['work_quality', 'Work quality'],
-  ['communication', 'Communication'],
-  ['professionalism', 'Professionalism'],
-  ['attendance', 'Attendance & punctuality'],
-  ['technical_skills', 'Technical skills'],
-  ['teamwork', 'Teamwork'],
-];
-
-function EvaluationModal({ student, type, existing, onClose, onSaved }) {
-  const [form, setForm] = useState(() => ({
-    student_id: student.id,
-    evaluation_type: type,
-    ...Object.fromEntries(criteria.map(([key]) => [key, existing?.[key] || 3])),
-    recommendations: existing?.recommendations || '',
-    feedback: existing?.feedback || '',
-    status: existing?.status === 'submitted' ? 'submitted' : 'draft',
-  }));
-  const [saving, setSaving] = useState(false);
-  const save = async (status) => {
-    if (status === 'submitted' && !window.confirm('Submit this evaluation? It will be shared as an official supervisor evaluation.')) return;
-    setSaving(true);
-    try { const response = await api.post('/supervisor/evaluations', { ...form, status }); toast.success(response.data.message); onSaved(); }
-    catch (error) { const errors = error.response?.data?.errors; toast.error(errors ? Object.values(errors).flat()[0] : error.response?.data?.message || 'Unable to save evaluation.'); }
-    finally { setSaving(false); }
+function EvaluationEditor({ initial, onBack }) {
+  const [data, setData] = useState(initial);
+  const savedAnswers = (ev) =>
+    Object.fromEntries(
+      (ev.responses || []).map((r) => [
+        r.evaluation_criterion_id,
+        {
+          rating_option_id: r.evaluation_rating_option_id,
+          is_no_rating: r.is_no_rating,
+          extra_text: r.extra_text || "",
+        },
+      ]),
+    );
+  const [answers, setAnswers] = useState(() =>
+    savedAnswers(initial.evaluation),
+  );
+  const [feedback, setFeedback] = useState(initial.evaluation.feedback || "");
+  const [recommendations, setRecommendations] = useState(
+    initial.evaluation.recommendations || "",
+  );
+  const [dirty, setDirty] = useState(false);
+  const [review, setReview] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useUnsavedWarning(dirty);
+  const locked = data.evaluation.status !== "draft" || data.legacy;
+  const answered = Object.values(answers).filter(
+    (a) => a.rating_option_id || a.is_no_rating,
+  ).length;
+  const action = async (type) => {
+    setBusy(true);
+    setError("");
+    try {
+      if (type === "submit") {
+        if (
+          !window.confirm(
+            "Submit and lock this evaluation? Submitted answers cannot be edited.",
+          )
+        )
+          return;
+        const response = await api.post(
+          `/supervisor/evaluations/${data.evaluation.id}/submit`,
+          { row_version: data.evaluation.row_version },
+        );
+        setData(response.data);
+        setDirty(false);
+        toast.success(response.data.message);
+      } else {
+        const response = await api.put(
+          `/supervisor/evaluations/${data.evaluation.id}/draft`,
+          {
+            row_version: data.evaluation.row_version,
+            feedback,
+            recommendations,
+            responses: Object.entries(answers).map(([id, answer]) => ({
+              criterion_id: Number(id),
+              rating_option_id: answer.rating_option_id ?? null,
+              is_no_rating: answer.is_no_rating ?? false,
+              extra_text: answer.extra_text || null,
+            })),
+          },
+        );
+        setData(response.data);
+        setAnswers(savedAnswers(response.data.evaluation));
+        setDirty(false);
+        if (type === "review") {
+          setData(
+            (
+              await api.get(
+                `/supervisor/evaluations/${data.evaluation.id}/review`,
+              )
+            ).data,
+          );
+          setReview(true);
+        } else toast.success("Draft saved.");
+      }
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
   };
-  const average = (criteria.reduce((total, [key]) => total + Number(form[key]), 0) / criteria.length).toFixed(1);
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={onClose}><div onMouseDown={(event) => event.stopPropagation()} className="flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900"><div className="flex items-start justify-between border-b border-slate-200 px-6 py-5 dark:border-slate-700"><div><p className="text-xs font-black uppercase tracking-widest text-[#a8750b]">{type} evaluation · {student.student_id}</p><h2 className="mt-1 text-2xl font-black text-slate-900 dark:text-white">{student.name}</h2></div><button onClick={onClose}><XMarkIcon className="h-6 w-6 text-slate-500" /></button></div><div className="min-h-0 flex-1 overflow-y-auto p-6"><div className="mb-6 flex items-center justify-between rounded-2xl bg-gradient-to-r from-[#7D001D]/8 to-amber-50 p-4 dark:from-red-400/10 dark:to-amber-950/20"><div><p className="text-sm font-bold text-slate-600 dark:text-slate-300">Current average rating</p><p className="mt-1 text-3xl font-black text-[#7D001D] dark:text-red-300">{average} / 5.0</p></div><StarIcon className="h-10 w-10 text-[#d4af37]" /></div><div className="grid gap-4 md:grid-cols-2">{criteria.map(([key, label]) => <div key={key} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"><div className="flex items-center justify-between"><label className="font-bold text-slate-800 dark:text-white">{label}</label><span className="text-lg font-black text-[#7D001D] dark:text-red-300">{form[key]}</span></div><div className="mt-3 flex gap-2">{[1, 2, 3, 4, 5].map((score) => <button type="button" key={score} onClick={() => setForm({ ...form, [key]: score })} className={`grid h-10 flex-1 place-items-center rounded-xl text-sm font-black transition ${score <= form[key] ? 'bg-[#7D001D] text-white' : 'bg-slate-100 text-slate-400 dark:bg-slate-800'}`}>{score}</button>)}</div></div>)}</div><div className="mt-5 grid gap-5 md:grid-cols-2"><label><span className="mb-2 block text-sm font-bold">Performance feedback</span><textarea value={form.feedback} onChange={(event) => setForm({ ...form, feedback: event.target.value })} className="min-h-32 w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" placeholder="Describe strengths and areas for improvement..." /></label><label><span className="mb-2 block text-sm font-bold">Recommendations</span><textarea value={form.recommendations} onChange={(event) => setForm({ ...form, recommendations: event.target.value })} className="min-h-32 w-full rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-700" placeholder="Recommended next steps or development activities..." /></label></div></div><div className="flex flex-col-reverse gap-3 border-t border-slate-200 p-5 dark:border-slate-700 sm:flex-row sm:justify-end"><button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold dark:border-slate-700">Cancel</button><button disabled={saving} onClick={() => save('draft')} className="rounded-2xl border border-[#7D001D] px-5 py-3 font-bold text-[#7D001D] dark:text-red-300">Save draft</button><button disabled={saving} onClick={() => save('submitted')} className="rounded-2xl bg-[#7D001D] px-6 py-3 font-bold text-white">{saving ? 'Saving...' : 'Submit evaluation'}</button></div></div></div>;
+  const openMissing = (criterion) => {
+    setReview(false);
+    setTimeout(() => {
+      const element = document.getElementById(`criterion-${criterion.id}`);
+      let parent = element?.parentElement;
+      while (parent) {
+        if (parent.tagName === "DETAILS") parent.open = true;
+        parent = parent.parentElement;
+      }
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document.getElementById(`rating-${criterion.id}`)?.focus();
+    }, 0);
+  };
+  return (
+    <div className="space-y-5">
+      <div className="ev-toolbar justify-between">
+        <Button
+          disabled={busy}
+          onClick={() => {
+            if (!dirty || window.confirm("Discard unsaved evaluation changes?"))
+              onBack();
+          }}
+        >
+          Back to interns
+        </Button>
+        <span className="ev-status">{data.evaluation.status}</span>
+      </div>
+      <ErrorBox message={error} />
+      <div className="ev-panel">
+        <h2 className="text-xl font-bold">{data.student?.name}</h2>
+        <p>{data.student?.student_id}</p>
+        {data.internship && (
+          <p className="mt-2 text-sm">
+            {data.internship.section} ·{" "}
+            {data.internship.hte || "HTE unavailable"} ·{" "}
+            {data.internship.department || "Department unavailable"}
+          </p>
+        )}
+        {locked && (
+          <p className="mt-2 text-sm">
+            Evaluator: {data.evaluator?.name} · Submitted:{" "}
+            {data.evaluation.submitted_at
+              ? new Date(data.evaluation.submitted_at).toLocaleString()
+              : "—"}{" "}
+            · Read-only
+          </p>
+        )}
+      </div>
+      {data.legacy ? (
+        <LegacyResult data={data} />
+      ) : (
+        <>
+          <ScaleGuide form={data.form} />
+          {(locked || review) && <Summary summary={data.summary} />}
+          {review && !locked && (
+            <section className="ev-panel space-y-3">
+              <h3 className="font-bold">Review before submission</h3>
+              <ErrorBox message={data.summary.errors.join("\n")} />
+              {data.summary.missing.map((m) => (
+                <div key={m.id}>
+                  <Button onClick={() => openMissing(m)}>
+                    Complete: {m.label}
+                  </Button>
+                </div>
+              ))}
+            </section>
+          )}
+          <fieldset disabled={busy} className="space-y-4">
+            <Rubric
+              form={data.form}
+              answers={answers}
+              readOnly={locked || review}
+              missing={review ? data.summary.missing : []}
+              onAnswer={(id, answer) => {
+                setAnswers((current) => ({ ...current, [id]: answer }));
+                setDirty(true);
+              }}
+            />
+            <section className="ev-panel grid gap-4 sm:grid-cols-2">
+              <Field label="Performance feedback">
+                <textarea
+                  className="ev-input min-h-28"
+                  maxLength={5000}
+                  readOnly={locked || review}
+                  value={feedback}
+                  onChange={(e) => {
+                    setFeedback(e.target.value);
+                    setDirty(true);
+                  }}
+                />
+              </Field>
+              <Field label="Recommendations">
+                <textarea
+                  className="ev-input min-h-28"
+                  maxLength={5000}
+                  readOnly={locked || review}
+                  value={recommendations}
+                  onChange={(e) => {
+                    setRecommendations(e.target.value);
+                    setDirty(true);
+                  }}
+                />
+              </Field>
+            </section>
+          </fieldset>
+          {!locked && (
+            <div className="ev-sticky space-y-3">
+              <div className="ev-toolbar justify-between text-sm" role="status">
+                <span>
+                  {answered}/{data.summary.total_criteria} answered
+                </span>
+                <span>
+                  {busy
+                    ? "Saving…"
+                    : dirty
+                      ? "Unsaved changes"
+                      : "All changes saved"}
+                </span>
+              </div>
+              <progress
+                aria-label="Answered criteria"
+                value={answered}
+                max={data.summary.total_criteria || 1}
+                className="w-full accent-[#7D001D]"
+              />
+              <div className="ev-toolbar justify-end">
+                {review ? (
+                  <>
+                    <Button disabled={busy} onClick={() => setReview(false)}>
+                      Back to edit
+                    </Button>
+                    <Button
+                      primary
+                      disabled={busy || !data.summary.can_submit}
+                      onClick={() => action("submit")}
+                    >
+                      Submit and lock
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button disabled={busy} onClick={() => action("save")}>
+                      Save draft
+                    </Button>
+                    <Button
+                      primary
+                      disabled={busy}
+                      onClick={() => action("review")}
+                    >
+                      Save and review
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 export default function SupervisorEvaluations() {
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [modal, setModal] = useState(null);
-  const load = useCallback(async () => { setLoading(true); try { setData((await api.get('/supervisor/evaluations')).data); } catch { toast.error('Unable to load evaluations.'); } finally { setLoading(false); } }, []);
-  useEffect(() => { load(); }, [load]);
-  const students = useMemo(() => (data?.students || []).filter((student) => `${student.student_id} ${student.name}`.toLowerCase().includes(search.toLowerCase())), [data, search]);
-  const evaluations = data?.evaluations || [];
-  const submitted = evaluations.filter((item) => item.status === 'submitted').length;
-  const open = (student, type) => setModal({ student, type, existing: evaluations.find((item) => item.student_id === student.id && item.evaluation_type === type) });
-  if (loading && !data) return <LoadingPanel />;
-  return <div className="space-y-6">
-    <PageIntro eyebrow="Performance management" title="Student Evaluations" description="Complete structured midterm and final performance evaluations for every intern assigned to you." icon={StarIcon} />
-    <div className="portal-metric-grid grid gap-4 sm:grid-cols-3"><MetricCard label="Assigned interns" value={data?.students?.length || 0} icon={UserGroupIcon} /><MetricCard label="Submitted evaluations" value={submitted} icon={CheckBadgeIcon} tone="green" /><MetricCard label="Remaining evaluations" value={Math.max((data?.students?.length || 0) * 2 - submitted, 0)} icon={ClockIcon} tone="gold" /></div>
-    <label className="relative block rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"><MagnifyingGlassIcon className="absolute left-8 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 dark:border-slate-700" placeholder="Search student intern..." /></label>
-    {students.length === 0 ? <EmptyPanel icon={StarIcon} title="No interns to evaluate" description="Assigned interns will appear here after coordinator deployment." /> : <div className="grid gap-4 xl:grid-cols-2">{students.map((student) => <article key={student.id} className="!rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900"><div><p className="text-[11px] font-bold uppercase tracking-wider text-[#a8750b]">{student.student_id} · {student.program}</p><h2 className="mt-1 !text-xl !font-bold text-slate-900 dark:!text-white">{student.name}</h2><p className="mt-1 text-sm text-slate-500">{student.hte || 'HTE not assigned'} · {student.progress}% OJT complete</p></div><div className="mt-4 grid gap-2.5 sm:grid-cols-2">{['midterm', 'final'].map((type) => { const evaluation = evaluations.find((item) => item.student_id === student.id && item.evaluation_type === type); return <button key={type} onClick={() => open(student, type)} className="group rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-left transition hover:border-[#7D001D]/30 hover:bg-rose-50/60 dark:border-slate-700 dark:bg-slate-800/50 dark:hover:bg-rose-950/20"><div className="flex items-center justify-between gap-3"><span className="text-sm font-bold capitalize text-slate-800 dark:text-white">{type} evaluation</span><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white text-[#7D001D] ring-1 ring-inset ring-slate-200 transition group-hover:ring-[#7D001D]/20 dark:bg-slate-900 dark:text-red-300 dark:ring-slate-700"><PencilSquareIcon className="size-4" /></span></div><span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold capitalize ${evaluation?.status === 'submitted' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200' : evaluation ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-white text-slate-500 ring-1 ring-inset ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700'}`}>{evaluation?.status || 'Not started'}</span></button>; })}</div></article>)}</div>}
-    {modal && <EvaluationModal {...modal} onClose={() => setModal(null)} onSaved={() => { setModal(null); load(); }} />}
-  </div>;
+  const [editor, setEditor] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState("");
+  const [period, setPeriod] = useState("");
+  const [page, setPage] = useState(1);
+  const [legacy, setLegacy] = useState(null);
+  const load = useCallback(async () => {
+    try {
+      setData(
+        (
+          await api.get("/supervisor/evaluation-students", {
+            params: { search, academic_period_id: period || undefined, page },
+          })
+        ).data,
+      );
+      setError("");
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }, [search, period, page]);
+  useEffect(() => {
+    const timer = setTimeout(load, 200);
+    return () => clearTimeout(timer);
+  }, [load]);
+  const open = async (student) => {
+    setBusy(true);
+    setError("");
+    try {
+      setEditor(
+        (student.evaluation_id
+          ? await api.get(`/supervisor/evaluations/${student.evaluation_id}`)
+          : await api.post(
+              `/supervisor/internships/${student.id}/evaluation/start`,
+            )
+        ).data,
+      );
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const history = async (historyPage = 1) => {
+    try {
+      setLegacy(
+        (
+          await api.get("/supervisor/evaluation-history", {
+            params: { page: historyPage },
+          })
+        ).data.legacy,
+      );
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+  return (
+    <div className="evaluation-workspace space-y-5">
+      <PageIntro
+        eyebrow="Performance management"
+        title="Student Evaluations"
+        description="Complete one whole-semester evaluation for each assigned internship using its program rubric."
+        icon={StarIcon}
+      />
+      {editor ? (
+        <EvaluationEditor
+          key={editor.evaluation.id}
+          initial={editor}
+          onBack={() => {
+            setEditor(null);
+            load();
+          }}
+        />
+      ) : (
+        <>
+          <ErrorBox message={error} />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <MetricCard
+              label="Assigned interns"
+              value={data?.overview.assigned || 0}
+              icon={UserGroupIcon}
+            />
+            <MetricCard
+              label="Submitted evaluations"
+              value={data?.overview.submitted || 0}
+              icon={CheckBadgeIcon}
+              tone="green"
+            />
+            <MetricCard
+              label="Remaining evaluations"
+              value={data?.overview.remaining || 0}
+              icon={ClockIcon}
+              tone="gold"
+            />
+          </div>
+          <div className="ev-panel grid gap-3 sm:grid-cols-2">
+            <Field label="Search intern">
+              <input
+                className="ev-input"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Student name or number"
+              />
+            </Field>
+            <Field label="Academic period">
+              <select
+                className="ev-input"
+                value={period}
+                onChange={(e) => {
+                  setPeriod(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All assigned periods</option>
+                {data?.periods.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {periodLabel(p)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          {!data && <p role="status">Loading evaluations…</p>}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {data?.students.data.map((student) => (
+              <article key={student.id} className="ev-panel space-y-3">
+                <div className="ev-toolbar justify-between">
+                  <h2 className="font-bold">{student.name}</h2>
+                  <span className="ev-status">
+                    {statusLabel(student.status)}
+                  </span>
+                </div>
+                <p className="text-sm">
+                  {student.student_id} · {student.program} · {student.section}
+                </p>
+                <p className="text-sm">{periodLabel(student.period)}</p>
+                <p className="text-sm">
+                  {student.hte || "HTE unavailable"} ·{" "}
+                  {student.department || "Department unavailable"}
+                </p>
+                {student.blocked_reason && (
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    {student.blocked_reason}
+                  </p>
+                )}
+                <Button
+                  primary
+                  disabled={busy || !!student.blocked_reason}
+                  onClick={() => open(student)}
+                >
+                  {student.status === "submitted"
+                    ? "View submitted result"
+                    : student.status === "draft"
+                      ? "Continue evaluation"
+                      : "Evaluate whole semester"}
+                </Button>
+              </article>
+            ))}
+          </div>
+          {data?.students.data.length === 0 && (
+            <p className="ev-panel">No assigned internships found.</p>
+          )}
+          <Pagination page={data?.students} onPage={setPage} />
+          <Button onClick={() => (legacy ? setLegacy(null) : history())}>
+            Legacy Midterm / Final history
+          </Button>
+          {legacy && (
+            <section className="ev-panel space-y-3">
+              <h2 className="font-bold">
+                Original evaluation records · Read-only
+              </h2>
+              {legacy.data.map((item) => (
+                <div key={item.id} className="ev-toolbar justify-between">
+                  <span>
+                    {item.student?.first_name} {item.student?.last_name} ·{" "}
+                    {item.evaluation_type} · {item.status}
+                  </span>
+                  <Button
+                    disabled={busy}
+                    onClick={async () => {
+                      try {
+                        setEditor(
+                          (await api.get(`/supervisor/evaluations/${item.id}`))
+                            .data,
+                        );
+                      } catch (e) {
+                        setError(errorText(e));
+                      }
+                    }}
+                  >
+                    View
+                  </Button>
+                </div>
+              ))}
+              {legacy.data.length === 0 && <p>No legacy evaluations.</p>}
+              <Pagination page={legacy} onPage={history} />
+            </section>
+          )}
+        </>
+      )}
+    </div>
+  );
 }

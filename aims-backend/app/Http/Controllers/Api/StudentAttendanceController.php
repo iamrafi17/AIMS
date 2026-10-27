@@ -57,6 +57,7 @@ class StudentAttendanceController extends Controller
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
             'accuracy' => ['nullable', 'numeric', 'between:0,10000'],
+            'recorded_at' => ['nullable', 'date'],
         ]);
 
         $student = $request->user()->student;
@@ -70,6 +71,16 @@ class StudentAttendanceController extends Controller
         $nextSlot = collect($this->slotSequence($attendance->session_type))
             ->first(fn (string $slot) => $attendance->{$slot} === null);
         abort_unless($nextSlot && str_ends_with($nextSlot, 'time_out'), 422, 'There is no active timed-in session to monitor.');
+        $recordedAt = isset($validated['recorded_at']) ? Carbon::parse($validated['recorded_at']) : now();
+        abort_unless($recordedAt->betweenIncluded(now()->subDay(), now()->addDay()), 422, 'GPS timestamp is outside the accepted device clock range.');
+        $previous = StudentLiveLocation::where('student_id', $student->id)->first();
+        $sameFix = isset($validated['recorded_at']) && $previous?->attendance_id === $attendance->id
+            && $previous->recorded_at && $recordedAt->lessThanOrEqualTo($previous->recorded_at);
+        if ($sameFix) {
+            $validated['latitude'] = $previous->latitude;
+            $validated['longitude'] = $previous->longitude;
+            $validated['accuracy'] = $previous->accuracy;
+        }
 
         $distance = null;
         $outsideGeofence = false;
@@ -92,13 +103,17 @@ class StudentAttendanceController extends Controller
             $outsideGeofence = $distance > $geofenceRadius;
         }
 
-        $location = StudentLiveLocation::updateOrCreate(
+        $location = $sameFix ? $previous : StudentLiveLocation::updateOrCreate(
             ['student_id' => $student->id],
             [
+                'student_internship_id' => $attendance->student_internship_id,
+                'attendance_id' => $attendance->id,
                 'latitude' => (float) $validated['latitude'],
                 'longitude' => (float) $validated['longitude'],
                 'accuracy' => isset($validated['accuracy']) ? (float) $validated['accuracy'] : null,
                 'captured_at' => now(),
+                'recorded_at' => $recordedAt,
+                'received_at' => now(),
             ],
         );
 
@@ -210,6 +225,11 @@ class StudentAttendanceController extends Controller
 
         $student = $request->user()->student;
         $date = Carbon::createFromFormat('Y-m-d', $validated['date'])->startOfDay();
+        if (\App\Models\ApprovalRecord::where('deployment_internship_id', $student->currentInternship?->id)
+            ->where('subject_type', 'deployment')->whereNotNull('deployment_stage')->exists()) {
+            $access = SmartClockAccess::status($student);
+            abort_unless($access['deployment_ready'], 403, $access['message']);
+        }
         $today = now()->startOfDay();
 
         if ($date->gt($today)) {
@@ -524,10 +544,14 @@ class StudentAttendanceController extends Controller
                 StudentLiveLocation::updateOrCreate(
                     ['student_id' => $student->id],
                     [
+                        'student_internship_id' => $attendance->student_internship_id,
+                        'attendance_id' => $attendance->id,
                         'latitude' => $location['latitude'],
                         'longitude' => $location['longitude'],
                         'accuracy' => $validated['accuracy'] ?? null,
                         'captured_at' => now(),
+                        'recorded_at' => now(),
+                        'received_at' => now(),
                     ],
                 );
             } else {

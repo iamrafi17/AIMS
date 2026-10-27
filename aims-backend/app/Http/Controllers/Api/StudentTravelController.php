@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
 use App\Models\SystemNotification;
+use App\Models\TravelCheckpoint;
 use App\Models\TravelLog;
 use App\Support\ReverseGeocoder;
+use App\Support\DeploymentActivation;
 use App\Support\OjtCompletion;
 use App\Support\TravelWorkflow;
 use Illuminate\Http\Request;
@@ -17,6 +19,7 @@ class StudentTravelController extends Controller
 {
     public function index(Request $request)
     {
+        DeploymentActivation::activateDue();
         $student = $request->user()->student;
         abort_unless($student, 404, 'Student profile not found.');
         $student->load(['program.college', 'hte']);
@@ -50,20 +53,26 @@ class StudentTravelController extends Controller
 
     public function start(Request $request)
     {
+        DeploymentActivation::activateDue();
         $student = $request->user()->student;
         abort_unless($student, 404, 'Student profile not found.');
         $student->load(['program.college', 'hte']);
         $coordinates = $this->coordinates($request);
 
-        if ($student->internship_status !== 'active') {
-            throw ValidationException::withMessages(['session' => 'Your active internship is required before starting travel.']);
+        if (! in_array($student->internship_status, ['pending', 'active'], true)) {
+            throw ValidationException::withMessages(['session' => 'A pending or active internship is required before starting travel.']);
+        }
+        if ($student->schedule_status !== 'approved') {
+            throw ValidationException::withMessages(['session' => 'Dean-approved deployment is required before starting travel.']);
         }
         if (! $student->hte_id || ! $student->hte?->is_active) {
             throw ValidationException::withMessages(['session' => 'An active assigned HTE is required before starting travel.']);
         }
-        if (($student->ojt_start_date && now()->startOfDay()->lt($student->ojt_start_date))
-            || (! OjtCompletion::usesAutomaticEnd($student) && $student->ojt_end_date && now()->startOfDay()->gt($student->ojt_end_date))) {
-            throw ValidationException::withMessages(['session' => 'Travel can only start during your active internship period.']);
+        if (! $student->ojt_start_date) {
+            throw ValidationException::withMessages(['session' => 'An OJT start date is required before starting travel.']);
+        }
+        if (! OjtCompletion::usesAutomaticEnd($student) && $student->ojt_end_date && now()->startOfDay()->gt($student->ojt_end_date)) {
+            throw ValidationException::withMessages(['session' => 'Travel cannot start after your internship end date.']);
         }
 
         $session = DB::transaction(function () use ($request, $student, $coordinates) {
@@ -86,24 +95,25 @@ class StudentTravelController extends Controller
                 throw ValidationException::withMessages(['session' => 'Complete your current travel session before starting another one.']);
             }
 
-            $session->update(['start_time' => now(), 'status' => 'active']);
+            $capturedAt = now();
+            $session->update(['start_time' => $capturedAt, 'departed_at' => $capturedAt, 'status' => 'traveling']);
             $session->checkpoints()->create([
                 ...$coordinates,
                 'sequence' => 1,
-                'checkpoint_name' => 'Starting Location',
-                'point_type' => 'start',
-                'captured_at' => now(),
+                'checkpoint_name' => 'Departure',
+                'point_type' => 'departure',
+                'captured_at' => $capturedAt,
                 'captured_by' => $request->user()->id,
             ]);
 
             return $session;
         });
 
-        SystemNotification::sendToUser($session->coordinator_id, 'Student travel session started', $student->full_name.' started travel to '.$student->hte->name.'.', 'travel', '/coordinator/travel');
-        SystemNotification::sendToUser($request->user()->id, 'Travel session started', 'Your starting GPS location was saved successfully.', 'travel', '/student/travel');
+        SystemNotification::sendToUser($session->coordinator_id, 'Student travel departed', $student->full_name.' departed for '.$student->hte->name.'.', 'travel', '/coordinator/travel');
+        SystemNotification::sendToUser($request->user()->id, 'Travel departure recorded', 'Your departure GPS location was saved successfully.', 'travel', '/student/travel');
 
         return response()->json([
-            'message' => 'Travel session started and your starting location was captured.',
+            'message' => 'Departure recorded. Your travel session is now in progress.',
             'session' => TravelWorkflow::sessionPayload($session->load(TravelWorkflow::relations()), '/student/travel'),
         ], 201);
     }
@@ -151,7 +161,7 @@ class StudentTravelController extends Controller
             $session->checkpoints()->create([
                 ...$coordinates,
                 'sequence' => $sequence,
-                'checkpoint_name' => 'Checkpoint '.($sequence - 2),
+                'checkpoint_name' => 'Checkpoint '.($session->checkpoints()->where('point_type', 'checkpoint')->count() + 1),
                 'point_type' => 'checkpoint',
                 'captured_at' => now(),
                 'captured_by' => $request->user()->id,
@@ -221,6 +231,50 @@ class StudentTravelController extends Controller
         TravelWorkflow::authorizeStudent($request->user(), $travel);
         $path = $this->privateStoragePath($travel->arrival_photo_path);
         abort_unless($path && $this->privateDisk()->exists($path), 404, 'Arrival photo not found.');
+
+        return response()->file($this->privateDisk()->path($path));
+    }
+
+    public function uploadCheckpointPhoto(Request $request, TravelLog $travel, TravelCheckpoint $checkpoint)
+    {
+        TravelWorkflow::authorizeStudent($request->user(), $travel);
+        abort_unless((int) $checkpoint->travel_log_id === (int) $travel->id, 404);
+        $request->validate(['photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120']]);
+
+        $newPath = null;
+        try {
+            $oldPath = DB::transaction(function () use ($request, $travel, $checkpoint, &$newPath) {
+                $session = TravelLog::query()->lockForUpdate()->findOrFail($travel->id);
+                abort_unless(in_array($session->status, ['active', 'traveling', 'arrived'], true), 422, 'Checkpoint photos are locked after the session ends.');
+                $point = $session->checkpoints()->whereKey($checkpoint->id)->lockForUpdate()->firstOrFail();
+                $newPath = $request->file('photo')->store('travel-checkpoints', 'local');
+                $previous = $point->photo_path;
+                $point->update(['photo_path' => $newPath]);
+
+                return $previous;
+            });
+        } catch (\Throwable $error) {
+            if ($newPath) {
+                $this->privateDisk()->delete($newPath);
+            }
+            throw $error;
+        }
+        if ($oldPath) {
+            $this->privateDisk()->delete($oldPath);
+        }
+
+        return response()->json([
+            'message' => 'Checkpoint photo uploaded successfully.',
+            'session' => TravelWorkflow::sessionPayload($travel->fresh()->load(TravelWorkflow::relations()), '/student/travel'),
+        ]);
+    }
+
+    public function checkpointPhoto(Request $request, TravelLog $travel, TravelCheckpoint $checkpoint)
+    {
+        TravelWorkflow::authorizeStudent($request->user(), $travel);
+        abort_unless((int) $checkpoint->travel_log_id === (int) $travel->id, 404);
+        $path = $this->privateStoragePath($checkpoint->photo_path);
+        abort_unless($path && $this->privateDisk()->exists($path), 404, 'Checkpoint photo not found.');
 
         return response()->file($this->privateDisk()->path($path));
     }
@@ -317,14 +371,20 @@ class StudentTravelController extends Controller
         if (! $request->user()->is_active) {
             $reasons[] = 'Student account is inactive.';
         }
-        if ($student->internship_status !== 'active') {
-            $reasons[] = 'An active internship is required.';
+        if (! in_array($student->internship_status, ['pending', 'active'], true)) {
+            $reasons[] = 'A pending or active internship is required.';
+        }
+        if ($student->schedule_status !== 'approved') {
+            $reasons[] = 'Dean-approved deployment is required.';
         }
         if (! $student->hte_id || ! $student->hte?->is_active) {
             $reasons[] = 'An active HTE assignment is required.';
         }
-        if (($student->ojt_start_date && now()->startOfDay()->lt($student->ojt_start_date)) || (! OjtCompletion::usesAutomaticEnd($student) && $student->ojt_end_date && now()->startOfDay()->gt($student->ojt_end_date))) {
-            $reasons[] = 'The internship period is not currently active.';
+        if (! $student->ojt_start_date) {
+            $reasons[] = 'An OJT start date is required.';
+        }
+        if (! OjtCompletion::usesAutomaticEnd($student) && $student->ojt_end_date && now()->startOfDay()->gt($student->ojt_end_date)) {
+            $reasons[] = 'The internship period has ended.';
         }
         if ($current) {
             if ($current->status === 'scheduled') {

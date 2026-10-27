@@ -13,6 +13,7 @@ use App\Models\Program;
 use App\Models\Student;
 use App\Models\TravelCheckpoint;
 use App\Models\TravelLog;
+use App\Support\DeploymentActivation;
 use App\Support\AttendanceHours;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -22,6 +23,7 @@ class UniversityDashboardController extends Controller
 {
     public function index(Request $request)
     {
+        DeploymentActivation::activateDue();
         $filters = $request->validate([
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
@@ -89,6 +91,9 @@ class UniversityDashboardController extends Controller
             : 0;
 
         $deployedStudents = $students->whereNotNull('hte_id');
+        $awaitingAssignment = $students->whereNull('hte_id')->where('internship_status', 'pending')->count();
+        $pendingDeploymentApproval = $deployedStudents->where('schedule_status', 'pending')->count();
+        $approvedAwaitingStart = $deployedStudents->where('schedule_status', 'approved')->where('internship_status', 'pending')->count();
         $validMoaHteIds = MOA::whereIn('hte_id', $deployedStudents->pluck('hte_id')->filter())
             ->where('status', 'approved')
             ->whereDate('effective_date', '<=', now()->toDateString())
@@ -120,7 +125,7 @@ class UniversityDashboardController extends Controller
         }) ?? 0;
 
         $reviewedEvaluations = $evaluations->whereIn('status', ['submitted', 'finalized']);
-        $averageRating = $reviewedEvaluations->avg(
+        $averageRating = $reviewedEvaluations->where('evaluation_type', '!=', 'whole_semester')->avg(
             fn (Evaluation $evaluation) => (float) $evaluation->average_rating
         ) ?? 0;
 
@@ -131,7 +136,7 @@ class UniversityDashboardController extends Controller
                 $attendance = $monthAttendance->whereIn('student_id', $studentIds);
                 $attended = $attendance->whereIn('status', ['present', 'late'])->count();
                 $workdays = $attended + $attendance->where('status', 'absent')->count();
-                $programEvaluations = $reviewedEvaluations->whereIn('student_id', $studentIds);
+                $programEvaluations = $reviewedEvaluations->where('evaluation_type', '!=', 'whole_semester')->whereIn('student_id', $studentIds);
                 $requirements = $programStudents->flatMap->requirements;
                 $journalRecords = $attendance->whereIn('status', ['present', 'late']);
                 $expectedJournals = $journalRecords->sum(fn (Attendance $record) => $record->session_type === 'full_day' ? 2 : 1);
@@ -211,6 +216,9 @@ class UniversityDashboardController extends Controller
                 'active' => $activeStudents->count(),
                 'completed' => $students->where('internship_status', 'completed')->count(),
                 'pending' => $students->where('internship_status', 'pending')->count(),
+                'awaiting_assignment' => $awaitingAssignment,
+                'pending_deployment_approval' => $pendingDeploymentApproval,
+                'approved_awaiting_start' => $approvedAwaitingStart,
                 'deployed' => $deployedStudents->count(),
                 'partner_htes' => $deployedStudents->pluck('hte_id')->unique()->count(),
                 'average_progress' => round($averageProgress, 1),

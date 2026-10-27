@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\SystemNotification;
+use App\Models\TravelCheckpoint;
 use App\Models\TravelLog;
 use App\Models\TravelReport;
 use App\Models\User;
@@ -156,6 +157,25 @@ class ProgramHeadTravelController extends Controller
 
     public function arrivalPhoto(Request $request, TravelLog $travel)
     {
+        $this->authorizePhotoViewer($request, $travel);
+        $path = $this->privateStoragePath($travel->arrival_photo_path);
+        abort_unless($path && $this->privateDisk()->exists($path), 404, 'Arrival photo not found.');
+
+        return response()->file($this->privateDisk()->path($path));
+    }
+
+    public function checkpointPhoto(Request $request, TravelLog $travel, TravelCheckpoint $checkpoint)
+    {
+        $this->authorizePhotoViewer($request, $travel);
+        abort_unless((int) $checkpoint->travel_log_id === (int) $travel->id, 404);
+        $path = $this->privateStoragePath($checkpoint->photo_path);
+        abort_unless($path && $this->privateDisk()->exists($path), 404, 'Checkpoint photo not found.');
+
+        return response()->file($this->privateDisk()->path($path));
+    }
+
+    private function authorizePhotoViewer(Request $request, TravelLog $travel): void
+    {
         if ($request->user()->role === 'program_head') {
             ProgramAccess::authorizeTravel($request->user(), $travel);
         } elseif ($request->user()->role === 'dean') {
@@ -163,9 +183,5 @@ class ProgramHeadTravelController extends Controller
         } else {
             abort_unless($travel->report()->whereIn('status', ['pending_vpaa', 'final_validated'])->exists(), 404);
         }
-        $path = $this->privateStoragePath($travel->arrival_photo_path);
-        abort_unless($path && $this->privateDisk()->exists($path), 404, 'Arrival photo not found.');
-
-        return response()->file($this->privateDisk()->path($path));
     }
 }

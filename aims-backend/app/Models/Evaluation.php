@@ -15,6 +15,8 @@ class Evaluation extends Model
         'student_internship_id',
         'supervisor_id',
         'evaluation_type',
+        'evaluation_form_id',
+        'row_version',
         'work_quality',
         'communication',
         'professionalism',
@@ -39,6 +41,16 @@ class Evaluation extends Model
     protected static function booted(): void
     {
         static::saving(function (Evaluation $evaluation): void {
+            if ($evaluation->evaluation_type === 'whole_semester') {
+                if ($evaluation->exists && $evaluation->getOriginal('status') === 'submitted' && $evaluation->isDirty()) {
+                    throw new \LogicException('Submitted evaluations are immutable.');
+                }
+                if (! $evaluation->student_internship_id || ! $evaluation->evaluation_form_id) {
+                    throw new \LogicException('Whole-semester evaluations require an explicit internship and form.');
+                }
+
+                return;
+            }
             $evaluation->syncStudentInternshipReference();
         });
     }
@@ -75,8 +87,22 @@ class Evaluation extends Model
         return $this->belongsTo(User::class, 'supervisor_id');
     }
 
+    public function form()
+    {
+        return $this->belongsTo(EvaluationForm::class, 'evaluation_form_id');
+    }
+
+    public function responses()
+    {
+        return $this->hasMany(EvaluationResponse::class);
+    }
+
     public function getAverageRatingAttribute()
     {
+        if ($this->evaluation_type === 'whole_semester') {
+            return null; // Different program scales must never be mixed into the legacy 1–5 dashboard average.
+        }
+
         return ($this->work_quality + $this->communication + $this->professionalism +
                 $this->attendance + $this->technical_skills + $this->teamwork) / 6;
     }

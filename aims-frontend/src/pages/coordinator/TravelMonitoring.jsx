@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import {
   MapContainer,
@@ -22,6 +22,7 @@ import {
 } from "@heroicons/react/24/outline";
 import toast from "react-hot-toast";
 import api from "../../services/api";
+import { selectedTravelPoint } from "../../utils/travelPoints";
 import {
   LoadingPanel,
   MetricCard,
@@ -145,33 +146,118 @@ function RouteMap({ points }) {
   );
 }
 
-function ProtectedImage({ endpoint }) {
-  const [source, setSource] = useState("");
+function useProtectedPhoto(endpoint) {
+  const [photo, setPhoto] = useState({ endpoint: null, source: "", failed: false });
   useEffect(() => {
     if (!endpoint) return undefined;
+    let cancelled = false;
     let url = "";
-    api
-      .get(endpoint, { responseType: "blob" })
-      .then(({ data }) => {
-        url = URL.createObjectURL(data);
-        setSource(url);
-      })
-      .catch(() => setSource(""));
+    api.get(endpoint, { responseType: "blob" }).then(({ data }) => {
+      if (cancelled) return;
+      url = URL.createObjectURL(data);
+      setPhoto({ endpoint, source: url, failed: false });
+    }).catch(() => {
+      if (!cancelled) setPhoto({ endpoint, source: "", failed: true });
+    });
     return () => {
+      cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
   }, [endpoint]);
+  if (!endpoint) return { source: "", failed: true };
+  return photo.endpoint === endpoint ? photo : { source: "", failed: false };
+}
+
+function ProtectedImage({ endpoint, alt, thumbnail = false, onOpen }) {
+  const { source, failed } = useProtectedPhoto(endpoint);
+  const className = thumbnail
+    ? "h-16 w-16 shrink-0 rounded-xl bg-slate-100 object-cover dark:bg-slate-800"
+    : "h-80 w-full rounded-2xl bg-slate-100 object-contain dark:bg-slate-950 lg:h-[420px]";
   return source ? (
-    <img
-      src={source}
-      alt="Student arrival evidence"
-      className="h-72 w-full rounded-3xl object-cover"
-    />
+    onOpen ? <button type="button" onClick={onOpen} aria-label={`Open ${alt} full size`} className="block w-full cursor-zoom-in rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7D001D]"><img src={source} alt={alt} className={className} /></button>
+      : <img src={source} alt={alt} className={className} />
   ) : (
-    <div className="grid h-72 place-items-center rounded-3xl bg-slate-100 text-sm text-slate-400 dark:bg-slate-800">
-      Arrival photo unavailable
+    <div className={`${className} grid place-items-center p-2 text-center text-xs text-slate-500`}>
+      {failed ? (endpoint ? "Photo unavailable" : "No photo uploaded") : "Loading photo..."}
     </div>
   );
+}
+
+function TravelPhotoViewer({ point, onClose }) {
+  const dialogRef = useRef(null);
+  const [zoom, setZoom] = useState(1);
+  const { source, failed } = useProtectedPhoto(point.photo_endpoint);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const previousOverflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = "hidden";
+    return () => {
+      dialog.close();
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  return <dialog ref={dialogRef} onCancel={onClose} onClose={onClose} aria-label={`${point.label} photo viewer`} className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none bg-slate-950 text-white backdrop:bg-slate-950/80">
+    <div className="flex h-full flex-col">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/15 p-4">
+        <div><h2 className="font-black">{point.label}</h2><p className="mt-1 text-xs text-slate-300">{new Date(point.captured_at).toLocaleString()}</p></div>
+        <div className="flex items-center gap-2">
+          <button type="button" disabled={!source || zoom <= 0.5} onClick={() => setZoom((value) => Math.max(0.5, value - 0.25))} aria-label="Zoom out" className="rounded-lg border border-white/30 px-3 py-2 disabled:opacity-40">−</button>
+          <button type="button" onClick={() => setZoom(1)} aria-label="Reset photo zoom" className="min-w-16 rounded-lg border border-white/30 px-2 py-2 text-sm">{Math.round(zoom * 100)}%</button>
+          <button type="button" disabled={!source || zoom >= 3} onClick={() => setZoom((value) => Math.min(3, value + 0.25))} aria-label="Zoom in" className="rounded-lg border border-white/30 px-3 py-2 disabled:opacity-40">+</button>
+          <button type="button" autoFocus onClick={onClose} className="ml-2 rounded-lg bg-white px-4 py-2 font-bold text-slate-900">Close</button>
+        </div>
+      </header>
+      <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-6">
+        {source ? <img src={source} alt={`${point.label} evidence`} style={{ width: `${zoom * 100}%`, maxWidth: "none" }} className="mx-auto h-auto" />
+          : <p role="status" className="grid h-full place-items-center text-slate-300">{failed ? (point.photo_endpoint ? "Photo unavailable" : "No photo uploaded") : "Loading photo..."}</p>}
+      </div>
+    </div>
+  </dialog>;
+}
+
+function RoutePhotoEvidence({ session }) {
+  const [selection, setSelection] = useState(null);
+  const [viewer, setViewer] = useState(null);
+  const point = selectedTravelPoint(session.points, selection?.sessionId === session.id ? selection.pointId : null);
+  const choosePoint = (item) => {
+    setSelection({ sessionId: session.id, pointId: item.id });
+    setViewer(window.matchMedia("(max-width: 1023px)").matches ? { sessionId: session.id, point: item } : null);
+  };
+
+  return <section className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+    <div className="min-w-0">
+      <h2 className="mb-1 text-lg font-black">Route timeline</h2>
+      <p className="mb-3 text-xs text-slate-500">Select a route point to view its photo evidence.</p>
+      <div className="space-y-2">
+        {session.points.map((item) => <button key={item.id} type="button" aria-pressed={point?.id === item.id} onClick={() => choosePoint(item)} className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7D001D] ${point?.id === item.id ? "border-[#7D001D] bg-rose-50 ring-1 ring-[#7D001D]/15 dark:bg-rose-950/30" : "border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"}`}>
+          <ProtectedImage endpoint={item.has_photo ? item.photo_endpoint : null} alt={`${item.label} thumbnail`} thumbnail />
+          <span className="min-w-0 flex-1">
+            <span className="block whitespace-normal break-words text-sm font-black">
+              {item.sequence}. {item.label}{item.remarks?.trim() && <> — {item.remarks.trim()}</>}
+            </span>
+            <span className="mt-1 block text-[11px] text-slate-500">{new Date(item.captured_at).toLocaleString()}</span>
+            <span className="mt-1 line-clamp-2 block text-xs text-slate-500">{item.readable_location || `${item.latitude}, ${item.longitude}`}</span>
+            <span className="mt-2 block text-[11px] font-bold text-[#7D001D] dark:text-rose-300">{item.has_photo ? "View photo" : "No photo uploaded"}</span>
+          </span>
+        </button>)}
+        {!session.points.length && <p className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">No route points recorded.</p>}
+      </div>
+    </div>
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900 lg:sticky lg:top-6">
+      <h2 className="text-lg font-black">Photo Evidence</h2>
+      {point ? <>
+        <p className="mt-1 font-bold">{point.sequence}. {point.label}</p>
+        <p className="mt-1 text-xs text-slate-500">{new Date(point.captured_at).toLocaleString()}</p>
+        <p className="mt-1 text-xs text-slate-500">{point.readable_location || `${point.latitude}, ${point.longitude}`}</p>
+        <div className="mt-4"><ProtectedImage key={point.id} endpoint={point.has_photo ? point.photo_endpoint : null} alt={`${point.label} evidence`} onOpen={() => setViewer({ sessionId: session.id, point })} /></div>
+        {point.has_photo && <p className="mt-3 text-center text-xs text-slate-500">Click the photo to open full size and zoom.</p>}
+      </> : <p className="mt-4 text-sm text-slate-500">No photo uploaded.</p>}
+    </div>
+    {viewer?.sessionId === session.id && <TravelPhotoViewer key={viewer.point.id} point={viewer.point} onClose={() => setViewer(null)} />}
+  </section>;
 }
 
 function belongsToTab(session, tab) {
@@ -584,39 +670,7 @@ export default function TravelMonitoring() {
             {selected.status === "scheduled" && <div className="mt-5 flex flex-wrap gap-2"><button onClick={() => { setScheduleDate(selected.scheduled_date || ""); setScheduleOpen(true); }} className="rounded-xl bg-[#7D001D] px-4 py-2.5 text-sm font-black text-white">Reschedule</button><button onClick={() => setCancelTarget(selected)} className="rounded-xl border border-rose-300 px-4 py-2.5 text-sm font-black text-rose-700">Cancel Schedule</button></div>}
           </section>
           <RouteMap points={selected.points} />
-          <section className="grid gap-6 lg:grid-cols-2">
-            <div>
-              <h2 className="mb-3 text-lg font-black">Route timeline</h2>
-              <div className="space-y-2">
-                {selected.points.map((point) => (
-                  <div
-                    key={point.id}
-                    className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"
-                  >
-                    <div className="flex justify-between gap-3">
-                      <p className="font-black">
-                        {point.sequence}. {point.label}
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {new Date(point.captured_at).toLocaleString()}
-                      </p>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {point.readable_location ||
-                        `${point.latitude}, ${point.longitude}`}
-                    </p>
-                    {point.remarks && (
-                      <p className="mt-2 text-sm">{point.remarks}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <h2 className="mb-3 text-lg font-black">Arrival evidence</h2>
-              <ProtectedImage endpoint={selected.arrival_photo_endpoint} />
-            </div>
-          </section>
+          <RoutePhotoEvidence key={selected.id} session={selected} />
 
           {selected.status === "completed" && (
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6">

@@ -290,6 +290,80 @@ class MoaRebuildWorkflowTest extends TestCase
         $this->assertDatabaseHas('moas', ['id' => $moaId, 'status' => 'approved', 'approved_by' => $dean->id, 'vpaa_reviewed_by' => $vpaa->id]);
     }
 
+    public function test_program_head_returns_reviewed_moa_before_coordinator_can_revise_or_delete(): void
+    {
+        Storage::fake('local');
+        [$hte, $programs, $coordinators, $heads, $vpaa] = $this->context();
+        $dean = User::factory()->create(['role' => 'dean', 'college_id' => $programs[0]->college_id]);
+
+        Sanctum::actingAs($coordinators[0]);
+        $moaId = $this->post('/api/coordinator/htes/moas', [
+            'hte_id' => $hte->id,
+            'program_id' => $programs[0]->id,
+            'effective_date' => today()->toDateString(),
+            'expiration_date' => today()->addYear()->toDateString(),
+            'file' => UploadedFile::fake()->create('agreement.pdf', 100, 'application/pdf'),
+        ], ['Accept' => 'application/json'])->assertCreated()->json('moa.id');
+
+        Sanctum::actingAs($heads[0]);
+        $this->postJson("/api/program-head/documents/moas/{$moaId}/review", ['decision' => 'endorsed'])->assertOk();
+        $approval = ApprovalRecord::where('subject_type', 'moa')->where('subject_id', $moaId)->firstOrFail();
+
+        Sanctum::actingAs($dean->fresh());
+        $this->putJson("/api/dean/moas/{$approval->id}", ['decision' => 'approved'])->assertOk();
+
+        Sanctum::actingAs($coordinators[0]);
+        $dates = [
+            'effective_date' => today()->toDateString(),
+            'expiration_date' => today()->addYears(2)->toDateString(),
+        ];
+        $this->putJson("/api/coordinator/htes/moas/{$moaId}", $dates)->assertUnprocessable();
+        $this->deleteJson("/api/coordinator/htes/moas/{$moaId}")->assertUnprocessable();
+
+        Sanctum::actingAs($vpaa);
+        $this->postJson("/api/vpaa/moas/{$approval->id}/review")->assertOk();
+
+        Sanctum::actingAs($coordinators[0]);
+        $this->putJson("/api/coordinator/htes/moas/{$moaId}", $dates)->assertUnprocessable();
+        $this->deleteJson("/api/coordinator/htes/moas/{$moaId}")->assertUnprocessable();
+
+        Sanctum::actingAs($heads[0]);
+        $this->postJson("/api/program-head/documents/moas/{$moaId}/review", ['decision' => 'endorsed'])->assertUnprocessable();
+        $this->postJson("/api/program-head/documents/moas/{$moaId}/review", ['decision' => 'returned'])->assertUnprocessable();
+        $this->postJson("/api/program-head/documents/moas/{$moaId}/review", [
+            'decision' => 'returned', 'feedback' => 'Incorrect PDF content.',
+        ])->assertOk()->assertJsonPath('moa.program_status', 'returned')
+            ->assertJsonPath('moa.program_feedback', 'Incorrect PDF content.')
+            ->assertJsonPath('moa.vpaa_reviewed_at', null);
+
+        Sanctum::actingAs($coordinators[0]);
+        $this->putJson("/api/coordinator/htes/moas/{$moaId}", $dates)->assertOk()
+            ->assertJsonPath('moa.status', 'pending')
+            ->assertJsonPath('moa.program_status', 'pending')
+            ->assertJsonPath('moa.vpaa_reviewed_at', null)
+            ->assertJsonPath('moa.approved_at', null);
+        $this->assertDatabaseHas('moas', ['id' => $moaId, 'deleted_at' => null]);
+
+        Sanctum::actingAs($heads[0]);
+        $this->postJson("/api/program-head/documents/moas/{$moaId}/review", ['decision' => 'endorsed'])->assertOk();
+        $newApproval = ApprovalRecord::where('subject_type', 'moa')->where('subject_id', $moaId)
+            ->orderByDesc('id')->firstOrFail();
+        $this->assertNotSame($approval->id, $newApproval->id);
+        Sanctum::actingAs($dean->fresh());
+        $this->putJson("/api/dean/moas/{$newApproval->id}", ['decision' => 'approved'])->assertOk();
+        Sanctum::actingAs($vpaa);
+        $this->postJson("/api/vpaa/moas/{$newApproval->id}/review")->assertOk();
+
+        Sanctum::actingAs($heads[0]);
+        $this->postJson("/api/program-head/documents/moas/{$moaId}/review", [
+            'decision' => 'returned', 'feedback' => 'Withdraw this agreement.',
+        ])->assertOk();
+        Sanctum::actingAs($coordinators[0]);
+        $this->deleteJson("/api/coordinator/htes/moas/{$moaId}")->assertOk();
+        $this->assertSoftDeleted('moas', ['id' => $moaId]);
+        $this->getJson('/api/coordinator/htes')->assertOk()->assertJsonCount(0, 'moas');
+    }
+
     private function context(): array
     {
         $college = College::create(['name' => 'Computing', 'code' => 'CICS', 'is_active' => true]);

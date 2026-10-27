@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
+    "update:psgc-addresses": "node scripts/update-psgc-addresses.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

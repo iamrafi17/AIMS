@@ -34,6 +34,7 @@ const menuItems = {
   coordinator: [
     { name: 'Dashboard', path: '/coordinator/dashboard', icon: HomeIcon },
     { name: 'Student Management', path: '/coordinator/students', icon: UsersIcon },
+    { name: 'Evaluations', path: '/coordinator/evaluations', icon: StarIcon },
     { name: 'Attendance & Journals', path: '/coordinator/attendance', icon: ClockIcon },
     { name: 'Internship Requirements', path: '/coordinator/internship-requirements', icon: DocumentIcon },
     { name: 'HTE Management', path: '/coordinator/htes', icon: BriefcaseIcon },
@@ -46,7 +47,8 @@ const menuItems = {
   program_head: [
     { name: 'Dashboard', path: '/program-head/dashboard', icon: HomeIcon },
     { name: 'OJT Setup', path: '/program-head/ojt-setup', icon: AcademicCapIcon },
-    { name: 'Documents', path: '/program-head/documents', icon: DocumentTextIcon },
+    { name: 'Evaluation Results', path: '/program-head/evaluations', icon: StarIcon },
+    { name: 'Document Review', path: '/program-head/documents', icon: DocumentTextIcon },
     { name: 'Student Monitoring', path: '/program-head/students', icon: UsersIcon },
     { name: 'Coordinator Assignments', path: '/program-head/coordinator-assignments', icon: AcademicCapIcon },
     { name: 'Travel Monitoring', path: '/program-head/travel', icon: MapIcon },
@@ -56,8 +58,9 @@ const menuItems = {
   ],
   dean: [
     { name: 'Dashboard', path: '/dean/dashboard', icon: HomeIcon },
+    { name: 'Evaluation Results', path: '/dean/evaluations', icon: StarIcon },
     { name: 'Live Map', path: '/dean/live-map', icon: MapIcon },
-    { name: 'Deployment Approvals', path: '/dean/approvals', icon: CheckCircleIcon },
+    { name: 'Deployment Review', path: '/dean/deployments', icon: CheckCircleIcon },
     { name: 'Student Document Folders', path: '/dean/documents', icon: DocumentIcon },
     { name: 'MOA Final Approval', path: '/dean/moas', icon: DocumentTextIcon },
     { name: 'Travel Validation', path: '/dean/travel', icon: MapIcon },
@@ -65,7 +68,9 @@ const menuItems = {
   ],
   vpaa: [
     { name: 'Dashboard', path: '/vpaa/dashboard', icon: HomeIcon },
+    { name: 'Live Map', path: '/vpaa/live-map', icon: MapIcon },
     { name: 'Student Folder Review', path: '/vpaa/approvals', icon: CheckCircleIcon },
+    { name: 'Student Deployments', path: '/vpaa/deployments', icon: BriefcaseIcon },
     { name: 'MOA Review', path: '/vpaa/moas', icon: DocumentTextIcon },
     { name: 'Travel Monitoring', path: '/vpaa/travel', icon: MapIcon },
     { name: 'Announcements', path: '/vpaa/announcements', icon: BellIcon },

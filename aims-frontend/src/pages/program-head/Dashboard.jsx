@@ -166,7 +166,7 @@ function ProgramHeadDashboard() {
           <MetricCard label="Total students" value={overview.total_students || 0} note="Registered interns" icon={FiUsers} />
           <MetricCard label="Active interns" value={overview.active || 0} note="Currently deployed" icon={FiUserCheck} tone="green" />
           <MetricCard label="Completed" value={overview.completed || 0} note="OJT requirements fulfilled" icon={FiCheckCircle} tone="blue" />
-          <MetricCard label="Pending" value={overview.pending || 0} note="Awaiting deployment" icon={FiClock} tone="amber" />
+          <MetricCard label="Pending" value={overview.pending || 0} note="Internship not yet active" icon={FiClock} tone="amber" />
           <MetricCard label="Average progress" value={`${overview.average_progress || 0}%`} note="Across active interns" icon={FiTrendingUp} tone="violet" />
         </div>
       </section>

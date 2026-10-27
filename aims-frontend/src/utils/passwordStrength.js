@@ -1,3 +1,20 @@
+import { useEffect, useState } from 'react';
+import api from '../services/api';
+
+export function usePasswordMinimum() {
+  const [minimum, setMinimum] = useState(8);
+
+  useEffect(() => {
+    let active = true;
+    api.get('/password-policy').then(({ data }) => {
+      if (active) setMinimum(data.minimum_length);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  return minimum;
+}
+
 const levels = {
   weak: { label: 'Weak', segments: 1, textClass: 'text-red-600 dark:text-red-400', barClass: 'bg-red-500' },
   medium: { label: 'Medium', segments: 2, textClass: 'text-yellow-600 dark:text-yellow-400', barClass: 'bg-yellow-500' },

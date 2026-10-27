@@ -86,8 +86,8 @@ class DeanDashboardController extends Controller
         $canReview = $period && $activePeriod && $period->id === $activePeriod->id;
         $deploymentCount = $canReview && $studentIds->isNotEmpty()
             ? ApprovalRecord::query()->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)
-                ->where('status', 'pending')->whereIn('subject_id', $studentIds)
-                ->whereHas('submitter', fn (Builder $submitter) => $submitter->forRole('program_head'))->count() : 0;
+                ->where('deployment_stage', \App\Support\DeploymentWorkflow::DEAN)
+                ->whereIn('deployment_internship_id', $internshipIds)->count() : 0;
         $moaCount = $canReview ? MOA::query()->whereIn('program_id', $programId ? [$programId] : $programs->pluck('id'))
             ->where('program_status', 'endorsed')->where('status', 'pending')->count() : 0;
         $travelCount = $canReview && $studentIds->isNotEmpty() ? TravelReport::query()
@@ -111,7 +111,7 @@ class DeanDashboardController extends Controller
             'charts' => ['internship_status' => $statusChart, 'program_progress' => $progress,
                 'monthly_attendance' => $monthly],
             'pending_actions' => [
-                ['key' => 'deployments', 'label' => 'Deployment Approvals', 'count' => $deploymentCount, 'path' => '/dean/approvals'],
+                ['key' => 'deployments', 'label' => 'Deployment Forwarding', 'count' => $deploymentCount, 'path' => '/dean/deployments'],
                 ['key' => 'moas', 'label' => 'MOA Final Approval', 'count' => $moaCount, 'path' => '/dean/moas'],
                 ['key' => 'travel', 'label' => 'Travel Validation', 'count' => $travelCount, 'path' => '/dean/travel'],
             ],

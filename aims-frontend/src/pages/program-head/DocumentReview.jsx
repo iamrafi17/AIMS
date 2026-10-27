@@ -20,6 +20,8 @@ import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { groupStudentRequirements } from './studentRequirementGroups';
 import ProgramHeadMoaReview from './ProgramHeadMoaReview';
+import DeploymentReview from '../../components/deployments/DeploymentReview';
+import { useSearchParams } from 'react-router-dom';
 
 const emptyData = {
   summary: {
@@ -40,6 +42,7 @@ const emptyData = {
 const tabs = [
   { id: 'requirements', label: 'Requirement Review', icon: FiFileText },
   { id: 'moas', label: 'MOA Review', icon: FiBriefcase },
+  { id: 'deployments', label: 'Deployment Approval', icon: FiCheckCircle },
   { id: 'monitoring', label: 'Document Monitoring', icon: FiActivity },
 ];
 
@@ -123,7 +126,9 @@ function DocumentReview() {
   const [data, setData] = useState(emptyData);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('requirements');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = tabs.some((tab) => tab.id === searchParams.get('tab')) ? searchParams.get('tab') : 'requirements';
+  const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -136,6 +141,7 @@ function DocumentReview() {
   const [endorsement, setEndorsement] = useState(null);
   const [feedback, setFeedback] = useState('');
   const [busy, setBusy] = useState(false);
+  const reviewInFlight = useRef(false);
 
   const loadDocuments = async (quiet = false) => {
     if (quiet) setRefreshing(true); else setLoading(true);
@@ -232,11 +238,13 @@ function DocumentReview() {
 
   const submitDecision = async (event) => {
     event.preventDefault();
+    if (!decision || reviewInFlight.current) return;
     if (decision.kind === 'requirement' && decision.decision === 'rejected' && !feedback.trim()) {
       toast.error('Feedback is required when rejecting a requirement.');
       return;
     }
 
+    reviewInFlight.current = true;
     setBusy(true);
     try {
       const endpoint = decision.kind === 'requirement'
@@ -274,6 +282,7 @@ function DocumentReview() {
     } catch (error) {
       toast.error(error.response?.data?.message || 'Unable to save the review decision.');
     } finally {
+      reviewInFlight.current = false;
       setBusy(false);
     }
   };
@@ -416,6 +425,7 @@ function DocumentReview() {
       )}
 
       {activeTab === 'moas' && <ProgramHeadMoaReview moas={data.moas} onChanged={() => loadDocuments(true)} />}
+      {activeTab === 'deployments' && <DeploymentReview role="program_head" />}
 
       {activeTab === 'monitoring' && (
         <div className="space-y-6">
@@ -504,8 +514,9 @@ function DocumentReview() {
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-4 dark:border-gray-700">
               {selectedDocument.document.can_program_head_review === false && <p className="mr-auto text-xs font-bold text-amber-700 dark:text-amber-300">Awaiting coordinator approval</p>}
               {selectedDocument.document.program_head_endorsed && <p className="mr-auto text-xs font-bold text-emerald-700 dark:text-emerald-300">Endorsed for Dean approval</p>}
+              {selectedDocument.document.program_head_approved && !selectedDocument.document.program_head_endorsed && <p role="status" className="mr-auto inline-flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300"><FiCheckCircle />Approved by Program Head</p>}
               <button type="button" onClick={() => downloadDocument('requirement', selectedDocument.document)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-[#7D001D] dark:border-gray-600 dark:text-rose-300"><FiDownload /> Download File</button>
-              {selectedDocument.document.can_program_head_review !== false && !selectedDocument.document.program_head_endorsed && <button type="button" onClick={() => openDecision('requirement', selectedDocument.document, 'approved')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white"><FiCheck /> Approve Requirement</button>}
+              {selectedDocument.document.can_program_head_review !== false && !selectedDocument.document.program_head_endorsed && !selectedDocument.document.program_head_approved && <button type="button" onClick={() => openDecision('requirement', selectedDocument.document, 'approved')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white"><FiCheck /> Approve Requirement</button>}
               {selectedDocument.document.can_program_head_review !== false && !selectedDocument.document.program_head_endorsed && selectedDocument.document.status !== 'rejected' && <button type="button" onClick={() => openDecision('requirement', selectedDocument.document, 'rejected')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-black text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300"><FiX /> Reject with Feedback</button>}
             </div>
           </div>

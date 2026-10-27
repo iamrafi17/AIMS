@@ -8,6 +8,7 @@ const formatDate = (value) => value ? new Date(value).toLocaleDateString('en-PH'
 export default function RequirementFilePreview({ preview, onClose, downloadName }) {
   const { requirement, student } = preview;
   return <DocumentPreviewModal
+    compact
     kicker="Internship Requirement"
     title={requirement.requirement_name}
     subtitle={`${student.name} · ${student.student_id} · ${student.section || 'No section'}`}

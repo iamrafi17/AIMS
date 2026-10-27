@@ -13,6 +13,8 @@
 
 ### Revision history
 
+Deployment workflow update (October 22, 2026): Student HTE/department preferences are confirmed or reassigned by the Coordinator, reviewed and approved in Program Head Document Review, viewed/forwarded by the college Dean, and viewed by VPAA. Program Head approval and the published start date govern OJT activation. Dean and VPAA do not make deployment approval/rejection decisions. This update supersedes earlier deployment-specific final-approval descriptions below; document-folder, MOA and travel approval chains are unchanged. See [the implemented deployment workflow](docs/DEPLOYMENT_WORKFLOW.md).
+
 | Version | Date | Summary |
 |---|---|---|
 | 3.4 | October 13, 2026 | MOA workflow: Coordinator upload, Program Head review and endorsement, Dean final approval or return, then VPAA review acknowledgment without approval or rejection. |
@@ -141,7 +143,7 @@ AIMS defines exactly six roles via `users.role`: `student`, `coordinator`, `prog
 5. The Coordinator uploads/maintains the HTE's MOA; the Program Head endorses it and the VPAA gives final approval before it is considered valid.
 6. The student records daily attendance through the smart clock (AM/PM, full-day/half-day, WFO/WFH/field) and logs AM/PM journal activities, and uploads the program's required documents.
 7. Coordinators review attendance/journals; the assigned HTE Supervisor separately reviews attendance and records evaluations and tasks; Program Head and VPAA review/approve documents and deployments within their authority.
-8. When applicable, the eligible student initiates a GPS-tracked travel session, records starting location, departure, optional route checkpoints, and final arrival, uploads required arrival-photo evidence, and ends the session to lock the evidence.
+8. When applicable, the eligible student starts travel by recording the GPS departure, adds optional route checkpoints, marks final arrival, uploads required arrival-photo evidence, and ends the session to lock the evidence.
 9. The assigned Coordinator reviews the completed evidence, generates and submits a versioned travel report; the Program Head validates or returns it and explicitly forwards validated reports to the VPAA; the VPAA issues final validation or returns the report through the revision chain.
 10. Dashboards and reports (per role) consolidate progress until the internship becomes `completed`, `dropped`, or otherwise closed.
 
@@ -182,7 +184,7 @@ Backend: `StudentDashboardController`, `StudentAttendanceController`, `StudentRe
 | STU-07 | P0 | Students shall record AM/PM journal activities (`am_activity`, `pm_activity`) alongside attendance for later Coordinator journal review. |
 | STU-08 | P0 | `GET /student/requirements` shall list the student's program requirement checklist with status (`pending`/`approved`/`rejected`) and reviewer feedback. |
 | STU-09 | P0 | Students shall upload (`POST /student/requirements/{id}/upload`) and download (`GET /student/requirements/{id}/download`) requirement files; re-uploading shall return the item to `pending`. |
-| STU-10 | P0 | `GET /student/travel` shall return the student's eligibility, assigned Coordinator, current session, and travel history. An eligible student shall start a session (`POST /student/travel/start`), record departure (`POST /student/travel/{travel}/departure`), add zero or more route checkpoints (`POST /student/travel/{travel}/checkpoints`), mark final arrival (`POST /student/travel/{travel}/arrival`), upload required arrival evidence (`POST /student/travel/{travel}/arrival-photo`), and end (`POST /student/travel/{travel}/end`) the session. Every route action shall capture server time, latitude, longitude, GPS accuracy when available, and a readable location. |
+| STU-10 | P0 | `GET /student/travel` shall return the student's eligibility, assigned Coordinator, current session, and travel history. An eligible student shall record departure and start the session in one action (`POST /student/travel/start`), add zero or more route checkpoints (`POST /student/travel/{travel}/checkpoints`), mark final arrival (`POST /student/travel/{travel}/arrival`), upload optional checkpoint photos (`POST /student/travel/{travel}/checkpoints/{checkpoint}/photo`), upload required arrival evidence (`POST /student/travel/{travel}/arrival-photo`), and end (`POST /student/travel/{travel}/end`) the session. The separate departure endpoint remains available for older active sessions. Every route action shall capture server time, latitude, longitude, GPS accuracy when available, and a readable location. |
 | STU-11 | P0 | Students shall view announcements targeted to `all` or `students`, and receive/mark-read in-app notifications that deep-link to the relevant screen. |
 | STU-12 | P0 | Students shall maintain personal, guardian, and contact profile fields and change their password from `Profile.jsx`. |
 
@@ -325,8 +327,8 @@ Backend: `AnnouncementController`, `NotificationController`, `ActivityLogControl
 
 - New sessions are student-controlled and solo. The initiating Student user is stored in `travel_logs.created_by`, the responsible Internship Coordinator in `coordinator_id`, and the Student record is linked through `travel_participants`. Companion records are not collected or stored.
 - A Student may start only when the account is active, registration is approved, internship is active and within its configured period, an active HTE is assigned, an active matching Coordinator can be resolved, and the Student has no session in `active`, `traveling`, or `arrived` state.
-- The session state sequence is `active` (starting location captured) -> `traveling` (departure captured) -> `arrived` (final arrival captured) -> `completed` (arrival photo present and session ended). Invalid, repeated, out-of-order, and cross-account transitions must return an authorization or validation error.
-- `travel_checkpoints.point_type` supports `start`, `departure`, `checkpoint`, and `final_arrival`. Points are append-only and ordered by `sequence`; each captures `captured_at` (server time), latitude, longitude, optional `gps_accuracy`, readable location, and optional remarks.
+- New sessions move from `scheduled` directly to `traveling` when departure is captured, then to `arrived` when final arrival is captured and `completed` when the arrival photo is present and the session ends. Older sessions in `active` may still record their separate departure. Invalid, repeated, out-of-order, and cross-account transitions must return an authorization or validation error.
+- `travel_checkpoints.point_type` supports `departure`, `checkpoint`, and `final_arrival`, plus legacy `start` points. Points are append-only and ordered by `sequence`; each captures `captured_at` (server time), latitude, longitude, optional `gps_accuracy`, readable location, optional remarks, and an optional private photo.
 - Final arrival requires a protected `arrival_photo_path` before completion. Student, assigned Coordinator, authorized Program Head, and eligible VPAA reviewers may retrieve it only through authorization-checked endpoints.
 - A completed session may have exactly one `travel_reports` record. Reports begin as `draft`; Coordinator remarks are editable only in `draft`, `for_revision`, or `returned_by_vpaa`.
 - The report sequence is `draft` -> `pending_program_head` -> `program_head_validated` -> `pending_vpaa` -> `final_validated`. A Program Head return sets `for_revision`; a VPAA return sets `returned_by_vpaa`. Resubmission increments `version` and repeats the complete Program Head-to-VPAA chain.
@@ -464,7 +466,7 @@ The release is acceptable when all of the following are true:
 12. User guides and administrator runbooks are available to the intended users.
 13. Admin User Management displays the linked college/program for student accounts, and its college filter includes students whose assignment is stored on the `students` profile.
 14. The Admin user list and Coordinator OJT enrollment, student, attendance, and journal lists honor their documented `per_page` options, return correct pagination metadata, reset to page 1 after page-size/filter changes, and retain search/filter query parameters while paging.
-15. A complete travel journey succeeds in staging: eligible Student start, departure, optional checkpoints, final arrival, required private arrival-photo upload, Student completion, Coordinator report generation/submission, Program Head validation/forwarding, and VPAA final validation.
+15. A complete travel journey succeeds in staging: eligible Student departure that starts travel, optional checkpoints and checkpoint photos, final arrival, required private arrival-photo upload, Student completion, Coordinator report generation/submission, Program Head validation/forwarding, and VPAA final validation.
 16. Travel workflow tests reject duplicate active sessions, invalid or repeated state transitions, cross-student/cross-Coordinator access, premature report actions, and attempts to edit a report while under review or after final validation; returned reports increment version and repeat the full validation chain.
 17. The Student attendance calendar exposes configured workdays, marks non-working dates unavailable when no record exists, and calculates “Workdays Left” from the remaining configured days in the current week and active OJT period.
 

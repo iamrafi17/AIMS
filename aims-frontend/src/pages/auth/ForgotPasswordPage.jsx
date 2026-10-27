@@ -13,6 +13,7 @@ import {
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
+import { usePasswordMinimum } from '../../utils/passwordStrength';
 import marsuLogo from '../../assets/marsu-logo.png';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-slate-900 outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-gray-700 dark:bg-gray-950 dark:text-white';
@@ -25,6 +26,7 @@ function errorMessage(error, fallback) {
 }
 
 export default function ForgotPasswordPage() {
+  const passwordMinimum = usePasswordMinimum();
   const [step, setStep] = useState('identify');
   const [userId, setUserId] = useState('');
   const [questions, setQuestions] = useState([]);
@@ -250,7 +252,8 @@ export default function ForgotPasswordPage() {
                   <LockClosedIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                   <input
                     required
-                    minLength="8"
+                    minLength={passwordMinimum}
+                    maxLength={255}
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
@@ -274,7 +277,8 @@ export default function ForgotPasswordPage() {
                   <LockClosedIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                   <input
                     required
-                    minLength="8"
+                    minLength={passwordMinimum}
+                    maxLength={255}
                     type={showPasswordConfirmation ? 'text' : 'password'}
                     value={passwordConfirmation}
                     onChange={(event) => setPasswordConfirmation(event.target.value)}

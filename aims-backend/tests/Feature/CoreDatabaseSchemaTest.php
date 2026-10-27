@@ -180,6 +180,10 @@ class CoreDatabaseSchemaTest extends TestCase
             ->firstWhere('name', 'academic_section_id');
         $this->assertFalse($enrollmentSection['nullable']);
         $this->assertIndex('ojt_enrollments', ['academic_section_id', 'registered_at']);
+        $this->assertTrue(Schema::hasColumns('ojt_enrollments', ['first_name', 'middle_name', 'last_name']));
+        foreach (['full_name', 'registration_feedback', 'registration_reviewed_by', 'registration_reviewed_at'] as $removedColumn) {
+            $this->assertFalse(Schema::hasColumn('ojt_enrollments', $removedColumn));
+        }
 
         $this->assertTrue(Schema::hasColumns('report_templates', ['period_scope', 'academic_period_id', 'validation_result']));
         foreach (['academic_year', 'semester', 'detected_placeholders'] as $normalizedColumn) {
@@ -248,7 +252,8 @@ class CoreDatabaseSchemaTest extends TestCase
         $this->assertUniqueIndex('travel_logs', ['session_code']);
         $this->assertUniqueIndex('travel_checkpoints', ['travel_log_id', 'sequence']);
         $this->assertUniqueIndex('travel_participants', ['travel_log_id', 'student_id']);
-        $this->assertUniqueIndex('evaluations', ['student_id', 'evaluation_type']);
+        $this->assertUniqueIndex('evaluation_forms', ['program_id', 'academic_period_id', 'version']);
+        $this->assertUniqueIndex('evaluation_responses', ['evaluation_id', 'evaluation_criterion_id']);
         $this->assertUniqueIndex('evaluations', ['student_internship_id', 'evaluation_type']);
     }
 

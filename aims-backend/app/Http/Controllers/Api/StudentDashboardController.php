@@ -8,6 +8,9 @@ use App\Models\Attendance;
 use App\Models\InternshipRequirement;
 use App\Models\Student;
 use App\Support\AttendanceHours;
+use App\Support\DeploymentActivation;
+use App\Support\DeploymentWorkflow;
+use App\Models\ApprovalRecord;
 use App\Support\HolidayCalendar;
 use App\Support\OjtCompletion;
 use Carbon\Carbon;
@@ -17,6 +20,7 @@ class StudentDashboardController extends Controller
 {
     public function index(Request $request)
     {
+        DeploymentActivation::activateDue();
         $student = $request->user()->student;
 
         if (! $student) {
@@ -108,7 +112,11 @@ class StudentDashboardController extends Controller
             ->limit(6)
             ->get(['id', 'title', 'description', 'due_date', 'priority', 'status']);
 
+        $deployment = ApprovalRecord::where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)
+            ->where('deployment_internship_id', $student->currentInternship?->id)->latest('id')->first();
+
         return response()->json([
+            'deployment' => $deployment && DeploymentWorkflow::current($deployment) ? DeploymentWorkflow::payload($deployment) : null,
             'student' => [
                 'full_name' => $student->full_name,
                 'student_id' => $student->student_id,
@@ -117,6 +125,9 @@ class StudentDashboardController extends Controller
                 'year_level' => $student->year_level,
                 'section' => $student->section,
                 'hte' => $student->hte?->name,
+                'department' => $student->hteDepartment?->department_name,
+                'preferred_hte' => $student->currentInternship?->preferredHte?->name,
+                'preferred_department' => $student->currentInternship?->preferredDepartment?->department_name,
                 'internship_status' => $student->internship_status,
             ],
             'attendance_summary' => [

@@ -82,6 +82,16 @@ class StaffSecuritySetupTest extends TestCase
             ->assertForbidden()
             ->assertJsonPath('onboarding_step', 'security_setup');
 
+        $profileCompletedAt = User::where('username', $userId)->firstOrFail()->profile_completed_at;
+        $this->withToken($token)->postJson('/api/staff/profile-setup', [
+            'email' => 'juan.delacruz@marsu.edu.ph',
+            'contact_number' => '09179998888',
+            'address' => 'Boac, Marinduque',
+        ])->assertOk()
+            ->assertJsonPath('user.onboarding_step', 'security_setup')
+            ->assertJsonPath('user.contact_number', '09179998888');
+        $this->assertEquals($profileCompletedAt, User::where('username', $userId)->firstOrFail()->profile_completed_at);
+
         $questions = SecurityQuestion::query()->take(3)->get();
         $this->withToken($token)->postJson('/api/staff/security-setup', [
             'password' => 'Personal123!',
@@ -97,10 +107,16 @@ class StaffSecuritySetupTest extends TestCase
 
         $staff = User::where('username', $userId)->firstOrFail();
         $this->assertSame('juan.delacruz@marsu.edu.ph', $staff->email);
-        $this->assertSame('09171234567', $staff->contact_number);
-        $this->assertSame('Santa Cruz, Marinduque', $staff->address);
+        $this->assertSame('09179998888', $staff->contact_number);
+        $this->assertSame('Boac, Marinduque', $staff->address);
         $this->assertNotNull($staff->profile_completed_at);
         $this->assertFalse($staff->requiresStaffOnboarding());
+
+        $this->withToken($token)->postJson('/api/staff/profile-setup', [
+            'email' => 'juan.delacruz@marsu.edu.ph',
+            'contact_number' => '09171234567',
+            'address' => 'Santa Cruz, Marinduque',
+        ])->assertForbidden();
     }
 
     public function test_all_supported_staff_roles_must_finish_first_login_setup_before_dashboard_access(): void

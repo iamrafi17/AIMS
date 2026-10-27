@@ -47,8 +47,8 @@ const emptyDashboard = {
   },
   pending_evaluations: {
     total: 0,
-    midterm: 0,
-    final: 0,
+    draft: 0,
+    not_started: 0,
     items: [],
   },
   completion: {
@@ -259,7 +259,7 @@ function SupervisorDashboard() {
         <div className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard label="Assigned interns" value={overview.assigned} note="Students under your supervision" icon={FiUsers} />
           <MetricCard label="Active interns" value={overview.active} note="Currently completing OJT" icon={FiUserCheck} tone="green" />
-          <MetricCard label="Pending evaluations" value={overview.pending_evaluations} note="Midterm or final actions" icon={FiClipboard} tone="amber" />
+          <MetricCard label="Pending evaluations" value={overview.pending_evaluations} note="Whole-semester evaluations" icon={FiClipboard} tone="amber" />
           <MetricCard label="Average progress" value={`${overview.average_progress}%`} note="Rendered against required hours" icon={FiTrendingUp} tone="violet" />
           <MetricCard label="Completed" value={overview.completed} note="Internships successfully finished" icon={FiAward} tone="blue" />
         </div>
@@ -325,8 +325,7 @@ function SupervisorDashboard() {
                     <td className="py-4">
                       <div className="flex gap-1.5">
                         {[
-                          ['Mid', intern.midterm_status],
-                          ['Final', intern.final_status],
+                          ['Whole semester', intern.whole_semester_status],
                         ].map(([label, status]) => (
                           <span key={label} title={`${label}: ${status}`} className={`rounded-lg px-2 py-1 text-[8px] font-black uppercase ${['submitted', 'finalized'].includes(status) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'}`}>
                             {label}
@@ -423,7 +422,7 @@ function SupervisorDashboard() {
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Panel
           title="Pending Evaluations"
-          subtitle="Midterm and final evaluations requiring your action"
+          subtitle="Whole-semester evaluations requiring your action"
           icon={FiClipboard}
           action={(
             <Link to="/supervisor/evaluations" className="inline-flex items-center gap-1 text-xs font-black text-[#7D001D] dark:text-rose-300">
@@ -433,8 +432,8 @@ function SupervisorDashboard() {
         >
           <div className="mb-4 grid grid-cols-3 gap-3">
             <div className="rounded-xl bg-amber-50 p-3 dark:bg-amber-950/30"><p className="text-xl font-black text-amber-600">{evaluations.total}</p><p className="text-[9px] font-black uppercase text-slate-400">Total pending</p></div>
-            <div className="rounded-xl bg-violet-50 p-3 dark:bg-violet-950/30"><p className="text-xl font-black text-violet-600">{evaluations.midterm}</p><p className="text-[9px] font-black uppercase text-slate-400">Midterm</p></div>
-            <div className="rounded-xl bg-blue-50 p-3 dark:bg-blue-950/30"><p className="text-xl font-black text-blue-600">{evaluations.final}</p><p className="text-[9px] font-black uppercase text-slate-400">Final</p></div>
+            <div className="rounded-xl bg-violet-50 p-3 dark:bg-violet-950/30"><p className="text-xl font-black text-violet-600">{evaluations.draft}</p><p className="text-[9px] font-black uppercase text-slate-400">Draft</p></div>
+            <div className="rounded-xl bg-blue-50 p-3 dark:bg-blue-950/30"><p className="text-xl font-black text-blue-600">{evaluations.not_started}</p><p className="text-[9px] font-black uppercase text-slate-400">Not started</p></div>
           </div>
           {evaluations.items.length ? (
             <div className="space-y-2">

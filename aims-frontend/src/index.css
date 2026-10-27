@@ -1225,6 +1225,10 @@ html:not(.dark) {
   color: #fff;
 }
 
+.dashboard-shell main .vpaa-live-map-header h1 {
+  color: #fff;
+}
+
 .dashboard-shell .font-black {
   font-weight: 700;
 }

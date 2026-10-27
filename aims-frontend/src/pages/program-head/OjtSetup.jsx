@@ -80,7 +80,8 @@ export default function OjtSetup() {
         <p className="mt-5 text-sm text-slate-600 dark:text-slate-300">
           {currentSetting ? `Published on ${new Date(currentSetting.published_at).toLocaleString('en-PH')}. Changes are blocked once a student deployment uses this setup.` : 'Publishing makes these values available to Coordinator deployment. OJT end dates remain per student.'}
         </p>
-        <button type="submit" disabled={saving || !periodId || selectedPeriod?.status === 'completed'} className="mt-5 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Publishing...' : currentSetting ? 'Update Published Setup' : 'Publish OJT Setup'}</button>
+        {selectedPeriod?.publish_block_reason && <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">{selectedPeriod.publish_block_reason}</p>}
+        <button type="submit" disabled={saving || !periodId || Boolean(selectedPeriod?.publish_block_reason)} className="mt-5 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Publishing...' : currentSetting ? 'Update Published Setup' : 'Publish OJT Setup'}</button>
       </>}
     </form>
   </div>;

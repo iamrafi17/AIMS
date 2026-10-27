@@ -11,6 +11,8 @@ use App\Models\OjtEnrollment;
 use App\Models\Program;
 use App\Models\SecurityQuestion;
 use App\Models\Student;
+use App\Models\Supervisor;
+use App\Models\SystemSetting;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -38,7 +40,7 @@ class RegistrationEnrollmentTest extends TestCase
             'name' => '4A', 'year_level' => 4, 'academic_year' => $period->academic_year, 'is_active' => true,
         ]);
         OjtEnrollment::create([
-            'school_id' => '2026-PREF-001', 'full_name' => 'SANTOS, Maria Dela',
+            'school_id' => '2026-PREF-001', 'first_name' => 'Maria Dela', 'last_name' => 'Santos',
             'section' => 'BSIT 4A', 'college_id' => $college->id,
             'program_id' => $program->id, 'academic_section_id' => $section->id,
             'source' => 'manual', 'added_by' => $coordinator->id,
@@ -51,12 +53,18 @@ class RegistrationEnrollmentTest extends TestCase
         $hte->programs()->attach($program->id, ['linked_by' => $coordinator->id, 'is_active' => true]);
         $department = HteDepartment::create(['hte_id' => $hte->id, 'department_name' => 'IT Office', 'normalized_name' => 'it office']);
         $department->programs()->attach($program->id, ['linked_by' => $coordinator->id, 'is_active' => true]);
+        Supervisor::create(['hte_department_id' => $department->id, 'full_name' => 'Maria Saint', 'is_active' => true]);
+        Supervisor::create(['hte_department_id' => $department->id, 'full_name' => 'Inactive Supervisor', 'is_active' => false]);
         $unavailableDepartment = HteDepartment::create(['hte_id' => $hte->id, 'department_name' => 'Finance Office', 'normalized_name' => 'finance office']);
         $unavailableDepartment->programs()->attach($program->id, ['linked_by' => $coordinator->id, 'is_active' => false]);
 
         $this->getJson("/api/colleges/{$college->id}/htes?program_id={$program->id}")
             ->assertOk()
             ->assertJsonPath('0.departments.0.id', $department->id)
+            ->assertJsonPath('0.departments.0.students_selected', 0)
+            ->assertJsonCount(1, '0.departments.0.supervisors')
+            ->assertJsonPath('0.departments.0.supervisors.0.full_name', 'Maria Saint')
+            ->assertJsonMissingPath('0.departments.0.supervisors.0.supervisor_profile')
             ->assertJsonMissing(['department_name' => 'Finance Office']);
 
         $payload = [
@@ -67,11 +75,19 @@ class RegistrationEnrollmentTest extends TestCase
         $this->postJson('/api/register', $payload)
             ->assertUnprocessable()
             ->assertJsonValidationErrors('hte_department_id');
+        $this->getJson("/api/colleges/{$college->id}/htes?program_id={$program->id}&academic_period_id={$period->id}")
+            ->assertOk()->assertJsonPath('0.departments.0.students_selected', 0);
 
         $response = $this->postJson('/api/register', [
             ...$payload,
             'hte_department_id' => $department->id,
         ])->assertCreated();
+
+        $this->getJson("/api/colleges/{$college->id}/htes?program_id={$program->id}&academic_period_id={$period->id}")
+            ->assertOk()->assertJsonPath('0.departments.0.students_selected', 1);
+        $this->postJson('/api/register', [...$payload, 'hte_department_id' => $department->id])->assertUnprocessable();
+        $this->getJson("/api/colleges/{$college->id}/htes?program_id={$program->id}&academic_period_id={$period->id}")
+            ->assertOk()->assertJsonPath('0.departments.0.students_selected', 1);
 
         $this->assertDatabaseHas('student_internships', [
             'student_id' => $response->json('student.id'),
@@ -94,6 +110,68 @@ class RegistrationEnrollmentTest extends TestCase
             ->assertJsonPath('deployments.0.current_internship.preferred_department.department_name', $department->department_name);
     }
 
+    public function test_department_counts_use_submitted_preferences_in_the_requested_period_and_ignore_official_assignment(): void
+    {
+        $college = College::create(['name' => 'Computing', 'code' => 'CICS', 'is_active' => true]);
+        $program = Program::create(['college_id' => $college->id, 'name' => 'IT', 'code' => 'BSIT', 'is_active' => true]);
+        $currentPeriod = $this->academicPeriod();
+        $currentPeriod->update(['status' => 'active']);
+        $previousPeriod = $this->academicPeriod('2025-2026');
+        $hte = HTE::create([
+            'name' => 'Partner Company', 'address' => 'Santa Cruz', 'is_active' => true,
+            'contact_person' => 'Supervisor', 'contact_email' => 'partner@example.com', 'contact_number' => '09171234567',
+        ]);
+        $hte->programs()->attach($program->id, ['is_active' => true]);
+        $departments = collect(['IT Office', 'Records Office'])->map(function ($name) use ($hte, $program) {
+            $department = HteDepartment::create(['hte_id' => $hte->id, 'department_name' => $name, 'normalized_name' => strtolower($name)]);
+            $department->programs()->attach($program->id, ['is_active' => true]);
+
+            return $department;
+        });
+        $students = collect([$currentPeriod, $previousPeriod, $currentPeriod])->map(function ($period, $index) use ($program, $hte, $departments) {
+            $section = AcademicSection::firstOrCreate([
+                'program_id' => $program->id, 'academic_period_id' => $period->id, 'name' => '4A',
+            ], ['year_level' => 4, 'is_active' => true]);
+            $user = User::factory()->create(['role' => 'student']);
+            $student = Student::create([
+                'user_id' => $user->id, 'student_id' => 'COUNT-'.$index,
+                'first_name' => 'Student', 'last_name' => (string) $index,
+                'academic_section_id' => $section->id,
+            ]);
+            $student->currentInternship()->firstOrFail()->update([
+                'preferred_hte_id' => $hte->id, 'preferred_hte_department_id' => $departments[0]->id,
+            ]);
+
+            return $student;
+        });
+        $current = $students[0];
+        $incomplete = $students[2]->currentInternship()->firstOrFail();
+        DB::table('ojt_enrollments')->where('id', $incomplete->ojt_enrollment_id)->update(['registered_at' => null]);
+        $url = "/api/colleges/{$college->id}/htes?program_id={$program->id}";
+        $this->getJson($url)->assertOk()
+            ->assertJsonPath('0.departments.0.students_selected', 1)
+            ->assertJsonPath('0.departments.1.students_selected', 0);
+        $this->getJson($url.'&academic_period_id='.$previousPeriod->id)->assertOk()
+            ->assertJsonPath('0.departments.0.students_selected', 1);
+
+        $current->update(['hte_id' => $hte->id, 'hte_department_id' => $departments[1]->id]);
+        $this->getJson($url)->assertOk()
+            ->assertJsonPath('0.departments.0.students_selected', 1)
+            ->assertJsonPath('0.departments.1.students_selected', 0);
+
+        $current->currentInternship()->firstOrFail()->update(['preferred_hte_department_id' => $departments[1]->id]);
+        $this->getJson($url)->assertOk()
+            ->assertJsonPath('0.departments.0.students_selected', 0)
+            ->assertJsonPath('0.departments.1.students_selected', 1);
+        $this->getJson($url.'&academic_period_id='.$previousPeriod->id)->assertOk()
+            ->assertJsonPath('0.departments.0.students_selected', 1);
+
+        $currentPeriod->update(['status' => 'completed']);
+        $this->getJson($url)->assertOk()
+            ->assertJsonPath('0.departments.0.students_selected', 0)
+            ->assertJsonPath('0.departments.1.students_selected', 0);
+    }
+
     #[DataProvider('registrationYearLevels')]
     public function test_enrolled_student_creates_their_own_credentials_during_registration(int $yearLevel, ?int $submittedYearLevel, string $source): void
     {
@@ -113,7 +191,7 @@ class RegistrationEnrollmentTest extends TestCase
         $coordinator->update(['college_id' => $college->id, 'program_id' => $program->id]);
         OjtEnrollment::create([
             'school_id' => '2026-REG-001',
-            'full_name' => 'SANTOS, Maria Dela',
+            'first_name' => 'Maria Dela', 'last_name' => 'Santos',
             'section' => "BSIT {$yearLevel}A",
             'college_id' => $college->id,
             'program_id' => $program->id,
@@ -123,8 +201,8 @@ class RegistrationEnrollmentTest extends TestCase
         ]);
         $this->getJson('/api/registration/enrollment/2026-REG-001')
             ->assertOk()
-            ->assertJsonPath('full_name', 'SANTOS, Maria Dela')
             ->assertJsonPath('first_name', 'Maria Dela')
+            ->assertJsonPath('middle_name', null)
             ->assertJsonPath('last_name', 'Santos')
             ->assertJsonPath('section', "{$yearLevel}A")
             ->assertJsonPath('academic_section.id', $section->id)
@@ -172,8 +250,6 @@ class RegistrationEnrollmentTest extends TestCase
             'student_record_id' => $response->json('student.id'),
             'academic_section_id' => $section->id,
             'registration_status' => 'approved',
-            'registration_reviewed_by' => null,
-            'registration_reviewed_at' => null,
         ]);
         $this->assertDatabaseHas('student_guardians', [
             'student_id' => $response->json('student.id'),
@@ -273,7 +349,7 @@ class RegistrationEnrollmentTest extends TestCase
 
         OjtEnrollment::create([
             'school_id' => '2026-NO-SECTION',
-            'full_name' => 'SANTOS, Maria Dela',
+            'first_name' => 'Maria Dela', 'last_name' => 'Santos',
             'section' => 'BSIT 4A',
             'college_id' => $college->id,
             'program_id' => $program->id,
@@ -295,8 +371,9 @@ class RegistrationEnrollmentTest extends TestCase
     }
 
     #[DataProvider('registrationPasswords')]
-    public function test_registration_enforces_password_length_and_confirmation_without_consuming_invalid_enrollments(string $password, string $confirmation, bool $accepted): void
+    public function test_registration_enforces_password_length_and_confirmation_without_consuming_invalid_enrollments(string $password, string $confirmation, bool $accepted, int $minimum = 8): void
     {
+        SystemSetting::where('key', 'minimum_password_length')->update(['value' => (string) $minimum]);
         $college = College::create(['name' => 'Computing', 'code' => 'CICS', 'is_active' => true]);
         $program = Program::create(['college_id' => $college->id, 'name' => 'Information Technology', 'code' => 'BSIT', 'is_active' => true]);
         $period = AcademicPeriod::create([
@@ -308,7 +385,7 @@ class RegistrationEnrollmentTest extends TestCase
             'name' => '4A', 'year_level' => 4, 'academic_year' => $period->academic_year, 'is_active' => true,
         ]);
         $enrollment = OjtEnrollment::create([
-            'school_id' => '2026-PASSWORD-001', 'full_name' => 'SANTOS, Maria Dela',
+            'school_id' => '2026-PASSWORD-001', 'first_name' => 'Maria Dela', 'last_name' => 'Santos',
             'section' => 'BSIT 4A', 'college_id' => $college->id,
             'program_id' => $program->id, 'academic_section_id' => $section->id,
             'source' => 'manual',
@@ -345,7 +422,11 @@ class RegistrationEnrollmentTest extends TestCase
             'seven characters rejected' => ['Short1!', 'Short1!', false],
             'eight characters accepted' => ['NewPass1', 'NewPass1', true],
             'twelve characters accepted' => ['Student1234!', 'Student1234!', true],
-            'thirteen characters rejected' => ['Student1234!x', 'Student1234!x', false],
+            'thirteen characters accepted' => ['Student1234!x', 'Student1234!x', true],
+            'below saved minimum rejected' => ['NewPass1', 'NewPass1', false, 10],
+            'saved minimum accepted' => ['NewPass123', 'NewPass123', true, 10],
+            'saved minimum above twelve accepted' => ['Student1234!xxxx', 'Student1234!xxxx', true, 16],
+            'above maximum rejected' => [str_repeat('x', 256), str_repeat('x', 256), false],
             'different confirmation case rejected' => ['Student1234!', 'student1234!', false],
         ];
     }

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class SupervisorProfile extends Model
 {
     protected $fillable = [
-        'user_id', 'full_name', 'contact_number', 'address',
+        'user_id', 'full_name', 'contact_email', 'contact_number', 'address',
         'profile_photo_path', 'profile_completed_at',
     ];
 

@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
-use App\Models\Evaluation;
 use App\Models\Student;
 use App\Support\AttendanceHours;
 use Illuminate\Http\Request;
@@ -14,10 +13,8 @@ class SupervisorDashboardController extends Controller
     public function index(Request $request)
     {
         $supervisorId = $request->user()->id;
-        $evaluations = Evaluation::where('supervisor_id', $supervisorId)->get();
         $studentIds = Student::forSupervisorUser($supervisorId)
             ->pluck('id')
-            ->merge($evaluations->pluck('student_id'))
             ->unique()
             ->values();
 
@@ -118,8 +115,8 @@ class SupervisorDashboardController extends Controller
             ],
             'pending_evaluations' => [
                 'total' => $pendingEvaluations->count(),
-                'midterm' => $pendingEvaluations->where('evaluation_type', 'midterm')->count(),
-                'final' => $pendingEvaluations->where('evaluation_type', 'final')->count(),
+                'draft' => $pendingEvaluations->where('status', 'draft')->count(),
+                'not_started' => $pendingEvaluations->where('status', 'not_started')->count(),
                 'items' => $pendingEvaluations,
             ],
             'completion' => [
@@ -156,16 +153,15 @@ class SupervisorDashboardController extends Controller
             'required_hours' => round($requiredHours, 1),
             'progress' => round($progress, 1),
             'attendance_rate' => $workdays > 0 ? round(($attended / $workdays) * 100, 1) : 0,
-            'midterm_status' => $student->evaluations->firstWhere('evaluation_type', 'midterm')?->status ?? 'not_started',
-            'final_status' => $student->evaluations->firstWhere('evaluation_type', 'final')?->status ?? 'not_started',
+            'whole_semester_status' => $student->evaluations->where('student_internship_id', $student->currentInternship?->id)->firstWhere('evaluation_type', 'whole_semester')?->status ?? 'not_started',
         ];
     }
 
     private function pendingEvaluationPayloads(Student $student)
     {
-        return collect(['midterm', 'final'])
+        return collect(['whole_semester'])
             ->map(function (string $type) use ($student) {
-                $evaluation = $student->evaluations->firstWhere('evaluation_type', $type);
+                $evaluation = $student->evaluations->where('student_internship_id', $student->currentInternship?->id)->firstWhere('evaluation_type', $type);
 
                 if ($evaluation && in_array($evaluation->status, ['submitted', 'finalized'], true)) {
                     return null;

@@ -83,6 +83,22 @@
   height: min(850px, calc(100dvh - 1rem));
 }
 
+.dashboard-shell [role='dialog'][aria-label='Student requirements'] {
+  width: min(615px, calc(100vw - 1rem));
+  max-width: min(615px, calc(100vw - 1rem));
+  height: min(850px, calc(100dvh - 1rem));
+  max-height: calc(100dvh - 1rem);
+  overflow: hidden;
+}
+
+.dashboard-shell [role='dialog'][aria-label='Student requirements'] article {
+  padding: 0.75rem;
+}
+
+.dashboard-shell [role='dialog'][aria-label='Student requirements'] article > div:last-child {
+  margin-top: 0.5rem;
+}
+
 .dashboard-shell .moa-preview-dialog .document-preview-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 210px;
@@ -93,6 +109,38 @@
 .dashboard-shell .moa-preview-dialog .document-preview-details {
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.dashboard-shell .moa-preview-dialog :is(.document-preview-file, .document-preview-details, footer textarea)::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dashboard-shell .moa-preview-dialog :is(.document-preview-file, .document-preview-details, footer textarea)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashboard-shell .moa-preview-dialog :is(.document-preview-file, .document-preview-details, footer textarea)::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.dashboard-shell .moa-preview-dialog footer textarea {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.dashboard-shell .moa-preview-dialog footer textarea:placeholder-shown {
+  overflow-y: hidden;
+}
+
+.dark .dashboard-shell .moa-preview-dialog :is(.document-preview-file, .document-preview-details, footer textarea) {
+  scrollbar-color: #64748b transparent;
+}
+
+.dark .dashboard-shell .moa-preview-dialog :is(.document-preview-file, .document-preview-details, footer textarea)::-webkit-scrollbar-thumb {
+  background: #64748b;
 }
 
 .dashboard-shell .moa-preview-dialog .document-preview-details {

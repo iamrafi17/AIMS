@@ -35,7 +35,7 @@ function SettingInput({ setting, value, onChange }) {
       </button>
     );
   }
-  return <input type={setting.type === 'integer' ? 'number' : 'text'} min="0" value={value ?? ''} onChange={(event) => onChange(event.target.value)} className="w-full max-w-sm rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700" />;
+  return <input type={setting.type === 'integer' ? 'number' : 'text'} min={setting.key === 'minimum_password_length' ? 8 : 0} max={setting.key === 'minimum_password_length' ? 72 : undefined} value={value ?? ''} onChange={(event) => onChange(event.target.value)} className="w-full max-w-sm rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700" />;
 }
 
 export default function AdminSystem() {
@@ -56,7 +56,7 @@ export default function AdminSystem() {
       const nextValues = {};
       Object.values(response.data.settings || {}).flat().forEach((setting) => { nextValues[setting.key] = setting.value; });
       setValues(nextValues);
-      setDirty(false);
+      setDirty(response.data.has_missing_settings === true);
     } catch (error) {
       const message = error.response?.data?.message || 'Unable to load system settings.';
       setLoadError(message);

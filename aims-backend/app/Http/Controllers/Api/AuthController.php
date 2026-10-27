@@ -12,6 +12,7 @@ use App\Models\OjtEnrollment;
 use App\Models\ProgramOjtSetting;
 use App\Models\SecurityQuestion;
 use App\Models\Student;
+use App\Models\SystemSetting;
 use App\Models\User;
 use App\Models\UserSecurityQuestion;
 use App\Support\UserId;
@@ -107,7 +108,7 @@ class AuthController extends Controller
             'hte_department_id' => 'nullable|exists:hte_departments,id',
             'agree_terms' => 'accepted',
             'agree_privacy' => 'accepted',
-            'password' => 'required|string|min:8|max:12|confirmed',
+            'password' => [...SystemSetting::passwordRules(), 'confirmed'],
             'security_questions' => ['required', 'array', 'size:3'],
             'security_questions.*.security_question_id' => [
                 'required',
@@ -169,10 +170,12 @@ class AuthController extends Controller
                 ]);
             }
 
-            [$firstName, $lastName] = $this->splitEnrollmentName($enrollment->full_name);
+            $firstName = $enrollment->first_name;
+            $lastName = $enrollment->last_name;
+            $middleName = array_key_exists('middle_name', $validated) ? $validated['middle_name'] : $enrollment->middle_name;
 
             $user = User::create([
-                'name' => $this->studentFullName($firstName, $request->middle_name, $lastName),
+                'name' => $this->studentFullName($firstName, $middleName, $lastName),
                 'email' => $request->email,
                 'contact_number' => $request->contact_number,
                 'address' => $request->address,
@@ -188,7 +191,7 @@ class AuthController extends Controller
                 'student_id' => $request->student_id,
                 'first_name' => $firstName,
                 'last_name' => $lastName,
-                'middle_name' => $request->middle_name,
+                'middle_name' => $middleName,
                 'gender' => $request->gender,
                 'birth_date' => $request->birth_date,
                 'address' => $request->address,
@@ -234,6 +237,13 @@ class AuthController extends Controller
                 'updated_at' => now(),
             ]);
 
+            User::forRole('coordinator')->where('is_active', true)
+                ->whereIn('id', DB::table('coordinator_section_assignments')
+                    ->where('academic_section_id', $enrollment->academic_section_id)->select('coordinator_id'))
+                ->pluck('id')->each(fn ($id) => \App\Models\SystemNotification::sendToUser($id,
+                    'Student ready for deployment', $student->full_name.' registered. Review the preferred HTE and department.',
+                    'approval', '/coordinator/htes?tab=deployments'));
+
             return [$user, $student];
         });
 
@@ -276,13 +286,11 @@ class AuthController extends Controller
         $this->registrationYearLevel($enrollment);
         $academicPeriod = $this->registrationAcademicPeriod($enrollment);
 
-        [$firstName, $lastName] = $this->splitEnrollmentName($enrollment->full_name);
-
         return response()->json([
             'student_id' => $enrollment->school_id,
-            'full_name' => $enrollment->full_name,
-            'first_name' => $firstName,
-            'last_name' => $lastName,
+            'first_name' => $enrollment->first_name,
+            'middle_name' => $enrollment->middle_name,
+            'last_name' => $enrollment->last_name,
             'section' => $enrollment->section,
             'academic_section' => $enrollment->academicSection,
             'college' => $enrollment->college,
@@ -321,26 +329,6 @@ class AuthController extends Controller
         return $section->year_level;
     }
 
-    private function splitEnrollmentName(string $fullName): array
-    {
-        $name = preg_replace('/\s+/', ' ', trim($fullName));
-
-        if (str_contains($name, ',')) {
-            [$lastName, $givenNames] = array_map('trim', explode(',', $name, 2));
-
-            return [
-                $givenNames ?: $name,
-                Str::title(Str::lower($lastName)),
-            ];
-        }
-
-        $parts = explode(' ', $name);
-        $lastName = count($parts) > 1 ? array_pop($parts) : '';
-        $firstName = implode(' ', $parts) ?: $name;
-
-        return [$firstName, $lastName];
-    }
-
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
@@ -377,6 +365,11 @@ class AuthController extends Controller
         ]);
     }
 
+    public function passwordPolicy()
+    {
+        return response()->json(['minimum_length' => SystemSetting::minimumPasswordLength()]);
+    }
+
     public function completeStaffPasswordSetup(Request $request)
     {
         $user = $request->user();
@@ -388,7 +381,7 @@ class AuthController extends Controller
         );
 
         $validated = $request->validate([
-            'password' => ['required', 'string', 'min:8', 'max:12', 'confirmed'],
+            'password' => [...SystemSetting::passwordRules(), 'confirmed'],
         ]);
 
         if (Hash::check($validated['password'], $user->password)) {
@@ -470,9 +463,10 @@ class AuthController extends Controller
         $user = $request->user();
 
         abort_unless(
-            $user && UserId::isStaffRole($user->role) && $user->requires_profile_setup,
+            $user && UserId::isStaffRole($user->role)
+                && ($user->requires_profile_setup || $user->requires_security_setup),
             403,
-            'This account does not require first-login profile setup.',
+            'This account is not completing first-login setup.',
         );
 
         $validated = $request->validate([
@@ -481,13 +475,20 @@ class AuthController extends Controller
             'address' => ['required', 'string', 'max:1000'],
         ]);
 
+        $isFirstProfileSave = $user->requires_profile_setup;
         $user->update([
             ...$validated,
             'requires_profile_setup' => false,
-            'profile_completed_at' => now(),
+            'profile_completed_at' => $user->profile_completed_at ?? now(),
         ]);
 
-        ActivityLog::record($user, 'Profile', 'Completed required personal information during first login.');
+        ActivityLog::record(
+            $user,
+            'Profile',
+            $isFirstProfileSave
+                ? 'Completed required personal information during first login.'
+                : 'Updated personal information during first-login setup.',
+        );
 
         $user = $user->fresh();
 
@@ -505,7 +506,7 @@ class AuthController extends Controller
         abort_unless($user?->requiresStaffSecuritySetup(), 403, 'This account does not require first-login security setup.');
 
         $validated = $request->validate([
-            'password' => ['required', 'string', 'min:8', 'max:12', 'confirmed'],
+            'password' => [...SystemSetting::passwordRules(), 'confirmed'],
             'security_questions' => ['required', 'array', 'size:3'],
             'security_questions.*.security_question_id' => [
                 'required',
@@ -658,7 +659,7 @@ class AuthController extends Controller
         $validated = $request->validate([
             'user_id' => ['required', 'string', 'max:100'],
             'token' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8', 'max:255', 'confirmed'],
+            'password' => [...SystemSetting::passwordRules(), 'confirmed'],
         ]);
 
         $user = $this->findRecoveryUser($validated['user_id']);

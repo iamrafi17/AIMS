@@ -468,6 +468,7 @@ export default function TravelMonitoringManagement({
                     {point.remarks && (
                       <p className="mt-2 text-sm">{point.remarks}</p>
                     )}
+                    {point.has_photo && <div className="mt-3"><ProtectedImage endpoint={point.photo_endpoint} /></div>}
                   </div>
                 ))}
               </div>

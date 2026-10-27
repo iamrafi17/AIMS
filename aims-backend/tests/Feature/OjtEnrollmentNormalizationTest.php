@@ -52,7 +52,7 @@ class OjtEnrollmentNormalizationTest extends TestCase
             ]);
             $enrollment = OjtEnrollment::create([
                 'school_id' => '2026-NORM-'.($index + 1),
-                'full_name' => 'Sample Student '.($index + 1),
+                'first_name' => 'Sample', 'last_name' => 'Student '.($index + 1),
                 'academic_section_id' => $section->id,
                 'source' => 'manual',
             ])->fresh();
@@ -87,7 +87,7 @@ class OjtEnrollmentNormalizationTest extends TestCase
 
         OjtEnrollment::create([
             'school_id' => '2026-MISMATCH',
-            'full_name' => 'Wrong Program Student',
+            'first_name' => 'Wrong Program', 'last_name' => 'Student',
             'academic_section_id' => $section->id,
             'program_id' => $secondProgram->id,
             'source' => 'manual',

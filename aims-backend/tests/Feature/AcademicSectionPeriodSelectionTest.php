@@ -78,7 +78,7 @@ class AcademicSectionPeriodSelectionTest extends TestCase
         [$program, $first, $second] = $this->context();
         $id = $this->postJson('/api/admin/academic/sections', $this->payload($program, $first))->assertCreated()->json('section.id');
         OjtEnrollment::create([
-            'school_id' => 'PERIOD-SECTION-001', 'full_name' => 'Enrolled Student', 'section' => '4A',
+            'school_id' => 'PERIOD-SECTION-001', 'first_name' => 'Enrolled', 'last_name' => 'Student', 'section' => '4A',
             'academic_section_id' => $id, 'program_id' => $program->id, 'college_id' => $program->college_id, 'source' => 'manual',
         ]);
         $this->putJson('/api/admin/academic/sections/'.$id, $this->payload($program, $second))->assertUnprocessable();

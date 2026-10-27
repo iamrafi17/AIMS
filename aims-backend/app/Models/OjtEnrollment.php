@@ -10,7 +10,9 @@ class OjtEnrollment extends Model
 {
     private const IMPORT_SNAPSHOT_COLUMNS = [
         'school_id',
-        'full_name',
+        'first_name',
+        'middle_name',
+        'last_name',
         'source',
     ];
 
@@ -22,7 +24,9 @@ class OjtEnrollment extends Model
 
     protected $fillable = [
         'school_id',
-        'full_name',
+        'first_name',
+        'middle_name',
+        'last_name',
         'section',
         'college_id',
         'program_id',
@@ -32,9 +36,6 @@ class OjtEnrollment extends Model
         'added_by',
         'student_record_id',
         'registration_status',
-        'registration_feedback',
-        'registration_reviewed_by',
-        'registration_reviewed_at',
         'registered_at',
     ];
 
@@ -42,7 +43,6 @@ class OjtEnrollment extends Model
     {
         return [
             'registered_at' => 'datetime',
-            'registration_reviewed_at' => 'datetime',
         ];
     }
 
@@ -187,11 +187,6 @@ class OjtEnrollment extends Model
             'academic_section_id',
             'academic_period_id',
         );
-    }
-
-    public function registrationReviewer(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'registration_reviewed_by');
     }
 
     public function internship()

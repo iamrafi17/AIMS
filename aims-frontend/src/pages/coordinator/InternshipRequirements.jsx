@@ -27,20 +27,24 @@ export default function InternshipRequirements() {
   const [preview, setPreview] = useState(null);
   const previewRequest = useRef(0);
   const [search, setSearch] = useState(params.get('search') || '');
+  const listParams = new URLSearchParams(params);
+  listParams.delete('student');
+  const listQuery = listParams.toString();
+  const studentId = params.get('student');
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setList((await api.get('/coordinator/internship-requirements', { params: Object.fromEntries(params) })).data); }
+    try { setList((await api.get('/coordinator/internship-requirements', { params: Object.fromEntries(new URLSearchParams(listQuery)) })).data); }
     catch (error) { toast.error(error.response?.data?.message || 'Unable to load requirements.'); }
     finally { setLoading(false); }
-  }, [params]);
+  }, [listQuery]);
   const openStudent = useCallback(async (id) => {
     try { setSelected((await api.get(`/coordinator/internship-requirements/${id}`)).data); }
     catch (error) { toast.error(error.response?.data?.message || 'Unable to load student requirements.'); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { const id = params.get('student'); if (id) openStudent(id); }, [params, openStudent]);
+  useEffect(() => { if (studentId) openStudent(studentId); }, [studentId, openStudent]);
   useEffect(() => () => { if (preview?.url) URL.revokeObjectURL(preview.url); }, [preview]);
   const closePreview = useCallback(() => { previewRequest.current += 1; setPreview(null); }, []);
   useEffect(() => {

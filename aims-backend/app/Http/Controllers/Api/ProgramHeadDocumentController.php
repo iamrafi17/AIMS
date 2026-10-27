@@ -131,7 +131,10 @@ class ProgramHeadDocumentController extends Controller
     public function reviewMoa(Request $request, MOA $moa)
     {
         ProgramAccess::authorizeMoa($request->user(), $moa);
-        if ($moa->program_status !== 'pending' || $moa->status !== 'pending') {
+        $pending = $moa->program_status === 'pending' && $moa->status === 'pending';
+        $completed = $moa->program_status === 'endorsed' && $moa->status === 'approved'
+            && $moa->vpaa_reviewed_at !== null;
+        if (! $pending && ! $completed) {
             return response()->json(['message' => 'This MOA has already been reviewed.'], 422);
         }
         $validated = $request->validate([
@@ -140,6 +143,9 @@ class ProgramHeadDocumentController extends Controller
         ]);
 
         $endorsed = $validated['decision'] === 'endorsed';
+        if ($completed && $endorsed) {
+            return response()->json(['message' => 'A completed MOA can only be returned for revision.'], 422);
+        }
         if ($endorsed && $moa->expiration_date->lt(today())) {
             return response()->json(['message' => 'This MOA has expired. Submit a renewed MOA before endorsement.'], 422);
         }
@@ -150,6 +156,15 @@ class ProgramHeadDocumentController extends Controller
             'program_reviewed_by' => $request->user()->id,
             'program_reviewed_at' => now(),
             'status' => 'pending',
+            ...($completed ? [
+                'dean_endorsed_by' => null,
+                'dean_endorsed_at' => null,
+                'dean_remarks' => null,
+                'approved_by' => null,
+                'approved_at' => null,
+                'vpaa_reviewed_by' => null,
+                'vpaa_reviewed_at' => null,
+            ] : []),
         ]);
 
         if ($endorsed) {
@@ -185,6 +200,7 @@ class ProgramHeadDocumentController extends Controller
             'file_path' => $requirement->file_path,
             'file_type' => $requirement->file_type,
             'status' => $requirement->status,
+            'program_head_approved' => $requirement->status === 'approved' && $requirement->reviewer?->role === 'program_head',
             'can_program_head_review' => ($requirement->reviewer?->role === 'program_head'
                 || ($requirement->reviewer?->role === 'coordinator' && $requirement->status === 'approved'))
                 && (! $requirement->isConsent()

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\College;
 use App\Models\Program;
+use App\Models\ProgramOjtSetting;
 use App\Models\SecurityQuestion;
 use App\Models\Student;
 use App\Models\Supervisor;
@@ -30,16 +31,19 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             'departments' => [[
                 'department_name' => 'Learning Resources Center',
                 'supervisor_full_name' => 'Maria Saint',
+                'supervisor_email' => 'maria.saint@example.com',
             ]],
         ])->assertCreated()
             ->assertJsonPath('hte.departments.0.department_name', 'Learning Resources Center')
             ->assertJsonPath('hte.departments.0.supervisors.0.full_name', 'Maria Saint')
+            ->assertJsonPath('hte.departments.0.supervisors.0.contact_email', 'maria.saint@example.com')
             ->json('hte.id');
 
         $supervisor = Supervisor::whereHas('supervisorProfile', fn ($profile) => $profile->where('full_name', 'Maria Saint'))->firstOrFail();
         $this->assertDatabaseHas('supervisor_profiles', [
             'id' => $supervisor->supervisor_profile_id,
             'full_name' => 'Maria Saint',
+            'contact_email' => 'maria.saint@example.com',
         ]);
         $this->assertDatabaseHas('hte_supervisor_assignments', [
             'supervisor_profile_id' => $supervisor->supervisor_profile_id,
@@ -61,8 +65,10 @@ class SharedHteSupervisorWorkflowTest extends TestCase
         $this->postJson("/api/coordinator/htes/{$hteId}/departments", [
             'department_name' => '  learning   resources center ',
             'supervisor_full_name' => ' maria saint ',
+            'supervisor_email' => 'maria.updated@example.com',
         ])->assertOk()
             ->assertJsonPath('message', 'Existing department and supervisor reused.');
+        $this->assertSame('maria.updated@example.com', $supervisor->fresh()->contact_email);
 
         Sanctum::actingAs($firstCoordinator);
         $this->postJson("/api/coordinator/htes/{$hteId}/departments", [
@@ -141,6 +147,7 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             'departments' => [[
                 'department_name' => 'Learning Resources Center',
                 'supervisor_full_name' => 'Maria Saint',
+                'supervisor_email' => 'maria.saint@example.com',
             ]],
         ])->assertCreated()->json('hte.id');
         $supervisor = Supervisor::firstOrFail();
@@ -152,6 +159,7 @@ class SharedHteSupervisorWorkflowTest extends TestCase
             ->assertOk()
             ->assertJsonPath('supervisors.0.id', $supervisor->id)
             ->assertJsonPath('supervisors.0.full_name', 'Maria Saint')
+            ->assertJsonPath('supervisors.0.contact_email', 'maria.saint@example.com')
             ->assertJsonPath('supervisors.0.hte.id', $hteId)
             ->assertJsonPath('supervisors.0.has_account', false);
 
@@ -249,6 +257,12 @@ class SharedHteSupervisorWorkflowTest extends TestCase
         \Illuminate\Support\Facades\DB::table('coordinator_section_assignments')->insert([
             'academic_section_id' => $student->academic_section_id, 'coordinator_id' => $coordinator->id,
             'created_at' => now(), 'updated_at' => now(),
+        ]);
+        ProgramOjtSetting::create([
+            'program_id' => $student->program_id,
+            'academic_period_id' => $student->academic_period_id,
+            'required_hours' => 486, 'ojt_start_date' => '2026-09-01',
+            'status' => 'published', 'published_at' => now(),
         ]);
 
         $payload = [

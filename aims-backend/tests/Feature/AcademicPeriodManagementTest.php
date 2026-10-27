@@ -143,7 +143,7 @@ class AcademicPeriodManagementTest extends TestCase
         ]);
         Sanctum::actingAs($coordinator);
         $enrollmentId = $this->postJson('/api/coordinator/students', [
-            'school_id' => 'PERIOD-001', 'full_name' => 'Student Period', 'academic_section_id' => $section->id,
+            'school_id' => 'PERIOD-001', 'first_name' => 'Student', 'last_name' => 'Period', 'academic_section_id' => $section->id,
         ])->assertCreated()->assertJsonPath('enrollment.academic_period_id', $period->id)->json('enrollment.id');
         $this->assertSame($period->id, $section->academic_period_id);
         Sanctum::actingAs(User::factory()->create(['role' => 'admin']));

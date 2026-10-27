@@ -7,7 +7,7 @@ import api from '../../services/api';
 const colors = { active: '#800020', pending: '#d4af37', completed: '#16856a', dropped: '#64748b', other: '#94a3b8' };
 const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900';
 const actions = [
-  { key: 'pending_deployments', label: 'Pending Deployments', note: 'Awaiting Dean review', path: '/dean/approvals', icon: CheckCircleIcon },
+  { key: 'pending_deployments', label: 'Pending Deployments', note: 'Ready to forward to VPAA', path: '/dean/deployments', icon: CheckCircleIcon },
   { key: 'pending_moas', label: 'Pending MOAs', note: 'Awaiting Dean final approval', path: '/dean/moas', icon: DocumentCheckIcon },
   { key: 'pending_travel_reports', label: 'Pending Travel Reports', note: 'Awaiting validation', path: '/dean/travel', icon: MapIcon },
 ];

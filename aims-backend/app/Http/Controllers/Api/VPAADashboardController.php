@@ -8,6 +8,7 @@ use App\Models\MOA;
 use App\Models\Program;
 use App\Models\Student;
 use App\Models\TravelReport;
+use App\Support\DeploymentWorkflow;
 use Illuminate\Http\Request;
 
 class VPAADashboardController extends UniversityDashboardController
@@ -35,7 +36,9 @@ class VPAADashboardController extends UniversityDashboardController
         $deploymentApprovals = ApprovalRecord::query()
             ->where('subject_type', ApprovalRecord::TYPE_DEPLOYMENT)
             ->whereIn('subject_id', $studentIds)
-            ->whereHas('submitter', fn ($query) => $query->forRole('program_head'))
+            ->where(fn ($query) => $query->where('deployment_stage', DeploymentWorkflow::VPAA)
+                ->orWhere(fn ($legacy) => $legacy->whereNull('deployment_stage')->where('status', 'approved')
+                    ->whereHas('submitter', fn ($user) => $user->forRole('program_head'))))
             ->with([
                 'submitter:id,role_id',
                 'submitter.roleDefinition:id,code',
@@ -84,6 +87,19 @@ class VPAADashboardController extends UniversityDashboardController
         ];
         $dashboard['deployment_validations'] = $deploymentApprovals->map(function (ApprovalRecord $approval) use ($deploymentStudents) {
             $student = $deploymentStudents->get($approval->subject_id);
+            if ($snapshot = $approval->deployment_snapshot) {
+                return [
+                    'approval_id' => $approval->id, 'batch' => $snapshot['student']['section'],
+                    'program' => $snapshot['student']['program'], 'hte' => $snapshot['hte']['name'],
+                    'department' => $snapshot['department']['name'], 'student_id' => $snapshot['student']['student_id'],
+                    'student' => $snapshot['student']['name'], 'proposed_date' => $snapshot['schedule']['start_date'],
+                    'working_schedule' => collect($snapshot['schedule']['days'])->filter(fn ($day) => $day['is_working'])
+                        ->map(fn ($day, $key) => ucfirst($key).' '.$day['am_start'].'-'.$day['am_end'].' / '.$day['pm_start'].'-'.$day['pm_end'])->implode('; '),
+                    'coordinator_submission' => $approval->submitted_at?->toIso8601String(),
+                    'program_head_review' => 'approved', 'program_head_remarks' => $approval->remarks,
+                    'vpaa_validation' => 'forwarded_to_vpaa', 'deployment_status' => 'approved',
+                ];
+            }
 
             return [
                 'approval_id' => $approval->id,

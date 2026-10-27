@@ -140,20 +140,40 @@ class AdminSystemController extends Controller
 
     public function settings()
     {
+        $savedSettings = SystemSetting::orderBy('group')->orderBy('id')->get()->keyBy('key');
+        $defaults = collect($this->defaultSettings());
+
         return response()->json([
-            'settings' => SystemSetting::orderBy('group')->orderBy('id')->get()->groupBy('group'),
+            'settings' => $defaults->map(fn (array $setting) => $savedSettings->get($setting['key']) ?? new SystemSetting($setting))
+                ->groupBy('group'),
+            'has_missing_settings' => $defaults->pluck('key')->diff($savedSettings->keys())->isNotEmpty(),
             'updated_at' => SystemSetting::max('updated_at'),
         ]);
     }
 
     public function updateSettings(Request $request)
     {
-        $data = $request->validate(['settings' => ['required', 'array']]);
-
-        foreach ($data['settings'] as $key => $value) {
-            $setting = SystemSetting::where('key', $key)->firstOrFail();
-            $setting->update(['value' => $this->normalizeSetting($setting->type, $value)]);
+        $defaults = collect($this->defaultSettings())->keyBy('key');
+        $rules = ['settings' => ['required', 'array:'.$defaults->keys()->implode(',')]];
+        foreach ($defaults as $key => $setting) {
+            $rules['settings.'.$key] = match ($setting['type']) {
+                'boolean' => ['sometimes', 'required', 'boolean'],
+                'integer' => ['sometimes', 'required', 'integer', 'min:0'],
+                default => ['sometimes', 'required', 'string'],
+            };
         }
+        $rules['settings.minimum_password_length'] = ['sometimes', 'required', 'integer', 'between:8,72'];
+        $data = $request->validate($rules);
+
+        DB::transaction(function () use ($data, $defaults) {
+            foreach ($data['settings'] as $key => $value) {
+                $setting = $defaults->get($key);
+                SystemSetting::updateOrCreate(['key' => $key], [
+                    ...$setting,
+                    'value' => $this->normalizeSetting($setting['type'], $value),
+                ]);
+            }
+        });
 
         return response()->json(['message' => 'System settings saved successfully.']);
     }
@@ -253,5 +273,26 @@ class AdminSystemController extends Controller
             'integer' => (string) max((int) $value, 0),
             default => trim((string) $value),
         };
+    }
+
+    private function defaultSettings(): array
+    {
+        return array_map(fn (array $setting) => [
+            'group' => $setting[0],
+            'key' => $setting[1],
+            'value' => $setting[2],
+            'type' => $setting[3],
+            'label' => $setting[4],
+            'description' => $setting[5],
+        ], [
+            ['general', 'system_name', 'Academic Internship Monitoring System', 'string', 'System name', 'Name displayed throughout the portal.'],
+            ['general', 'campus_name', 'Marinduque State University – Santa Cruz Campus', 'string', 'Campus name', 'Official campus identity.'],
+            ['internship', 'default_ojt_hours', '486', 'integer', 'Default required OJT hours', 'Used when an enrollment has no program-specific requirement.'],
+            ['internship', 'allow_past_attendance', '0', 'boolean', 'Allow past attendance by default', 'Coordinators can still override this for individual students.'],
+            ['security', 'session_timeout_minutes', '120', 'integer', 'Session timeout (minutes)', 'Recommended inactivity limit for authenticated sessions.'],
+            ['security', 'minimum_password_length', '8', 'integer', 'Minimum password length', 'Minimum accepted account password length.'],
+            ['notifications', 'email_notifications', '1', 'boolean', 'Email notifications', 'Send important approval and deadline notices by email.'],
+            ['notifications', 'moa_expiration_days', '60', 'integer', 'MOA expiration warning (days)', 'Number of days before expiration alerts begin.'],
+        ]);
     }
 }

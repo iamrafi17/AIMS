@@ -17,13 +17,21 @@ class ProgramHeadOjtSettingController extends Controller
     public function index(Request $request)
     {
         $programId = ProgramAccess::programId($request->user());
+        $settings = ProgramOjtSetting::query()->where('program_id', $programId)
+            ->with('academicPeriod:id,academic_year,semester,status')
+            ->orderByDesc('published_at')->get();
+        $periods = AcademicPeriod::query()->orderByDesc('start_date')->get();
+        $periods->each(function (AcademicPeriod $period) use ($programId, $settings): void {
+            $reason = $period->status === 'completed'
+                ? 'A completed academic period cannot receive a new OJT setup.'
+                : $this->deploymentBlockReason($programId, $period->id, $settings->contains('academic_period_id', $period->id));
+            $period->setAttribute('publish_block_reason', $reason);
+        });
 
         return response()->json([
             'program' => Program::query()->findOrFail($programId, ['id', 'code', 'name', 'college_id']),
-            'periods' => AcademicPeriod::query()->orderByDesc('start_date')->get(),
-            'settings' => ProgramOjtSetting::query()->where('program_id', $programId)
-                ->with('academicPeriod:id,academic_year,semester,status')
-                ->orderByDesc('published_at')->get(),
+            'periods' => $periods,
+            'settings' => $settings,
         ]);
     }
 
@@ -42,12 +50,12 @@ class ProgramHeadOjtSettingController extends Controller
                 throw ValidationException::withMessages(['academic_period_id' => 'A completed academic period cannot receive a new OJT setup.']);
             }
 
-            if (DB::table('student_internship_placements as placements')
-                ->join('student_internships as internships', 'internships.id', '=', 'placements.student_internship_id')
-                ->join('academic_sections as sections', 'sections.id', '=', 'internships.academic_section_id')
-                ->where('sections.program_id', $programId)
-                ->where('sections.academic_period_id', $period->id)->exists()) {
-                throw ValidationException::withMessages(['academic_period_id' => 'Deployments already exist for this program and period. Publish OJT setup before the first deployment.']);
+            $publishedSettingExists = ProgramOjtSetting::query()
+                ->where('program_id', $programId)
+                ->where('academic_period_id', $period->id)
+                ->exists();
+            if ($reason = $this->deploymentBlockReason($programId, $period->id, $publishedSettingExists)) {
+                throw ValidationException::withMessages(['academic_period_id' => $reason]);
             }
 
             return ProgramOjtSetting::query()->updateOrCreate(
@@ -63,5 +71,37 @@ class ProgramHeadOjtSettingController extends Controller
         });
 
         return response()->json(['message' => 'OJT setup published.', 'setting' => $setting->load('academicPeriod')]);
+    }
+
+    private function deploymentBlockReason(int $programId, int $periodId, bool $publishedSettingExists): ?string
+    {
+        $placements = DB::table('student_internship_placements as placements')
+            ->join('student_internships as internships', 'internships.id', '=', 'placements.student_internship_id')
+            ->join('academic_sections as sections', 'sections.id', '=', 'internships.academic_section_id')
+            ->where('sections.program_id', $programId)
+            ->where('sections.academic_period_id', $periodId);
+
+        if ($publishedSettingExists && (clone $placements)->exists()) {
+            return 'This OJT setup cannot be changed after a student deployment has used it.';
+        }
+
+        if (! $publishedSettingExists && (clone $placements)
+                ->where(function ($query): void {
+                    $query->where('placements.is_current', true)
+                        ->orWhereExists(function ($approval): void {
+                            $approval->selectRaw('1')->from('approval_records')
+                                ->whereColumn('approval_records.subject_id', 'internships.student_id')
+                                ->where('approval_records.subject_type', 'deployment')
+                                ->where('approval_records.status', 'approved');
+                        })
+                        ->orWhereExists(function ($attendance): void {
+                            $attendance->selectRaw('1')->from('attendance')
+                                ->whereColumn('attendance.student_internship_id', 'internships.id');
+                        });
+                })->exists()) {
+            return 'An active or used deployment exists for this program and period. Resolve it before publishing OJT setup.';
+        }
+
+        return null;
     }
 }

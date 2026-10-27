@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { deploymentStageLabel } from '../../utils/deployment';
 import {
   FiBriefcase,
   FiCalendar,
@@ -277,11 +278,12 @@ function StudentDashboard() {
     };
 
     const watchId = navigator.geolocation.watchPosition(
-      ({ coords }) => {
+      ({ coords, timestamp }) => {
         latestLocationRef.current = {
           latitude: coords.latitude,
           longitude: coords.longitude,
           accuracy: coords.accuracy,
+          recorded_at: new Date(timestamp).toISOString(),
         };
         latestLocationCapturedAtRef.current = Date.now();
         shareLatestLocation();
@@ -631,6 +633,13 @@ function StudentDashboard() {
           return entries.length ? <div key={type}><h3 className="text-xs font-black text-violet-700 dark:text-violet-300">{title}</h3><ul className="mt-2 space-y-1.5">{entries.map((holiday) => <li key={`${holiday.id}-${holiday.date}`} className="flex gap-3 text-sm text-slate-700 dark:text-slate-200"><span className="w-14 shrink-0 font-black">{new Date(`${holiday.date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</span><span>{holiday.name}</span></li>)}</ul></div> : null;
         })}</div> : <p className="mt-4 text-sm text-slate-500">No holidays this month.</p>}
       </section>
+      <section className="rounded-2xl border border-slate-100 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
+        <h2 className="font-black text-[#690016] dark:text-white">My Deployment</h2>
+        <p className="mt-2 text-sm font-bold">{deploymentStageLabel(dashboardData?.deployment?.stage)}</p>
+        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+          {[['Preferred HTE', dashboardData?.student?.preferred_hte], ['Preferred Department', dashboardData?.student?.preferred_department], ['Assigned HTE', dashboardData?.student?.hte], ['Assigned Department', dashboardData?.student?.department]].map(([label, value]) => <div key={label}><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 font-bold">{value || 'To be assigned'}</dd></div>)}
+        </dl>
+      </section>
       <section>
         <div className="mb-4 flex items-end justify-between gap-4">
           <div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#a8750b]">Internship requirements</p><h2 className="mt-1 text-xl font-black text-[#690016]">OJT Status</h2></div>
@@ -641,7 +650,7 @@ function StudentDashboard() {
             title="Schedule"
             status={dashboardStatus.schedule}
             icon={FiCalendar}
-            description="Coordinator approval status for your OJT schedule."
+            description="Program Head review status for your Coordinator-confirmed deployment."
           />
           <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div className="flex items-start justify-between gap-4">

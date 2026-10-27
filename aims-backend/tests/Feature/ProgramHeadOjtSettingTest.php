@@ -71,11 +71,6 @@ class ProgramHeadOjtSettingTest extends TestCase
             'internship_status' => 'pending',
         ]);
 
-        Sanctum::actingAs($head);
-        $setting = ['academic_period_id' => $period->id, 'required_hours' => 486, 'ojt_start_date' => '2027-01-15'];
-        $this->postJson('/api/program-head/ojt-settings/publish', $setting)->assertOk();
-
-        Sanctum::actingAs($coordinator);
         $deployment = [
             'hte_id' => $hte->id, 'required_ojt_hours' => 999,
             'ojt_start_date' => '2026-08-01', 'ojt_end_date' => '2027-05-15',
@@ -84,6 +79,16 @@ class ProgramHeadOjtSettingTest extends TestCase
             'work_days' => ['mon', 'tue', 'wed', 'thu', 'fri'],
             'internship_status' => 'active', 'allow_past_attendance' => false,
         ];
+        Sanctum::actingAs($coordinator);
+        $this->putJson("/api/coordinator/htes/deployments/{$student->id}", $deployment)
+            ->assertUnprocessable()->assertJsonValidationErrors('hte_id');
+        $this->assertDatabaseCount('student_internship_placements', 0);
+
+        Sanctum::actingAs($head);
+        $setting = ['academic_period_id' => $period->id, 'required_hours' => 486, 'ojt_start_date' => '2027-01-15'];
+        $this->postJson('/api/program-head/ojt-settings/publish', $setting)->assertOk();
+
+        Sanctum::actingAs($coordinator);
         $this->putJson("/api/coordinator/htes/deployments/{$student->id}", $deployment)->assertOk();
         $this->assertSame(486.0, (float) $student->fresh()->required_ojt_hours);
         $this->assertSame('2027-01-15', $student->fresh()->ojt_start_date->toDateString());
@@ -96,6 +101,72 @@ class ProgramHeadOjtSettingTest extends TestCase
         $this->assertDatabaseHas('program_ojt_settings', [
             'program_id' => $program->id, 'academic_period_id' => $period->id, 'required_hours' => 486,
         ]);
+    }
+
+    public function test_withdrawn_legacy_placement_does_not_block_first_publish(): void
+    {
+        [$head, $coordinator, $program, $period, $section] = $this->context();
+        $hte = HTE::create([
+            'name' => 'Legacy Partner', 'address' => 'Santa Cruz', 'contact_person' => 'Supervisor',
+            'contact_email' => 'legacy@example.test', 'contact_number' => '09170000000',
+            'default_am_start' => '08:00', 'default_am_end' => '12:00',
+            'default_pm_start' => '13:00', 'default_pm_end' => '17:00',
+            'work_days' => ['mon', 'tue', 'wed', 'thu', 'fri'], 'is_active' => true,
+        ]);
+        $hteProgramId = DB::table('hte_programs')->insertGetId([
+            'hte_id' => $hte->id, 'program_id' => $program->id, 'linked_by' => $coordinator->id,
+            'is_active' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $student = Student::create([
+            'user_id' => User::factory()->create(['role' => 'student'])->id,
+            'student_id' => '2026-LEGACY-01', 'first_name' => 'Legacy', 'last_name' => 'Intern',
+            'gender' => 'female', 'birth_date' => '2002-01-01', 'address' => 'Santa Cruz',
+            'contact_number' => '09171111111', 'college_id' => $program->college_id,
+            'program_id' => $program->id, 'academic_section_id' => $section->id,
+            'year_level' => 4, 'section' => 'A', 'parent_name' => 'Parent',
+            'parent_address' => 'Santa Cruz', 'parent_contact_number' => '09172222222',
+            'registration_status' => 'approved', 'internship_status' => 'pending',
+        ]);
+        $placementId = DB::table('student_internship_placements')->insertGetId([
+            'student_internship_id' => $student->currentInternship->id,
+            'hte_program_id' => $hteProgramId, 'assigned_by' => $coordinator->id,
+            'assigned_at' => now()->subDay(), 'is_current' => true,
+            'created_at' => now()->subDay(), 'updated_at' => now(),
+        ]);
+        $payload = ['academic_period_id' => $period->id, 'required_hours' => 468, 'ojt_start_date' => '2026-10-21'];
+
+        Sanctum::actingAs($head);
+        $this->getJson('/api/program-head/ojt-settings')
+            ->assertOk()->assertJsonPath('periods.0.publish_block_reason', 'An active or used deployment exists for this program and period. Resolve it before publishing OJT setup.');
+        $this->postJson('/api/program-head/ojt-settings/publish', $payload)
+            ->assertUnprocessable()->assertJsonValidationErrors('academic_period_id');
+
+        DB::table('student_internship_placements')->where('id', $placementId)->update([
+            'is_current' => false, 'ended_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('approval_records')->insert([
+            'subject_type' => 'deployment', 'subject_id' => $student->id,
+            'status' => 'rejected', 'submitted_by' => $coordinator->id,
+            'submitted_at' => now()->subDay(), 'decided_at' => now(),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        DB::table('approval_records')->where('subject_id', $student->id)->update(['status' => 'approved']);
+        $this->postJson('/api/program-head/ojt-settings/publish', $payload)
+            ->assertUnprocessable()->assertJsonValidationErrors('academic_period_id');
+        DB::table('approval_records')->where('subject_id', $student->id)->update(['status' => 'rejected']);
+        $this->getJson('/api/program-head/ojt-settings')
+            ->assertOk()->assertJsonPath('periods.0.publish_block_reason', null);
+        $this->postJson('/api/program-head/ojt-settings/publish', $payload)->assertOk();
+        $this->assertDatabaseHas('program_ojt_settings', [
+            'program_id' => $program->id, 'academic_period_id' => $period->id,
+            'required_hours' => 468, 'ojt_start_date' => '2026-10-21',
+        ]);
+        $this->getJson('/api/program-head/ojt-settings')
+            ->assertOk()->assertJsonPath('periods.0.publish_block_reason', 'This OJT setup cannot be changed after a student deployment has used it.');
+        $this->postJson('/api/program-head/ojt-settings/publish', [
+            ...$payload, 'required_hours' => 500,
+        ])->assertUnprocessable()->assertJsonValidationErrors('academic_period_id');
     }
 
     public function test_completed_period_cannot_be_published(): void
@@ -114,7 +185,7 @@ class ProgramHeadOjtSettingTest extends TestCase
         [$head, $coordinator, $program, $period, $section] = $this->context();
         $program->college->update(['required_ojt_hours' => 600]);
         OjtEnrollment::create([
-            'school_id' => '2026-SETUP-001', 'full_name' => 'SANTOS, Maria',
+            'school_id' => '2026-SETUP-001', 'first_name' => 'Maria', 'last_name' => 'Santos',
             'section' => 'BSIS 4A', 'college_id' => $program->college_id,
             'program_id' => $program->id, 'academic_section_id' => $section->id,
             'source' => 'manual', 'added_by' => $coordinator->id,

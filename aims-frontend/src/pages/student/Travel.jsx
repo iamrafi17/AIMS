@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -16,6 +16,7 @@ import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { EmptyPanel, LoadingPanel, MetricCard, PageIntro } from '../../components/common/PortalUI';
 import TravelRoadRoute from '../../components/maps/TravelRoadRoute';
+import { displayedTravelPoints } from '../../utils/travelPoints';
 
 const eventIcons = {
   start: L.divIcon({ className: 'travel-point travel-point--departure', html: '<span>S</span>', iconSize: [36, 36], iconAnchor: [18, 18] }),
@@ -184,15 +185,82 @@ function RouteMap({ points = [] }) {
   );
 }
 
-function ProtectedImage({ endpoint }) {
+function ProtectedImage({ endpoint, alt = 'Arrival evidence', className = 'h-52 w-full rounded-2xl object-cover sm:w-80' }) {
   const [source, setSource] = useState('');
   useEffect(() => {
     if (!endpoint) return undefined;
     let url = '';
-    api.get(endpoint, { responseType: 'blob' }).then(({ data }) => { url = URL.createObjectURL(data); setSource(url); }).catch(() => setSource(''));
-    return () => { if (url) URL.revokeObjectURL(url); };
+    let cancelled = false;
+    setSource('');
+    api.get(endpoint, { responseType: 'blob' }).then(({ data }) => {
+      url = URL.createObjectURL(data);
+      if (cancelled) URL.revokeObjectURL(url);
+      else setSource(url);
+    }).catch(() => { if (!cancelled) setSource(''); });
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
   }, [endpoint]);
-  return source ? <img src={source} alt="Arrival evidence" className="h-52 w-full rounded-2xl object-cover sm:w-80" /> : null;
+  return source ? <img src={source} alt={alt} className={className} /> : null;
+}
+
+function CheckpointPhotoUpload({ sessionId, point, busy, setBusy, onUploaded }) {
+  const [file, setFile] = useState(null);
+  const fileInput = useRef(null);
+  const isArrival = (point.event_type || point.point_type) === 'final_arrival';
+  const upload = async () => {
+    if (!file) return;
+    setBusy(`checkpoint-photo-${point.id}`);
+    try {
+      const form = new FormData();
+      form.append('photo', file);
+      const endpoint = isArrival
+        ? `/student/travel/${sessionId}/arrival-photo`
+        : `/student/travel/${sessionId}/checkpoints/${point.id}/photo`;
+      const response = await api.post(endpoint, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success(response.data.message);
+      setFile(null);
+      if (fileInput.current) fileInput.current.value = '';
+      await onUploaded();
+    } catch (error) { toast.error(errorMessage(error, 'Checkpoint photo was not uploaded.')); }
+    finally { setBusy(''); }
+  };
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 focus-within:ring-2 focus-within:ring-[#7D001D] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
+          <CameraIcon className="h-4 w-4" /> Choose image
+          <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" aria-label={`Photo for ${point.label}`} onChange={(event) => setFile(event.target.files?.[0] || null)} className="sr-only" />
+        </label>
+        <button type="button" disabled={!file || busy} onClick={upload} className="rounded-xl bg-[#7D001D] px-3 py-2 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40">{busy === `checkpoint-photo-${point.id}` ? 'Uploading...' : point.has_photo ? 'Replace photo' : 'Upload photo'}</button>
+      </div>
+      {file && <p className="max-w-full truncate text-xs text-slate-500" title={file.name}>{file.name}</p>}
+    </div>
+  );
+}
+
+function CheckpointPhotoCard({ sessionId, point, canUpload = false, busy, setBusy, onUploaded }) {
+  const isArrival = (point.event_type || point.point_type) === 'final_arrival';
+  const earlierPhoto = point.earlier_point?.has_photo ? point.earlier_point : null;
+  const previewPoint = point.has_photo ? point : earlierPhoto;
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900 sm:p-5">
+      <div className="flex items-start gap-4">
+        <div className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800 sm:h-28 sm:w-28">
+          <CameraIcon className="h-7 w-7" aria-hidden="true" />
+          {previewPoint && <ProtectedImage endpoint={previewPoint.photo_endpoint} alt={previewPoint === earlierPhoto ? 'Photo taken before departure' : `${point.label} photo`} className="absolute inset-0 h-full w-full object-contain" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-black text-slate-900 dark:text-white">{point.display_sequence}. {point.label}</h3>
+          <p className="mt-1 text-xs text-slate-500">{new Date(point.captured_at).toLocaleString()}</p>
+          <p className="mt-2 text-xs font-semibold text-slate-600 dark:text-slate-300">{point.has_photo ? (isArrival ? 'Required arrival photo uploaded' : 'Photo uploaded') : isArrival ? 'Arrival photo required before ending the session' : earlierPhoto ? 'Earlier photo, before departure' : 'No photo yet'}</p>
+          {canUpload && <CheckpointPhotoUpload sessionId={sessionId} point={point} busy={busy} setBusy={setBusy} onUploaded={onUploaded} />}
+        </div>
+      </div>
+      {point.has_photo && earlierPhoto && <details className="mt-3 border-t border-slate-200 pt-3 text-xs dark:border-slate-700">
+        <summary className="cursor-pointer font-semibold text-slate-600 dark:text-slate-300">View earlier photo from {new Date(earlierPhoto.captured_at).toLocaleString()}</summary>
+        <ProtectedImage endpoint={earlierPhoto.photo_endpoint} alt="Photo taken before departure" className="mt-3 h-32 w-32 rounded-xl object-contain" />
+      </details>}
+    </article>
+  );
 }
 
 export default function StudentTravel() {
@@ -201,7 +269,6 @@ export default function StudentTravel() {
   const [busy, setBusy] = useState('');
   const [gpsStatus, setGpsStatus] = useState('');
   const [remarks, setRemarks] = useState('');
-  const [photo, setPhoto] = useState(null);
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -212,6 +279,8 @@ export default function StudentTravel() {
 
   useEffect(() => { load(); }, [load]);
   const session = data.current_session;
+  const currentPoints = useMemo(() => displayedTravelPoints(session?.points || []), [session?.points]);
+  const history = useMemo(() => data.history.map((item) => ({ ...item, displayed_points: displayedTravelPoints(item.points) })), [data.history]);
 
   const performGpsAction = async (action, endpoint, payload = {}) => {
     setBusy(action);
@@ -226,17 +295,6 @@ export default function StudentTravel() {
     finally { setBusy(''); setGpsStatus(''); }
   };
 
-  const uploadPhoto = async () => {
-    if (!session || !photo) return;
-    setBusy('photo');
-    try {
-      const form = new FormData(); form.append('photo', photo);
-      const response = await api.post(`/student/travel/${session.id}/arrival-photo`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success(response.data.message); setPhoto(null); await load(true);
-    } catch (error) { toast.error(errorMessage(error, 'Arrival photo was not uploaded successfully.')); }
-    finally { setBusy(''); }
-  };
-
   const endSession = async () => {
     setBusy('end');
     try { const response = await api.post(`/student/travel/${session.id}/end`); toast.success(response.data.message); await load(true); }
@@ -248,10 +306,10 @@ export default function StudentTravel() {
 
   return (
     <div className="space-y-6">
-      <PageIntro eyebrow="Student travel" title="Travel Monitoring" description="View your coordinator's schedule, record GPS checkpoints on travel day, and follow the report status." icon={MapIcon} actions={session?.status === 'scheduled' && <button disabled={!data.can_start.allowed || busy} onClick={() => performGpsAction('start', '/student/travel/start')} className="inline-flex items-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#690016] disabled:cursor-not-allowed disabled:opacity-40"><PlayIcon className="h-5 w-5" />{busy === 'start' ? 'Capturing GPS...' : 'Start Travel'}</button>} />
+      <PageIntro eyebrow="Student travel" title="Travel Monitoring" description="View your coordinator's schedule, record GPS checkpoints on travel day, and follow the report status." icon={MapIcon} actions={session?.status === 'scheduled' && <button disabled={!data.can_start.allowed || busy} onClick={() => performGpsAction('start', '/student/travel/start')} className="inline-flex items-center gap-2 rounded-2xl bg-[#d4af37] px-5 py-3 font-black text-[#690016] disabled:cursor-not-allowed disabled:opacity-40"><PlayIcon className="h-5 w-5" />{busy === 'start' ? 'Capturing GPS...' : 'Start Departure'}</button>} />
 
       {!session && <section className="rounded-3xl border border-violet-200 bg-violet-50 p-5 dark:border-violet-900 dark:bg-violet-950/30"><p className="font-black text-violet-800 dark:text-violet-200">{data.travel_requirement === 'awaiting_schedule' ? 'No travel schedule yet' : 'No travel session yet'}</p><p className="mt-2 text-sm text-violet-700 dark:text-violet-300">{data.travel_requirement === 'awaiting_schedule' ? 'Your coordinator has not set a travel date. You will be notified when a schedule is available.' : 'Your HTE assignment is needed before travel can be scheduled.'}</p></section>}
-      {session?.status === 'scheduled' && <section className="rounded-3xl border border-violet-200 bg-violet-50 p-5 dark:border-violet-900 dark:bg-violet-950/30"><h2 className="font-black text-violet-800 dark:text-violet-200">Upcoming Travel</h2><dl className="mt-4 grid grid-cols-[minmax(110px,auto)_1fr] gap-x-5 gap-y-2 text-sm"><dt>Travel Date</dt><dd className="font-bold">{new Date(`${session.scheduled_date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</dd><dt>Status</dt><dd className="font-bold">Scheduled</dd><dt>Departure Time</dt><dd className="font-bold">Not started yet</dd></dl><p className="mt-4 text-sm text-violet-700 dark:text-violet-300">{data.can_start.allowed ? 'You may start travel today.' : 'Start Travel will be available on your scheduled travel date.'}</p></section>}
+      {session?.status === 'scheduled' && <section className="rounded-3xl border border-violet-200 bg-violet-50 p-5 dark:border-violet-900 dark:bg-violet-950/30"><h2 className="font-black text-violet-800 dark:text-violet-200">Upcoming Travel</h2><dl className="mt-4 grid grid-cols-[minmax(110px,auto)_1fr] gap-x-5 gap-y-2 text-sm"><dt>Travel Date</dt><dd className="font-bold">{new Date(`${session.scheduled_date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</dd><dt>Status</dt><dd className="font-bold">Scheduled</dd><dt>Departure Time</dt><dd className="font-bold">Not started yet</dd></dl><p className="mt-4 text-sm text-violet-700 dark:text-violet-300">{data.can_start.allowed ? 'You may record your departure today.' : 'Start Departure will be available on your scheduled travel date.'}</p></section>}
 
       <section className="portal-metric-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Assigned HTE" value={data.student?.hte?.name || 'Not assigned'} icon={MapPinIcon} />
@@ -261,14 +319,31 @@ export default function StudentTravel() {
       </section>
 
       {session && session.status !== 'scheduled' && <>
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-wider text-[#a8750b]">{session.session_code}</p><h2 className="mt-1 text-2xl font-black">{session.hte?.name}</h2><p className="mt-1 text-sm text-slate-500">{session.hte?.address}</p></div><span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-black capitalize ${statusStyles[session.status]}`}>{session.status}</span></div><p className="mt-4 text-sm text-slate-500">Started {new Date(session.start_time).toLocaleString()} · {session.points.length} route point{session.points.length === 1 ? '' : 's'}</p></section>
-        <RouteMap points={session.points} />
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-wider text-[#a8750b]">{session.session_code}</p><h2 className="mt-1 text-2xl font-black">{session.hte?.name}</h2><p className="mt-1 text-sm text-slate-500">{session.hte?.address}</p></div><span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-black capitalize ${statusStyles[session.status]}`}>{session.status}</span></div><p className="mt-4 text-sm text-slate-500">Started {new Date(session.start_time).toLocaleString()} · {currentPoints.length} route point{currentPoints.length === 1 ? '' : 's'}</p></section>
+        <RouteMap points={currentPoints} />
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6">
+          <h2 className="text-xl font-black">Checkpoint photos</h2>
+          <p className="mt-1 text-sm text-slate-500">Departure and checkpoint photos are optional. A Final Arrival photo is required before ending the session. Upload JPG, PNG, or WebP images up to 5 MB. Photos are locked when you end the session.</p>
+          <div className="mt-4 grid items-start gap-4 lg:grid-cols-2">
+            {currentPoints.map((point) => <CheckpointPhotoCard key={point.id} sessionId={session.id} point={point} canUpload={(point.event_type || point.point_type) === 'final_arrival' ? session.status === 'arrived' : ['active', 'traveling', 'arrived'].includes(session.status)} busy={busy} setBusy={setBusy} onUploaded={() => load(true)} />)}
+          </div>
+        </section>
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6"><h2 className="text-xl font-black">Travel actions</h2><p className="mt-1 text-sm text-slate-500">Every action captures the best fresh GPS position available, up to 500-meter accuracy, before saving.</p>{gpsStatus && <div className="mt-4 flex items-center gap-3 rounded-2xl bg-blue-50 p-4 text-sm font-bold text-blue-700 dark:bg-blue-950/30 dark:text-blue-200"><ArrowPathIcon className="h-5 w-5 animate-spin" />{gpsStatus}</div>}<div className="mt-5 flex flex-wrap gap-3">{session.status === 'active' && <button disabled={busy} onClick={() => performGpsAction('departure', `/student/travel/${session.id}/departure`)} className="rounded-xl bg-[#7D001D] px-5 py-3 font-black text-white disabled:opacity-40">{busy === 'departure' ? 'Confirming GPS...' : 'Start Departure'}</button>}{session.status === 'traveling' && <button disabled={busy} onClick={() => performGpsAction('arrival', `/student/travel/${session.id}/arrival`)} className="rounded-xl bg-emerald-600 px-5 py-3 font-black text-white disabled:opacity-40">{busy === 'arrival' ? 'Confirming GPS...' : 'Mark Final Arrival'}</button>}</div>{session.status === 'traveling' && <div className="mt-5 flex flex-col gap-3 rounded-2xl bg-slate-50 p-4 dark:bg-slate-800 sm:flex-row"><input value={remarks} onChange={(event) => setRemarks(event.target.value)} maxLength={1000} placeholder="Optional checkpoint remarks" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700" /><button disabled={busy} onClick={() => performGpsAction('checkpoint', `/student/travel/${session.id}/checkpoints`, { remarks })} className="rounded-xl border border-[#7D001D]/30 px-5 py-3 font-black text-[#7D001D] disabled:opacity-40 dark:text-red-300">{busy === 'checkpoint' ? 'Confirming GPS...' : 'Add Checkpoint'}</button></div>}</section>
-        {session.status === 'arrived' && <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/30 sm:p-6"><div className="flex items-start gap-3"><CameraIcon className="h-7 w-7 shrink-0 text-amber-700" /><div className="w-full"><h2 className="text-xl font-black">Arrival photo required</h2><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Upload a JPG, PNG, or WebP image up to 5 MB before ending the session.</p>{session.has_arrival_photo && <div className="mt-4"><ProtectedImage endpoint={session.arrival_photo_endpoint} /></div>}<div className="mt-4 flex flex-wrap gap-2"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPhoto(event.target.files?.[0] || null)} className="max-w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm dark:bg-slate-900" /><button disabled={!photo || busy} onClick={uploadPhoto} className="rounded-xl bg-amber-600 px-5 py-2 font-black text-white disabled:opacity-40">{busy === 'photo' ? 'Uploading...' : 'Upload Photo'}</button></div></div></div></section>}
         {session.status === 'arrived' && <section className="flex flex-col gap-4 rounded-3xl bg-slate-950 p-5 text-white sm:flex-row sm:items-center sm:justify-between"><div><p className="font-black">End travel session</p><p className="mt-1 text-sm text-slate-300">Final arrival saved · Photo {session.has_arrival_photo ? 'uploaded' : 'required'}</p></div><button disabled={!session.has_arrival_photo || busy} onClick={endSession} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#d4af37] px-6 py-3 font-black text-[#690016] disabled:opacity-40"><StopIcon className="h-5 w-5" />{busy === 'end' ? 'Ending...' : 'End Session'}</button></section>}
       </>}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6"><div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-black">Travel History</h2><p className="text-sm text-slate-500">Your completed and previous sessions with report validation status.</p></div><button onClick={() => load()} aria-label="Refresh history" className="rounded-xl border border-slate-200 p-2 dark:border-slate-700"><ArrowPathIcon className="h-5 w-5" /></button></div>{data.history.length ? <div className="space-y-3">{data.history.map((item) => <article key={item.id} className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-800"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase text-[#a8750b]">{item.session_code}</p><p className="mt-1 font-black">{item.hte?.name}</p><p className="mt-1 text-xs text-slate-500">{item.points.length} route points · {item.start_time ? new Date(item.start_time).toLocaleString() : 'Unknown date'}</p></div><div className="flex flex-wrap gap-2"><span className={`rounded-full px-3 py-1 text-xs font-black capitalize ${statusStyles[item.status] || statusStyles.completed}`}>{item.status}</span><span className="rounded-full bg-[#7D001D]/10 px-3 py-1 text-xs font-black text-[#7D001D] dark:text-red-300">{item.report ? reportLabels[item.report.status] || item.report.status : 'Not Yet Generated'}</span></div></div></article>)}</div> : <EmptyPanel icon={MapIcon} title="No travel history" description="Completed sessions will appear here." />}</section>
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6"><div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-black">Travel History</h2><p className="text-sm text-slate-500">Your completed and previous sessions with report validation status.</p></div><button onClick={() => load()} aria-label="Refresh history" className="rounded-xl border border-slate-200 p-2 dark:border-slate-700"><ArrowPathIcon className="h-5 w-5" /></button></div>{data.history.length ? <div className="space-y-3">{history.map((item) => <article key={item.id} className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-800"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase text-[#a8750b]">{item.session_code}</p><p className="mt-1 font-black">{item.hte?.name}</p><p className="mt-1 text-xs text-slate-500">{item.displayed_points.length} route points · {item.start_time ? new Date(item.start_time).toLocaleString() : 'Unknown date'}</p></div><div className="flex flex-wrap gap-2"><span className={`rounded-full px-3 py-1 text-xs font-black capitalize ${statusStyles[item.status] || statusStyles.completed}`}>{item.status}</span><span className="rounded-full bg-[#7D001D]/10 px-3 py-1 text-xs font-black text-[#7D001D] dark:text-red-300">{item.report ? reportLabels[item.report.status] || item.report.status : 'Not Yet Generated'}</span></div></div></article>)}</div> : <EmptyPanel icon={MapIcon} title="No travel history" description="Completed sessions will appear here." />}</section>
+      {history.some((item) => item.displayed_points.some((point) => point.has_photo || point.earlier_point?.has_photo)) && <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6">
+        <h2 className="text-xl font-black">Past checkpoint photos</h2>
+        <div className="mt-4 space-y-5">
+          {history.filter((item) => item.displayed_points.some((point) => point.has_photo || point.earlier_point?.has_photo)).map((item) => <div key={item.id}>
+            <p className="font-black">{item.session_code} · {item.hte?.name}</p>
+            <div className="mt-3 grid items-start gap-4 lg:grid-cols-2">
+              {item.displayed_points.filter((point) => point.has_photo || point.earlier_point?.has_photo).map((point) => <CheckpointPhotoCard key={point.id} sessionId={item.id} point={point} />)}
+            </div>
+          </div>)}
+        </div>
+      </section>}
     </div>
   );
 }

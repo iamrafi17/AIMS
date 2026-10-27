@@ -82,7 +82,9 @@ class StudentRecordNormalizer
             if (! $enrollment && $student->academic_section_id) {
                 $enrollment = OjtEnrollment::create([
                     'school_id' => $student->student_id,
-                    'full_name' => trim($student->last_name.', '.$student->first_name.' '.$student->middle_name),
+                    'first_name' => $student->first_name,
+                    'middle_name' => $student->middle_name,
+                    'last_name' => $student->last_name,
                     'academic_section_id' => $student->academic_section_id,
                     'source' => 'manual',
                     'student_record_id' => $student->id,
@@ -168,9 +170,6 @@ class StudentRecordNormalizer
             if ($enrollment && Schema::hasColumn('ojt_enrollments', 'registration_status')) {
                 $enrollment->update([
                     'registration_status' => $student->registration_status ?: 'pending',
-                    'registration_feedback' => $student->registration_feedback,
-                    'registration_reviewed_by' => $student->registration_reviewed_by,
-                    'registration_reviewed_at' => $student->registration_reviewed_at,
                 ]);
             }
 

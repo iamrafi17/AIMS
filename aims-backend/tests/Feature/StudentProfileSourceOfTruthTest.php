@@ -49,7 +49,7 @@ class StudentProfileSourceOfTruthTest extends TestCase
         [, $student, $section] = $this->studentAccount();
         $enrollment = OjtEnrollment::create([
             'school_id' => $student->student_id,
-            'full_name' => 'SANTOS, Maria Reyes',
+            'first_name' => 'Maria', 'middle_name' => 'Reyes', 'last_name' => 'Santos',
             'academic_section_id' => $section->id,
             'source' => 'csv',
             'student_record_id' => $student->id,
@@ -63,12 +63,12 @@ class StudentProfileSourceOfTruthTest extends TestCase
         $this->assertDatabaseHas('ojt_enrollments', [
             'id' => $enrollment->id,
             'school_id' => $student->student_id,
-            'full_name' => 'SANTOS, Maria Reyes',
+            'first_name' => 'Maria', 'middle_name' => 'Reyes', 'last_name' => 'Santos',
             'source' => 'csv',
         ]);
 
         $this->expectException(LogicException::class);
-        $enrollment->update(['full_name' => 'Changed imported name']);
+        $enrollment->update(['first_name' => 'Changed imported name']);
     }
 
     public function test_enrollment_cannot_link_to_a_different_school_id(): void
@@ -80,7 +80,7 @@ class StudentProfileSourceOfTruthTest extends TestCase
 
         OjtEnrollment::create([
             'school_id' => 'DIFFERENT-ID',
-            'full_name' => 'Imported Student',
+            'first_name' => 'Imported', 'last_name' => 'Student',
             'academic_section_id' => $section->id,
             'source' => 'csv',
             'student_record_id' => $student->id,
@@ -211,7 +211,9 @@ class StudentProfileSourceOfTruthTest extends TestCase
         foreach ([$firstSection, $secondSection] as $section) {
             OjtEnrollment::create([
                 'school_id' => $student->student_id,
-                'full_name' => $student->full_name,
+                'first_name' => $student->first_name,
+                'middle_name' => $student->middle_name,
+                'last_name' => $student->last_name,
                 'academic_section_id' => $section->id,
                 'source' => 'manual',
                 'student_record_id' => $student->id,

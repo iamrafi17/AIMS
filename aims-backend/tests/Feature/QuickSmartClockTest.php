@@ -226,6 +226,22 @@ class QuickSmartClockTest extends TestCase
             'longitude' => 122.0275,
         ]);
 
+        $fixTime = now()->addSeconds(2)->toIso8601String();
+        $this->postJson('/api/student/attendance/live-location', [
+            'latitude' => 13.4853, 'longitude' => 122.0275,
+            'accuracy' => 12.5, 'recorded_at' => $fixTime,
+        ])->assertOk();
+        $this->postJson('/api/student/attendance/live-location', [
+            'latitude' => 13.4953, 'longitude' => 122.0275,
+            'accuracy' => 12.5, 'recorded_at' => $fixTime,
+        ])->assertOk();
+        $this->assertDatabaseHas('student_live_locations', [
+            'student_id' => $user->student->id,
+            'latitude' => 13.4853,
+            'attendance_id' => Attendance::forStudent($user->student->id)->firstOrFail()->id,
+            'student_internship_id' => $user->student->currentInternship->id,
+        ]);
+
         $this->postJson('/api/student/attendance/quick-clock', [
             'status' => 'present',
             'work_mode' => 'wfo',
@@ -238,6 +254,13 @@ class QuickSmartClockTest extends TestCase
         $this->assertDatabaseMissing('student_live_locations', [
             'student_id' => $user->student->id,
         ]);
+
+        $this->postJson('/api/student/attendance/live-location', [
+            'latitude' => 13.4753,
+            'longitude' => 122.0275,
+            'accuracy' => 10,
+        ])->assertUnprocessable()
+            ->assertJsonPath('message', 'There is no active timed-in session to monitor.');
     }
 
     public function test_smart_clock_marks_each_time_in_late_using_batch_schedule_and_grace_period(): void

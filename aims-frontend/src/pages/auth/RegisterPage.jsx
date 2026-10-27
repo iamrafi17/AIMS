@@ -14,12 +14,14 @@ import {
   FiUser,
   FiUsers,
 } from 'react-icons/fi';
+import { BuildingOfficeIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import useAuth from '../../context/useAuth';
 import marsuLogo from '../../assets/marsu-logo.png';
 import ContactNumberInput from '../../components/forms/ContactNumberInput';
-import { getPasswordStrength } from '../../utils/passwordStrength';
+import PsgcAddressSelect from '../../components/forms/PsgcAddressSelect';
+import { getPasswordStrength, usePasswordMinimum } from '../../utils/passwordStrength';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500';
 
@@ -55,13 +57,17 @@ function StepHeader({ eyebrow, title, description }) {
 }
 
 function RegisterPage() {
+  const passwordMinimum = usePasswordMinimum();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [enrollmentLoading, setEnrollmentLoading] = useState(false);
   const [enrollmentVerified, setEnrollmentVerified] = useState(false);
+  const [academicPeriodId, setAcademicPeriodId] = useState(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
+  const [addressValid, setAddressValid] = useState(false);
+  const [parentAddressValid, setParentAddressValid] = useState(false);
   const [colleges, setColleges] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [htes, setHtes] = useState([]);
@@ -122,16 +128,33 @@ function RegisterPage() {
       return;
     }
 
+    let active = true;
     Promise.all([
       api.get(`/colleges/${formData.college_id}/programs`),
-      api.get(`/colleges/${formData.college_id}/htes`, { params: { program_id: formData.program_id || undefined } }),
+      api.get(`/colleges/${formData.college_id}/htes`, { params: { program_id: formData.program_id || undefined, academic_period_id: academicPeriodId || undefined } }),
     ])
       .then(([programResponse, hteResponse]) => {
+        if (!active) return;
         setPrograms(programResponse.data);
         setHtes(hteResponse.data);
       })
-      .catch(() => toast.error('Unable to load programs or partner HTEs.'));
-  }, [formData.college_id, formData.program_id]);
+      .catch(() => { if (active) toast.error('Unable to load programs or partner HTEs.'); });
+    return () => { active = false; };
+  }, [formData.college_id, formData.program_id, academicPeriodId]);
+
+  useEffect(() => {
+    if (step !== 4 || !formData.college_id || !academicPeriodId) return;
+    let active = true;
+    const refreshDepartments = () => {
+      api.get(`/colleges/${formData.college_id}/htes`, {
+        params: { program_id: formData.program_id || undefined, academic_period_id: academicPeriodId },
+      }).then(({ data }) => { if (active) setHtes(data); })
+        .catch(() => { if (active) toast.error('Unable to refresh department options.'); });
+    };
+    refreshDepartments();
+    window.addEventListener('focus', refreshDepartments);
+    return () => { active = false; window.removeEventListener('focus', refreshDepartments); };
+  }, [step, formData.college_id, formData.program_id, academicPeriodId]);
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
@@ -144,7 +167,7 @@ function RegisterPage() {
       ...(name === 'student_id' ? { first_name: '', middle_name: '', last_name: '', year_level: '', section: '', college_id: '', program_id: '', hte_id: '', hte_department_id: '', internship_semester: '', internship_year: '' } : {}),
       [name]: type === 'checkbox' ? checked : value,
     }));
-    if (name === 'student_id') setEnrollmentVerified(false);
+    if (name === 'student_id') { setEnrollmentVerified(false); setAcademicPeriodId(null); }
   };
 
   const updateSecurityQuestion = (index, field, value) => {
@@ -164,10 +187,12 @@ function RegisterPage() {
     setEnrollmentVerified(false);
     try {
       const response = await api.get(`/registration/enrollment/${encodeURIComponent(schoolId)}`);
+      setAcademicPeriodId(response.data.academic_period?.id || null);
       setFormData((current) => ({
         ...current,
         student_id: response.data.student_id,
         first_name: response.data.first_name,
+        middle_name: response.data.middle_name || '',
         last_name: response.data.last_name,
         year_level: response.data.academic_section?.year_level || '',
         section: response.data.section,
@@ -181,6 +206,7 @@ function RegisterPage() {
       setEnrollmentVerified(true);
       toast.success('Student found in the official student list.');
     } catch (error) {
+      setAcademicPeriodId(null);
       setFormData((current) => ({ ...current, first_name: '', middle_name: '', last_name: '', year_level: '', section: '', college_id: '', program_id: '', hte_id: '', hte_department_id: '', internship_semester: '', internship_year: '' }));
       toast.error(error.response?.data?.message || 'Your School No. was not found in the official student list.');
     } finally {
@@ -192,6 +218,14 @@ function RegisterPage() {
     event.preventDefault();
     if (step === 1 && !enrollmentVerified) {
       toast.error('Verify your School ID before continuing.');
+      return;
+    }
+    if (step === 1 && !addressValid) {
+      toast.error('Select a province, municipality or city, and barangay.');
+      return;
+    }
+    if (step === 3 && !parentAddressValid) {
+      toast.error("Select the parent or guardian's province or area, municipality or city, and barangay.");
       return;
     }
     setStep((current) => Math.min(current + 1, steps.length));
@@ -206,8 +240,8 @@ function RegisterPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (formData.password.length < 8 || formData.password.length > 12) {
-      toast.error('Your password must be 8–12 characters.');
+    if (formData.password.length < passwordMinimum || formData.password.length > 255) {
+      toast.error(`Your password must be ${passwordMinimum}–255 characters.`);
       return;
     }
 
@@ -252,7 +286,7 @@ function RegisterPage() {
   const selectedDepartment = availableDepartments.find((department) => String(department.id) === String(formData.hte_department_id));
   const passwordStrength = getPasswordStrength(formData.password);
   const passwordRequirements = [
-    { label: '8–12 characters', met: formData.password.length >= 8 && formData.password.length <= 12 },
+    { label: `At least ${passwordMinimum} characters`, met: formData.password.length >= passwordMinimum && formData.password.length <= 255 },
     { label: 'Matches Confirm Password', met: Boolean(formData.password) && formData.password === formData.password_confirmation },
   ];
 
@@ -299,7 +333,7 @@ function RegisterPage() {
                 <ContactNumberInput value={formData.contact_number} onValueChange={(contact_number) => setFormData((current) => ({ ...current, contact_number }))} required className={inputClass} placeholder="09XX XXX XXXX" autoComplete="tel" />
               </Field>
               <Field label="Complete Address" className="sm:col-span-2">
-                <textarea name="address" value={formData.address} onChange={handleChange} required rows={3} className={inputClass} placeholder="House number, street, barangay, municipality, province" autoComplete="street-address" />
+                <PsgcAddressSelect value={formData.address} onChange={(address) => setFormData((current) => ({ ...current, address }))} onValidityChange={setAddressValid} className={inputClass} />
               </Field>
             </div>
           </>
@@ -351,7 +385,7 @@ function RegisterPage() {
                 <ContactNumberInput value={formData.parent_contact_number} onValueChange={(parent_contact_number) => setFormData((current) => ({ ...current, parent_contact_number }))} required className={inputClass} placeholder="09XX XXX XXXX" />
               </Field>
               <Field label="Complete Address" className="sm:col-span-2">
-                <textarea name="parent_address" value={formData.parent_address} onChange={handleChange} required rows={3} className={inputClass} placeholder="Parent or guardian’s complete address" />
+                <PsgcAddressSelect value={formData.parent_address} onChange={(parent_address) => setFormData((current) => ({ ...current, parent_address }))} onValidityChange={setParentAddressValid} className={inputClass} />
               </Field>
             </div>
           </>
@@ -375,10 +409,23 @@ function RegisterPage() {
               </Field>
               {formData.hte_id && (
                 <Field label="Preferred Department / Unit" hint="Optional" className="sm:col-span-2">
-                  <select name="hte_department_id" value={formData.hte_department_id} onChange={handleChange} className={inputClass} disabled={!availableDepartments.length}>
-                    <option value="">{availableDepartments.length ? 'No department preference' : 'No departments available for your program'}</option>
-                    {availableDepartments.map((department) => <option key={department.id} value={department.id}>{department.department_name}</option>)}
-                  </select>
+                  <div role="radiogroup" aria-label="Preferred Department / Unit" className="grid gap-3 sm:grid-cols-2">
+                    <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition focus-within:ring-4 focus-within:ring-[#7D001D]/10 ${!formData.hte_department_id ? 'border-[#7D001D] bg-[#7D001D]/[0.025]' : 'border-slate-200 bg-white hover:border-[#7D001D]/45'}`}>
+                      <input type="radio" name="hte_department_id" value="" checked={!formData.hte_department_id} onChange={handleChange} className="mt-1 h-4 w-4 shrink-0 accent-[#7D001D]" />
+                      <span className="text-sm font-bold text-slate-700">No department preference</span>
+                    </label>
+                    {availableDepartments.map((department) => (
+                      <label key={department.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition focus-within:ring-4 focus-within:ring-[#7D001D]/10 ${String(formData.hte_department_id) === String(department.id) ? 'border-[#7D001D] bg-[#7D001D]/[0.025]' : 'border-slate-200 bg-white hover:border-[#7D001D]/45'}`}>
+                        <input type="radio" name="hte_department_id" value={department.id} checked={String(formData.hte_department_id) === String(department.id)} onChange={handleChange} className="mt-1 h-4 w-4 shrink-0 accent-[#7D001D]" />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-start gap-2 font-extrabold text-slate-800"><BuildingOfficeIcon aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-[#7D001D]" />{department.department_name}</span>
+                          <span className="mt-2 block text-xs leading-5 text-slate-500">Supervisor: {(department.supervisors || []).map((supervisor) => supervisor.full_name).filter(Boolean).join(', ') || 'Not assigned'}</span>
+                          <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600"><FiUsers aria-hidden="true" className="h-3.5 w-3.5" />{department.students_selected ?? 0} students selected</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {!availableDepartments.length && <p className="mt-2 text-xs text-slate-500">No departments available for your program.</p>}
                 </Field>
               )}
               <p className="text-xs leading-5 text-slate-400 sm:col-span-2">These are preferences only. Your coordinator will confirm the final HTE and department based on availability.</p>
@@ -392,7 +439,8 @@ function RegisterPage() {
             <div className="space-y-5">
               <div className="rounded-xl border border-slate-100 bg-[#faf8f5] p-5">
                 <h3 className="flex items-center gap-2 font-black text-[#690016]"><FiCheckCircle className="text-[#a8750b]" /> Terms and Conditions</h3>
-                <p className="mt-3 text-sm leading-6 text-slate-600">I understand that my AIMS account must be used responsibly and that all attendance, journal, document, and monitoring records I submit must be accurate. I agree to follow MarSU internship policies and the rules of my assigned host training establishment.</p>
+                <p className="mt-3 text-sm leading-6 text-slate-600">I will use my AIMS account for my own internship activities and keep my login details private. I will provide accurate and complete information when registering and when submitting attendance, journals, documents, travel updates, and other internship records. I will review my entries before submitting them and update my contact information when it changes.</p>
+                <p className="mt-3 text-sm leading-6 text-slate-600">I agree to follow the internship procedures of Marinduque State University and the applicable rules of my assigned host training establishment. I understand that authorized university personnel and my assigned supervisor may review my submissions to coordinate, monitor, and assess my internship.</p>
               </div>
               <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 transition has-checked:border-[#7D001D]/35 has-checked:bg-[#7D001D]/[0.025]">
                 <input type="checkbox" name="agree_terms" checked={formData.agree_terms} onChange={handleChange} required className="mt-0.5 h-4 w-4 shrink-0 accent-[#7D001D]" />
@@ -400,7 +448,8 @@ function RegisterPage() {
               </label>
               <div className="rounded-xl border border-slate-100 bg-[#faf8f5] p-5">
                 <h3 className="flex items-center gap-2 font-black text-[#690016]"><FiShield className="text-[#a8750b]" /> Data Privacy Act of 2012</h3>
-                <p className="mt-3 text-sm leading-6 text-slate-600">I consent to Marinduque State University collecting, using, and securely storing the information required to administer and monitor my internship, in accordance with Republic Act No. 10173 and applicable university policies.</p>
+                <p className="mt-3 text-sm leading-6 text-slate-600">Marinduque State University collects and processes the information I provide during registration, including my identity, contact and academic details, and my parent or guardian's emergency contact information. AIMS also processes account information and internship records such as placement details, attendance, journals, uploaded documents, and travel or location entries when those features are used.</p>
+                <p className="mt-3 text-sm leading-6 text-slate-600">This information is used to verify enrollment, manage internship assignments, monitor progress, communicate about internship matters, and prepare related records and reports. Authorized university personnel and assigned supervisors may access information needed for these purposes, subject to Republic Act No. 10173 and applicable university privacy policies.</p>
               </div>
               <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 transition has-checked:border-[#7D001D]/35 has-checked:bg-[#7D001D]/[0.025]">
                 <input type="checkbox" name="agree_privacy" checked={formData.agree_privacy} onChange={handleChange} required className="mt-0.5 h-4 w-4 shrink-0 accent-[#7D001D]" />
@@ -417,9 +466,9 @@ function RegisterPage() {
               <Field label="Username" hint="Student ID" className="sm:col-span-2">
                 <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600"><FiUser /> {formData.student_id || 'Complete Step 1'}</div>
               </Field>
-              <Field label="Password" hint="8–12 characters" htmlFor="student-registration-password">
+              <Field label="Password" hint={`At least ${passwordMinimum} characters`} htmlFor="student-registration-password">
                 <div className="relative">
-                  <input id="student-registration-password" type={showPassword ? 'text' : 'password'} name="password" value={formData.password} onChange={handleChange} required minLength={8} maxLength={12} className={`${inputClass} pr-11`} autoComplete="new-password" aria-describedby="student-password-strength student-password-requirements" />
+                  <input id="student-registration-password" type={showPassword ? 'text' : 'password'} name="password" value={formData.password} onChange={handleChange} required minLength={passwordMinimum} maxLength={255} className={`${inputClass} pr-11`} autoComplete="new-password" aria-describedby="student-password-strength student-password-requirements" />
                   <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#7D001D]" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>{showPassword ? <FiEyeOff /> : <FiEye />}</button>
                 </div>
                 <div id="student-password-strength" role="status" aria-live="polite" aria-atomic="true" className="mt-2">
@@ -439,12 +488,12 @@ function RegisterPage() {
                     </li>)}
                   </ul>
                   <p className="mt-2 text-slate-500">Passwords are case-sensitive.</p>
-                  <p className="mt-2 text-slate-500">For a stronger password, use 12 characters with uppercase and lowercase letters, numbers, and symbols.</p>
+                  <p className="mt-2 text-slate-500">For a stronger password, use uppercase and lowercase letters, numbers, and symbols.</p>
                 </div>
               </Field>
               <Field label="Confirm Password" htmlFor="student-registration-password-confirmation">
                 <div className="relative">
-                  <input id="student-registration-password-confirmation" type={showPasswordConfirmation ? 'text' : 'password'} name="password_confirmation" value={formData.password_confirmation} onChange={handleChange} required minLength={8} maxLength={12} className={`${inputClass} pr-11`} autoComplete="new-password" />
+                  <input id="student-registration-password-confirmation" type={showPasswordConfirmation ? 'text' : 'password'} name="password_confirmation" value={formData.password_confirmation} onChange={handleChange} required minLength={passwordMinimum} maxLength={255} className={`${inputClass} pr-11`} autoComplete="new-password" />
                   <button type="button" onClick={() => setShowPasswordConfirmation((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#7D001D]" aria-label={showPasswordConfirmation ? 'Hide confirm password' : 'Show confirm password'} aria-pressed={showPasswordConfirmation}>{showPasswordConfirmation ? <FiEyeOff /> : <FiEye />}</button>
                 </div>
               </Field>

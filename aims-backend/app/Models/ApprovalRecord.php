@@ -24,6 +24,11 @@ class ApprovalRecord extends Model
         'decided_by',
         'remarks',
         'decided_at',
+        'deployment_internship_id',
+        'deployment_stage',
+        'deployment_snapshot',
+        'dean_forwarded_by',
+        'dean_forwarded_at',
     ];
 
     protected function casts(): array
@@ -31,6 +36,8 @@ class ApprovalRecord extends Model
         return [
             'submitted_at' => 'datetime',
             'decided_at' => 'datetime',
+            'deployment_snapshot' => 'array',
+            'dean_forwarded_at' => 'datetime',
         ];
     }
 
@@ -42,6 +49,16 @@ class ApprovalRecord extends Model
     public function decisionMaker()
     {
         return $this->belongsTo(User::class, 'decided_by');
+    }
+
+    public function deploymentInternship()
+    {
+        return $this->belongsTo(StudentInternship::class, 'deployment_internship_id');
+    }
+
+    public function deanForwarder()
+    {
+        return $this->belongsTo(User::class, 'dean_forwarded_by');
     }
 
     public static function submit(string $subjectType, int $subjectId, ?int $submittedBy): self

@@ -156,7 +156,7 @@ class CoordinatorDashboardTest extends TestCase
                 ]);
             OjtEnrollment::create([
                 'school_id' => $schoolId,
-                'full_name' => 'Official Eligible Student',
+                'first_name' => 'Official Eligible', 'last_name' => 'Student',
                 'academic_section_id' => $section->id,
                 'source' => 'manual',
                 'added_by' => $coordinator->id,

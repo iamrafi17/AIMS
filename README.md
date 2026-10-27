@@ -35,11 +35,13 @@ A full-stack web application for MarSU Santa Cruz Campus to monitor and manage s
 - Multi-step student registration
 - GPS-enabled attendance tracking
 - Internship requirements management
-- Coordinator-led, action-based travel monitoring with ordered departure/arrival points
+- Coordinator-scheduled, student-controlled travel monitoring with GPS departure, checkpoints, arrival, and photo evidence
 - Announcement system
 - Report generation
 
 ## Installation
+
+Start MySQL in XAMPP, then run the backend and frontend in separate terminals. In `aims-backend`, run `php artisan serve` and wait for port 8000 to be ready. In `aims-frontend`, run `npm run dev`. Keep both terminals open while using the system.
 
 ### Prerequisites
 - PHP 8.2+
@@ -194,6 +196,8 @@ VITE_API_URL=http://localhost:8000/api
 ```
 
 ## Operations
+
+- [Student deployment workflow](docs/DEPLOYMENT_WORKFLOW.md)
 
 - [Scaling and production setup](aims-backend/docs/SCALING.md)
 - [Database and private-file backup/restore](aims-backend/docs/BACKUP_AND_RESTORE.md)

@@ -14,7 +14,7 @@ class Supervisor extends Model
         'full_name', 'normalized_name', 'user_id',
     ];
 
-    protected $appends = ['full_name', 'normalized_name', 'user_id'];
+    protected $appends = ['full_name', 'normalized_name', 'user_id', 'contact_email'];
 
     protected static function booted(): void
     {
@@ -63,6 +63,11 @@ class Supervisor extends Model
     public function getUserIdAttribute(): ?int
     {
         return $this->supervisorProfile?->user_id;
+    }
+
+    public function getContactEmailAttribute(): ?string
+    {
+        return $this->supervisorProfile?->contact_email ?? $this->supervisorProfile?->user?->email;
     }
 
     public function supervisorProfile()

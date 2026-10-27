@@ -21,7 +21,9 @@ import toast from 'react-hot-toast';
 import UserAvatar from '../../components/UserAvatar';
 import useAuth from '../../context/useAuth';
 import api from '../../services/api';
+import { usePasswordMinimum } from '../../utils/passwordStrength';
 import ContactNumberInput from '../../components/forms/ContactNumberInput';
+import PsgcAddressSelect from '../../components/forms/PsgcAddressSelect';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-700 dark:disabled:text-gray-400';
 
@@ -70,6 +72,7 @@ function SectionHeader({ icon, title, description, editing, onToggle }) {
 }
 
 function CoordinatorProfile() {
+  const passwordMinimum = usePasswordMinimum();
   const { user, refreshUser } = useAuth();
   const roleLabel = {
     coordinator: 'Internship Coordinator',
@@ -96,6 +99,7 @@ function CoordinatorProfile() {
   const [showPasswords, setShowPasswords] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [busy, setBusy] = useState(null);
+  const [addressValid, setAddressValid] = useState(false);
 
   const resetAccount = () => setAccount({ name: user?.name || '' });
   const resetContact = () => setContact({
@@ -121,6 +125,7 @@ function CoordinatorProfile() {
 
   const toggleContact = () => {
     if (editingContact) resetContact();
+    setAddressValid(false);
     setEditingContact((current) => !current);
   };
 
@@ -141,6 +146,10 @@ function CoordinatorProfile() {
 
   const saveContact = async (event) => {
     event.preventDefault();
+    if (!addressValid) {
+      toast.error('Select a province, municipality or city, and barangay.');
+      return;
+    }
     setBusy('contact');
     try {
       const response = await api.put('/profile/contact', contact);
@@ -314,9 +323,12 @@ function CoordinatorProfile() {
                 <Field label="Contact Number" icon={PhoneIcon}>
                   <ContactNumberInput value={contact.contact_number} onValueChange={(contact_number) => setContact((current) => ({ ...current, contact_number }))} disabled={!editingContact} className={inputClass} required autoComplete="tel" placeholder="09XX XXX XXXX" />
                 </Field>
-                <Field label="Office / Present Address" icon={MapPinIcon} className="md:col-span-2">
-                  <textarea rows="3" value={contact.address} onChange={(event) => setContact((current) => ({ ...current, address: event.target.value }))} disabled={!editingContact} className={`${inputClass} resize-none`} required />
-                </Field>
+                <div className="md:col-span-2">
+                  <p className="mb-1.5 flex min-h-9 items-start gap-2 text-[11px] font-extrabold uppercase leading-4 tracking-wide text-slate-500 dark:text-gray-400"><SmallIcon icon={MapPinIcon} className="text-[#a8750b]" />Office / Present Address</p>
+                  {editingContact
+                    ? <PsgcAddressSelect value={contact.address} onChange={(address) => setContact((current) => ({ ...current, address }))} onValidityChange={setAddressValid} className={inputClass} />
+                    : <textarea rows="3" value={contact.address} aria-label="Office / Present Address" disabled className={`${inputClass} resize-none`} />}
+                </div>
               </div>
               {editingContact && (
                 <div className="mt-6 flex justify-end">
@@ -356,7 +368,8 @@ function CoordinatorProfile() {
                       type={showPasswords ? 'text' : 'password'}
                       value={passwords[name]}
                       onChange={(event) => setPasswords((current) => ({ ...current, [name]: event.target.value }))}
-                      minLength={name === 'current_password' ? undefined : 8}
+                      minLength={name === 'current_password' ? undefined : passwordMinimum}
+                      maxLength={255}
                       autoComplete={name === 'current_password' ? 'current-password' : 'new-password'}
                       className={`${inputClass} pr-11`}
                       required
@@ -368,7 +381,7 @@ function CoordinatorProfile() {
                   </div>
                 </Field>
               ))}
-              <p className="rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-500 dark:bg-gray-900/60 dark:text-gray-400">Use at least 8 characters. The new password must differ from your current password.</p>
+              <p className="rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-500 dark:bg-gray-900/60 dark:text-gray-400">Use at least {passwordMinimum} characters. The new password must differ from your current password.</p>
               <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 dark:border-gray-700 sm:flex-row sm:justify-end">
                 <button type="button" onClick={closePasswordModal} disabled={busy === 'password'} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">Cancel</button>
                 <button disabled={busy === 'password'} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-60">

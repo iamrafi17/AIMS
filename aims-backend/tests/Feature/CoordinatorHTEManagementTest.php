@@ -7,6 +7,7 @@ use App\Models\College;
 use App\Models\HTE;
 use App\Models\MOA;
 use App\Models\Program;
+use App\Models\ProgramOjtSetting;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Filesystem\FilesystemAdapter;
@@ -27,7 +28,7 @@ class CoordinatorHTEManagementTest extends TestCase
         Sanctum::actingAs($coordinator);
 
         $payload = [
-            'name' => 'New Technology Partner',
+            'name' => '  New   Technology Partner  ',
             'address' => 'Santa Cruz, Marinduque',
             'contact_person' => 'Partner Supervisor',
             'contact_email' => 'partner@example.com',
@@ -56,6 +57,12 @@ class CoordinatorHTEManagementTest extends TestCase
             ->assertJsonPath('hte.geofence_enabled', true)
             ->json('hte.id');
 
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasColumn('htes', 'normalized_name'));
+        $this->postJson('/api/coordinator/htes', [...$payload, 'name' => 'new technology partner'])
+            ->assertUnprocessable()->assertJsonValidationErrors('name');
+        $this->putJson("/api/coordinator/htes/{$hteId}", [...$payload, 'name' => '  PARTNER   COMPANY '])
+            ->assertUnprocessable()->assertJsonValidationErrors('name');
+
         $payload['geofence_radius'] = 250;
         $payload['work_days'][] = 'sat';
 
@@ -80,6 +87,44 @@ class CoordinatorHTEManagementTest extends TestCase
             'am_start' => '08:00',
             'pm_end' => '17:00',
         ]);
+    }
+
+    public function test_geofence_edit_does_not_revalidate_an_unchanged_legacy_schedule(): void
+    {
+        [$coordinator, , $hte] = $this->context();
+        Sanctum::actingAs($coordinator);
+        $hte->update(['default_am_end' => '14:00']);
+        $hte->refresh();
+
+        $payload = [
+            'name' => $hte->name,
+            'address' => $hte->address,
+            'contact_person' => $hte->contact_person,
+            'contact_email' => $hte->contact_email,
+            'contact_number' => $hte->contact_number,
+            'latitude' => 13.46573159,
+            'longitude' => 122.05900570,
+            'geofence_radius' => 100,
+            'geofence_enabled' => true,
+            'default_am_start' => '08:00',
+            'default_am_end' => '14:00',
+            'default_pm_start' => '13:00',
+            'default_pm_end' => '17:00',
+            'work_days' => ['mon', 'tue', 'wed', 'thu', 'fri'],
+            'is_active' => true,
+        ];
+
+        $this->putJson("/api/coordinator/htes/{$hte->id}", $payload)
+            ->assertOk()
+            ->assertJsonPath('hte.geofence_enabled', true)
+            ->assertJsonPath('hte.default_am_end', '14:00');
+        $this->assertDatabaseHas('htes', ['id' => $hte->id, 'geofence_enabled' => true]);
+        $this->assertDatabaseHas('hte_schedules', ['hte_id' => $hte->id, 'day_of_week' => 'mon', 'am_end' => '14:00']);
+
+        $this->putJson("/api/coordinator/htes/{$hte->id}", [
+            ...$payload,
+            'default_am_end' => '15:00',
+        ])->assertUnprocessable()->assertJsonValidationErrors('default_am_end');
     }
 
     public function test_coordinator_can_create_an_hte_with_a_normalized_per_day_schedule(): void
@@ -221,12 +266,12 @@ class CoordinatorHTEManagementTest extends TestCase
             'allow_past_attendance' => true,
         ])->assertOk()
             ->assertJsonPath('student.hte_id', $hte->id)
-            ->assertJsonPath('student.internship_status', 'active')
+            ->assertJsonPath('student.internship_status', 'pending')
             ->assertJsonCount(6, 'student.work_days');
 
         $this->assertDatabaseHas('student_internships', [
             'student_id' => $student->id,
-            'status' => 'active',
+            'status' => 'pending',
             'deployment_status' => 'pending',
             'allow_past_attendance' => true,
             'is_current' => true,
@@ -474,7 +519,7 @@ class CoordinatorHTEManagementTest extends TestCase
 
         $this->deleteJson("/api/coordinator/htes/moas/{$moa->id}")
             ->assertStatus(422)
-            ->assertJsonPath('message', 'Reviewed or approved MOAs cannot be deleted.');
+            ->assertJsonPath('message', 'MOA under review cannot be deleted.');
         $this->assertDatabaseHas('moas', ['id' => $moa->id]);
         $privateDisk->assertExists($moa->file_path);
 
@@ -508,7 +553,7 @@ class CoordinatorHTEManagementTest extends TestCase
 
         $this->deleteJson("/api/coordinator/htes/moas/{$moaId}")
             ->assertOk()
-            ->assertJsonPath('message', 'Pending MOA deleted.');
+            ->assertJsonPath('message', 'MOA deleted.');
 
         $this->assertSoftDeleted('moas', ['id' => $moaId]);
         /** @var FilesystemAdapter $privateDisk */
@@ -596,6 +641,11 @@ class CoordinatorHTEManagementTest extends TestCase
             'updated_at' => now(),
         ]);
         $period = $this->academicPeriod();
+        ProgramOjtSetting::create([
+            'program_id' => $program->id, 'academic_period_id' => $period->id,
+            'required_hours' => 486, 'ojt_start_date' => '2026-08-01',
+            'status' => 'published', 'published_at' => now(),
+        ]);
         $batch = AcademicSection::create([
             'program_id' => $program->id,
             'academic_period_id' => $period->id,

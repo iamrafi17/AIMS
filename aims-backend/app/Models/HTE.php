@@ -6,6 +6,7 @@ use App\Support\HteScheduleNormalizer;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Builder;
 
 class HTE extends Model
 {
@@ -21,7 +22,6 @@ class HTE extends Model
 
     protected $fillable = [
         'name',
-        'normalized_name',
         'address',
         'contact_person',
         'contact_email',
@@ -52,9 +52,7 @@ class HTE extends Model
     protected static function booted(): void
     {
         static::saving(function (HTE $hte): void {
-            if ($hte->isDirty('name') || blank($hte->normalized_name)) {
-                $hte->normalized_name = Str::lower(preg_replace('/\s+/', ' ', trim((string) $hte->name)));
-            }
+            $hte->name = self::cleanName((string) $hte->name);
         });
 
         static::saved(function (HTE $hte): void {
@@ -62,6 +60,16 @@ class HTE extends Model
             $hte->scheduleInput = [];
             $hte->unsetRelation('schedules');
         });
+    }
+
+    public static function cleanName(string $name): string
+    {
+        return preg_replace('/\s+/u', ' ', trim($name));
+    }
+
+    public function scopeNamed(Builder $query, string $name): Builder
+    {
+        return $query->whereRaw('LOWER(name) = ?', [Str::lower(self::cleanName($name))]);
     }
 
     public function setAttribute($key, $value)

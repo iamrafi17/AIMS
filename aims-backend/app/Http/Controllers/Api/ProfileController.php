@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\SystemSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -129,7 +130,7 @@ class ProfileController extends Controller
     {
         $validated = $request->validate([
             'current_password' => ['required', 'string', 'max:255'],
-            'password' => ['required', 'string', 'min:8', 'max:255', 'confirmed', 'different:current_password'],
+            'password' => [...SystemSetting::passwordRules(), 'confirmed', 'different:current_password'],
         ]);
         $user = $request->user();
 
@@ -204,4 +205,5 @@ class ProfileController extends Controller
             'avatar_url' => $user->avatar_url,
         ];
     }
+
 }

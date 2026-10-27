@@ -7,6 +7,7 @@ use App\Models\ApprovalRecord;
 use App\Models\InternshipRequirement;
 use App\Models\Student;
 use App\Models\SystemNotification;
+use App\Support\DeploymentActivation;
 use App\Support\DeanAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -98,6 +99,8 @@ class VPAAApprovalController extends Controller
 
     public function review(Request $request, ApprovalRecord $approval)
     {
+        // Deployment decisions belong to the Program Head; Dean only forwards.
+        abort_if($approval->subject_type === ApprovalRecord::TYPE_DEPLOYMENT, 403, 'Deployment approval is handled by the Program Head.');
         abort_unless($request->user()->role === 'dean', 403);
         abort_if($approval->subject_type === ApprovalRecord::TYPE_DOCUMENT, 410, 'Individual document approvals are part of the legacy workflow.');
         if ($approval->subject_type === ApprovalRecord::TYPE_DEPLOYMENT) {
@@ -137,7 +140,11 @@ class VPAAApprovalController extends Controller
             } elseif ($approval->subject_type === ApprovalRecord::TYPE_DEPLOYMENT) {
                 Student::findOrFail($approval->subject_id)->update([
                     'schedule_status' => $validated['decision'],
+                    'internship_status' => 'pending',
                 ]);
+                if ($validated['decision'] === 'approved') {
+                    DeploymentActivation::activateDue();
+                }
             } else {
                 throw ValidationException::withMessages(['approval' => 'Unsupported approval request type.']);
             }

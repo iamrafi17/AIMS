@@ -91,8 +91,8 @@ final class TravelWorkflow
             ] : null,
             'student' => $student ? self::studentPayload($student) : null,
             'participants' => $session->participants->map(fn (Student $participant) => self::studentPayload($participant))->values(),
-            'points' => $points->map(fn (TravelCheckpoint $point) => self::pointPayload($point))->values(),
-            'checkpoints' => $points->map(fn (TravelCheckpoint $point) => self::pointPayload($point))->values(),
+            'points' => $points->map(fn (TravelCheckpoint $point) => self::pointPayload($point, $photoBase, $session))->values(),
+            'checkpoints' => $points->map(fn (TravelCheckpoint $point) => self::pointPayload($point, $photoBase, $session))->values(),
             'has_arrival_photo' => (bool) $session->arrival_photo_path,
             'arrival_photo_endpoint' => $session->arrival_photo_path ? "{$photoBase}/{$session->id}/arrival-photo" : null,
             'has_final_arrival' => $points->contains('point_type', 'final_arrival'),
@@ -162,8 +162,14 @@ final class TravelWorkflow
         ];
     }
 
-    public static function pointPayload(TravelCheckpoint $point): array
+    public static function pointPayload(TravelCheckpoint $point, string $photoBase, ?TravelLog $session = null): array
     {
+        $isArrival = $point->point_type === 'final_arrival' && $session !== null;
+        $photoPath = $isArrival ? $session->arrival_photo_path : $point->photo_path;
+        $photoEndpoint = $isArrival
+            ? "{$photoBase}/{$session->id}/arrival-photo"
+            : "{$photoBase}/{$point->travel_log_id}/checkpoints/{$point->id}/photo";
+
         return [
             'id' => $point->id,
             'travel_log_id' => $point->travel_log_id,
@@ -179,6 +185,10 @@ final class TravelWorkflow
             'readable_location' => $point->readable_location,
             'remarks' => $point->notes,
             'notes' => $point->notes,
+            'has_photo' => (bool) $photoPath,
+            'photo_endpoint' => $photoPath
+                ? $photoEndpoint.'?v='.substr(sha1($photoPath), 0, 12)
+                : null,
             'captured_at' => $point->captured_at?->toIso8601String(),
             'recorded_at' => $point->captured_at?->toIso8601String(),
         ];

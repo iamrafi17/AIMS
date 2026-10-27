@@ -34,6 +34,7 @@ class CoordinatorStudentManagementTest extends TestCase
 
         $payload = $this->studentPayload($college, $program, $hte);
         $student = $this->createStudent($college, $program, $hte);
+        $originalPassword = $student->user->password;
         $student->update(['registration_status' => 'approved', 'internship_status' => 'pending']);
 
         $payload['first_name'] = 'Updated';
@@ -41,7 +42,10 @@ class CoordinatorStudentManagementTest extends TestCase
         $payload['email'] = 'updated.intern@example.com';
         $payload['contact_number'] = '09179999999';
         $payload['address'] = 'Updated Address';
+        $payload['gender'] = 'male';
+        $payload['birth_date'] = '2003-03-03';
         $payload['registration_status'] = 'rejected';
+        $payload['password'] = 'AutofilledPassword123!';
 
         $this->putJson('/api/coordinator/students/'.$student->id, $payload)
             ->assertOk()
@@ -52,13 +56,16 @@ class CoordinatorStudentManagementTest extends TestCase
             'id' => $student->user_id,
             'email' => 'updated.intern@example.com',
         ]);
+        $this->assertSame($originalPassword, $student->user->fresh()->password);
         $this->assertDatabaseHas('students', [
             'id' => $student->id,
             'first_name' => 'Updated',
             'middle_name' => 'Middle',
             'last_name' => 'Intern',
-            'contact_number' => '09179999999',
-            'address' => 'Updated Address',
+            'gender' => 'female',
+            'birth_date' => '2002-01-01 00:00:00',
+            'contact_number' => '09172222222',
+            'address' => 'Santa Cruz, Marinduque',
         ]);
 
         $this->postJson('/api/coordinator/students/'.$student->id.'/approve')
@@ -69,7 +76,6 @@ class CoordinatorStudentManagementTest extends TestCase
         $this->assertDatabaseHas('ojt_enrollments', [
             'student_record_id' => $student->id,
             'registration_status' => 'approved',
-            'registration_reviewed_by' => null,
         ]);
         $this->assertDatabaseHas('student_internships', [
             'student_id' => $student->id,
@@ -92,23 +98,74 @@ class CoordinatorStudentManagementTest extends TestCase
         Sanctum::actingAs($coordinator);
 
         $this->postJson('/api/coordinator/students', [
-            'full_name' => 'Juan Dela Cruz',
+            'first_name' => 'Juan',
+            'middle_name' => 'Santos',
+            'last_name' => 'Dela Cruz',
             'school_id' => '2026-QUICK-01',
             'academic_section_id' => $section->id,
         ])->assertCreated()
             ->assertJsonPath('enrollment.school_id', '2026-QUICK-01')
-            ->assertJsonPath('enrollment.full_name', 'Juan Dela Cruz')
+            ->assertJsonPath('enrollment.first_name', 'Juan')
+            ->assertJsonPath('enrollment.middle_name', 'Santos')
+            ->assertJsonPath('enrollment.last_name', 'Dela Cruz')
             ->assertJsonPath('enrollment.section', '4A')
             ->assertJsonMissingPath('temporary_password');
 
         $this->assertDatabaseHas('ojt_enrollments', [
             'school_id' => '2026-QUICK-01',
-            'full_name' => 'Juan Dela Cruz',
+            'first_name' => 'Juan',
+            'middle_name' => 'Santos',
+            'last_name' => 'Dela Cruz',
             'academic_section_id' => $section->id,
             'source' => 'manual',
         ]);
         $this->assertDatabaseMissing('students', ['student_id' => '2026-QUICK-01']);
         $this->assertDatabaseMissing('users', ['name' => 'Juan Dela Cruz']);
+    }
+
+    public function test_hte_department_changes_must_use_student_deployments(): void
+    {
+        [$coordinator, $college, $program, $hte] = $this->managementContext();
+        Sanctum::actingAs($coordinator);
+
+        $department = $hte->departments()->create([
+            'department_name' => 'Research Office',
+            'normalized_name' => 'research office',
+        ]);
+        $department->programs()->attach($program->id, [
+            'linked_by' => $coordinator->id,
+            'is_active' => true,
+        ]);
+        $student = $this->createStudent($college, $program, $hte);
+
+        $this->getJson('/api/coordinator/students/options')
+            ->assertOk()
+            ->assertJsonPath('htes.0.departments.0.department_name', 'Research Office');
+
+        $payload = $this->studentPayload($college, $program, $hte);
+        $payload['hte_department_id'] = $department->id;
+        $this->putJson('/api/coordinator/students/'.$student->id, $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('hte_id');
+        $this->assertNull($student->fresh()->hte_department_id);
+
+        $payload['hte_department_id'] = null;
+        $payload['internship_status'] = 'active';
+        $this->putJson('/api/coordinator/students/'.$student->id, $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('internship_status');
+
+        $payload['internship_status'] = 'pending';
+        $payload['schedule_status'] = 'approved';
+        $this->putJson('/api/coordinator/students/'.$student->id, $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('schedule_status');
+
+        $payload['schedule_status'] = 'pending';
+        $payload['ojt_start_date'] = now()->addWeek()->toDateString();
+        $this->putJson('/api/coordinator/students/'.$student->id, $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('ojt_start_date');
     }
 
     public function test_coordinator_can_choose_the_ojt_enrollment_page_size(): void
@@ -119,7 +176,8 @@ class CoordinatorStudentManagementTest extends TestCase
         foreach (range(1, 11) as $number) {
             OjtEnrollment::create([
                 'school_id' => '2026-PAGE-'.str_pad((string) $number, 2, '0', STR_PAD_LEFT),
-                'full_name' => 'Enrollment Student '.$number,
+                'first_name' => 'Enrollment',
+                'last_name' => 'Student '.$number,
                 'academic_section_id' => $section->id,
                 'source' => 'manual',
                 'added_by' => $coordinator->id,
@@ -387,7 +445,9 @@ class CoordinatorStudentManagementTest extends TestCase
 
         OjtEnrollment::create([
             'school_id' => '23S0141',
-            'full_name' => 'CANTUBA, Rose S',
+            'first_name' => 'Rose',
+            'middle_name' => 'S',
+            'last_name' => 'CANTUBA',
             'section' => 'BSIT',
             'college_id' => $college->id,
             'program_id' => $program->id,
@@ -419,7 +479,12 @@ class CoordinatorStudentManagementTest extends TestCase
             ->assertJsonPath('summary.duplicates', 3)
             ->assertJsonPath('summary.invalid', 2)
             ->assertJsonPath('students.0.school_no', '23S0160')
-            ->assertJsonPath('students.0.full_name', 'BRIONES, Terrence C')
+            ->assertJsonPath('students.0.first_name', 'Terrence')
+            ->assertJsonPath('students.0.middle_name', 'C')
+            ->assertJsonPath('students.0.last_name', 'BRIONES')
+            ->assertJsonPath('students.2.first_name', 'Cassandra Marie')
+            ->assertJsonPath('students.2.middle_name', 'R')
+            ->assertJsonPath('students.2.last_name', 'CONDE')
             ->assertJsonPath('students.0.status', 'Ready')
             ->assertJsonPath('students.1.status', 'Duplicate')
             ->assertJsonPath('students.2.status', 'Duplicate')
@@ -442,7 +507,9 @@ class CoordinatorStudentManagementTest extends TestCase
 
         $this->assertDatabaseHas('ojt_enrollments', [
             'school_id' => '23S0160',
-            'full_name' => 'BRIONES, Terrence C',
+            'first_name' => 'Terrence',
+            'middle_name' => 'C',
+            'last_name' => 'BRIONES',
             'academic_section_id' => $section->id,
             'source' => 'csv',
         ]);

@@ -109,8 +109,8 @@ class ReportExportService
         $overview = $data['overview'] ?? [];
         $compliance = $data['compliance'] ?? [];
         if ($report === 'hte_deployment_validation') {
-            $title = 'HTE Deployment Validation Report';
-            $headers = ['Deployment Batch', 'Program', 'HTE', 'School Number', 'Student', 'Proposed Date', 'Working Schedule', 'Coordinator Submission', 'Program Head Review', 'Program Head Remarks', 'Final Validation', 'Final Deployment Status'];
+            $title = 'HTE Deployment Monitoring Report';
+            $headers = ['Deployment Batch', 'Program', 'HTE', 'School Number', 'Student', 'Proposed Date', 'Working Schedule', 'Coordinator Submission', 'Program Head Review', 'Program Head Remarks', 'Dean Forwarding', 'Deployment Status'];
             $fields = ['batch', 'program', 'hte', 'student_id', 'student', 'proposed_date', 'working_schedule', 'coordinator_submission', 'program_head_review', 'program_head_remarks', 'vpaa_validation', 'deployment_status'];
             $rows = collect($data['deployment_validations'] ?? [])->map(fn (array $row) => $this->row($row, $fields))->all();
         } elseif ($report === 'travel_monitoring_validation') {

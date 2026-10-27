@@ -16,12 +16,12 @@ use App\Models\StudentInternship;
 use App\Models\SystemNotification;
 use App\Models\User;
 use App\Support\AttendanceHours;
+use App\Support\EnrollmentName;
 use App\Support\ProgramAccess;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -76,7 +76,11 @@ class CoordinatorStudentController extends Controller
         return response()->json([
             'colleges' => College::with(['programs' => fn ($query) => $query->whereKey($programId)->where('is_active', true)])
                 ->whereKey($collegeId)->where('is_active', true)->get(),
-            'htes' => HTE::where('is_active', true)
+            'htes' => HTE::with(['departments' => fn ($query) => $query->whereHas('programs', fn ($programs) => $programs
+                ->whereKey($programId)
+                ->where('hte_department_programs.is_active', true))
+                ->orderBy('department_name')])
+                ->where('is_active', true)
                 ->whereHas('programs', fn ($query) => $query->whereKey($programId)->where('hte_programs.is_active', true))
                 ->orderBy('name')->get(['id', 'name']),
             'sections' => ProgramAccess::sectionQuery($request->user())
@@ -108,11 +112,15 @@ class CoordinatorStudentController extends Controller
             ->when(($filters['registration'] ?? null) === 'registered', fn ($query) => $query->whereNotNull('registered_at'))
             ->when($sectionId, fn ($query) => $query->where('academic_section_id', $sectionId))
             ->when($search, function ($query) use ($search) {
-                $query->where(function ($nested) use ($search) {
-                    $nested->where('school_id', 'like', '%'.$search.'%')
-                        ->orWhere('full_name', 'like', '%'.$search.'%')
-                        ->orWhereHas('academicSection', fn ($section) => $section->where('name', 'like', '%'.$search.'%'));
-                });
+                foreach (preg_split('/\s+/u', $search) as $term) {
+                    $query->where(function ($nested) use ($term) {
+                        $nested->where('school_id', 'like', '%'.$term.'%')
+                            ->orWhere('first_name', 'like', '%'.$term.'%')
+                            ->orWhere('middle_name', 'like', '%'.$term.'%')
+                            ->orWhere('last_name', 'like', '%'.$term.'%')
+                            ->orWhereHas('academicSection', fn ($section) => $section->where('name', 'like', '%'.$term.'%'));
+                    });
+                }
             })
             ->latest()
             ->paginate($filters['per_page'] ?? 10)
@@ -132,7 +140,9 @@ class CoordinatorStudentController extends Controller
     {
         $programId = ProgramAccess::programId($request->user());
         $validated = $request->validate([
-            'full_name' => ['required', 'string', 'max:255'],
+            'first_name' => ['required', 'string', 'max:100'],
+            'middle_name' => ['nullable', 'string', 'max:100'],
+            'last_name' => ['required', 'string', 'max:100'],
             'school_id' => ['required', 'string', 'max:20', Rule::unique('ojt_enrollments', 'school_id'), Rule::unique('students', 'student_id'), Rule::unique('users', 'username')],
             'academic_section_id' => ['required', 'integer', ...$this->sectionExistsRule($programId, $request->user())],
         ]);
@@ -140,7 +150,9 @@ class CoordinatorStudentController extends Controller
 
         $enrollment = OjtEnrollment::create([
             'school_id' => trim($validated['school_id']),
-            'full_name' => preg_replace('/\s+/', ' ', trim($validated['full_name'])),
+            'first_name' => preg_replace('/\s+/u', ' ', trim($validated['first_name'])),
+            'middle_name' => filled($validated['middle_name'] ?? null) ? preg_replace('/\s+/u', ' ', trim($validated['middle_name'])) : null,
+            'last_name' => preg_replace('/\s+/u', ' ', trim($validated['last_name'])),
             'academic_section_id' => $section->id,
             'source' => 'manual',
             'added_by' => $request->user()->id,
@@ -171,18 +183,55 @@ class CoordinatorStudentController extends Controller
             $rules['ojt_end_date'] = ['nullable', 'date'];
         }
         $validated = $request->validate($rules);
+        if ((int) ($validated['hte_id'] ?? 0) !== (int) $student->hte_id
+            || (int) ($validated['hte_department_id'] ?? 0) !== (int) $student->hte_department_id) {
+            throw ValidationException::withMessages(['hte_id' => 'Change the HTE assignment in Student Deployments.']);
+        }
+        if (($validated['schedule_status'] ?? $student->schedule_status) !== $student->schedule_status) {
+            throw ValidationException::withMessages(['schedule_status' => 'Deployment approval is decided by the Program Head and Dean.']);
+        }
+        if (($validated['internship_status'] ?? $student->internship_status) === 'active'
+            && $student->internship_status !== 'active') {
+            throw ValidationException::withMessages(['internship_status' => 'The internship becomes active after deployment approval and the OJT start date.']);
+        }
+        $validated['gender'] = $student->gender;
+        $validated['birth_date'] = $student->birth_date?->toDateString();
+        $validated['contact_number'] = $student->contact_number;
+        $validated['address'] = $student->address;
+        if (! empty($validated['hte_department_id'])) {
+            $departmentAvailable = DB::table('hte_departments')
+                ->join('hte_department_programs', 'hte_department_programs.hte_department_id', '=', 'hte_departments.id')
+                ->where('hte_departments.id', $validated['hte_department_id'])
+                ->where('hte_departments.hte_id', $validated['hte_id'] ?? null)
+                ->where('hte_department_programs.program_id', ProgramAccess::programId($request->user()))
+                ->where('hte_department_programs.is_active', true)
+                ->exists();
+            if (! $departmentAvailable) {
+                throw ValidationException::withMessages(['hte_department_id' => 'The selected department is not available to this program and HTE.']);
+            }
+        }
         if ($setting) {
             $validated['required_ojt_hours'] = $setting->required_hours;
             $validated['ojt_start_date'] = $setting->ojt_start_date->toDateString();
             $validated['ojt_end_date'] = null;
         }
+        if ($student->hte_id && (
+            ($validated['ojt_start_date'] ?? null) !== $student->ojt_start_date?->toDateString()
+            || ($validated['ojt_end_date'] ?? null) !== $student->ojt_end_date?->toDateString()
+            || (float) ($validated['required_ojt_hours'] ?? 0) !== (float) $student->required_ojt_hours
+            || (bool) ($validated['allow_past_attendance'] ?? false) !== (bool) $student->allow_past_attendance
+        )) {
+            throw ValidationException::withMessages(['ojt_start_date' => 'Change OJT dates and hours in Student Deployments.']);
+        }
 
         DB::transaction(function () use ($validated, $student, $request) {
-            $student->user->update([
-                'email' => $validated['email'],
-                ...(! empty($validated['password']) ? ['password' => Hash::make($validated['password'])] : []),
-            ]);
-            $student->update($this->studentAttributes($validated, $student->user_id, $request->user()));
+            $student->user->update(['email' => $validated['email']]);
+            $attributes = $this->studentAttributes($validated, $student->user_id, $request->user());
+            if ((int) $student->hte_id !== (int) ($validated['hte_id'] ?? null)
+                || (int) $student->hte_department_id !== (int) ($validated['hte_department_id'] ?? null)) {
+                $attributes['supervisor_record_id'] = null;
+            }
+            $student->update($attributes);
         });
 
         return response()->json([
@@ -329,7 +378,9 @@ class CoordinatorStudentController extends Controller
 
                 OjtEnrollment::create([
                     'school_id' => $student['school_no'],
-                    'full_name' => $student['full_name'],
+                    'first_name' => $student['first_name'],
+                    'middle_name' => $student['middle_name'],
+                    'last_name' => $student['last_name'],
                     'academic_section_id' => $section->id,
                     'source' => 'csv',
                     'added_by' => $request->user()->id,
@@ -365,21 +416,22 @@ class CoordinatorStudentController extends Controller
 
         return array_map(function (array $student) use ($counts, $existingEnrollments, $existingStudents) {
             $schoolNo = $student['school_no'];
-            $fullName = $student['full_name'];
+            $firstName = $student['first_name'];
+            $lastName = $student['last_name'];
             $key = Str::upper($schoolNo);
             $status = 'Ready';
             $reason = null;
 
-            if ($schoolNo === '' || $fullName === '') {
+            if ($schoolNo === '' || $firstName === '' || $lastName === '') {
                 $status = 'Invalid';
                 $reason = $schoolNo === ''
                     ? 'School No. is required.'
-                    : 'Full Name is required.';
-            } elseif (mb_strlen($schoolNo) > 20 || mb_strlen($fullName) > 255) {
+                    : 'First and Last Name are required.';
+            } elseif (mb_strlen($schoolNo) > 20 || mb_strlen($firstName) > 100 || mb_strlen($lastName) > 100 || mb_strlen((string) $student['middle_name']) > 100) {
                 $status = 'Invalid';
                 $reason = mb_strlen($schoolNo) > 20
                     ? 'School No. must not exceed 20 characters.'
-                    : 'Full Name must not exceed 255 characters.';
+                    : 'Each name field must not exceed 100 characters.';
             } elseif (($counts[$key] ?? 0) > 1) {
                 $status = 'Duplicate';
                 $reason = 'School No. appears more than once in this file.';
@@ -434,7 +486,7 @@ class CoordinatorStudentController extends Controller
                 $students[] = [
                     'row' => $rowNumber,
                     'school_no' => trim((string) ($row[4] ?? '')),
-                    'full_name' => preg_replace('/\s+/', ' ', trim((string) ($row[5] ?? ''))),
+                    ...EnrollmentName::fromOfficialName((string) ($row[5] ?? '')),
                 ];
             }
         } finally {
@@ -502,11 +554,11 @@ class CoordinatorStudentController extends Controller
         return [
             'student_id' => ['required', 'string', 'max:20', Rule::unique('students')->ignore($student?->id), Rule::unique('users', 'username')->ignore($student?->user_id)],
             'first_name' => ['required', 'string', 'max:100'], 'last_name' => ['required', 'string', 'max:100'], 'middle_name' => ['nullable', 'string', 'max:100'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($student?->user_id)], 'password' => [$student ? 'nullable' : 'nullable', 'string', 'min:8', 'max:255'],
-            'gender' => ['required', 'in:male,female'], 'birth_date' => ['required', 'date', 'before:today'], 'address' => ['required', 'string', 'max:1000'], 'contact_number' => ['required', 'string', 'digits:11'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($student?->user_id)],
             'college_id' => ['nullable', Rule::in([(int) $coordinator->college_id])], 'program_id' => ['nullable', Rule::in([(int) $coordinator->program_id])], 'year_level' => ['required', 'integer', 'between:1,5'], 'section' => ['required', 'string', 'max:50'],
             'parent_name' => ['required', 'string', 'max:255'], 'parent_relationship' => ['nullable', 'string', 'max:50'], 'parent_address' => ['required', 'string', 'max:1000'], 'parent_contact_number' => ['required', 'string', 'digits:11'],
             'hte_id' => ['nullable', Rule::exists('hte_programs', 'hte_id')->where(fn ($query) => $query->where('program_id', $coordinator->program_id)->where('is_active', true))], 'internship_semester' => ['nullable', 'string', 'max:30'], 'internship_year' => ['nullable', 'string', 'max:20'],
+            'hte_department_id' => ['nullable', 'integer', Rule::exists('hte_departments', 'id')],
             'internship_status' => ['nullable', 'in:pending,active,completed,dropped'],
             'consent_status' => ['nullable', 'in:pending,rejected,done'],
             'schedule_status' => ['nullable', 'in:pending,rejected,approved'],
@@ -528,6 +580,7 @@ class CoordinatorStudentController extends Controller
             'gender' => $data['gender'], 'birth_date' => $data['birth_date'], 'address' => $data['address'], 'contact_number' => $data['contact_number'], 'college_id' => $coordinator->college_id, 'program_id' => $coordinator->program_id,
             'year_level' => $data['year_level'], 'section' => $data['section'], 'parent_name' => $data['parent_name'], 'parent_relationship' => $data['parent_relationship'] ?? null,
             'parent_address' => $data['parent_address'], 'parent_contact_number' => $data['parent_contact_number'], 'hte_id' => $data['hte_id'] ?? null,
+            'hte_department_id' => $data['hte_department_id'] ?? null,
             'internship_semester' => $data['internship_semester'] ?? null, 'internship_year' => $data['internship_year'] ?? null,
             'internship_status' => $data['internship_status'] ?? 'pending',
             'consent_status' => $data['consent_status'] ?? 'pending', 'schedule_status' => $data['schedule_status'] ?? 'pending',

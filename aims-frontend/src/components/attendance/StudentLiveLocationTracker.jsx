@@ -73,11 +73,12 @@ function StudentLiveLocationTracker() {
     };
 
     const watchId = navigator.geolocation.watchPosition(
-      ({ coords }) => {
+      ({ coords, timestamp }) => {
         latestLocationRef.current = {
           latitude: coords.latitude,
           longitude: coords.longitude,
           accuracy: coords.accuracy,
+          recorded_at: new Date(timestamp).toISOString(),
         };
         shareLatest();
       },

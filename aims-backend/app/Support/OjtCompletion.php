@@ -7,6 +7,7 @@ use App\Models\Holiday;
 use App\Models\ProgramOjtSetting;
 use App\Models\Student;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection;
 
 final class OjtCompletion
 {
@@ -127,7 +128,8 @@ final class OjtCompletion
         return $start && $end ? max(Carbon::parse($start)->diffInMinutes(Carbon::parse($end), false) / 60, 0) : 0;
     }
 
-    private static function isHoliday($holidays, Student $student, Carbon $date): bool
+    /** @param Collection<int, Holiday> $holidays */
+    private static function isHoliday(Collection $holidays, Student $student, Carbon $date): bool
     {
         return $holidays->contains(fn (Holiday $holiday) => (
             $holiday->is_recurring ? $holiday->date->format('m-d') === $date->format('m-d') : $holiday->date->isSameDay($date)

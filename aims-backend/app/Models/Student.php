@@ -21,7 +21,7 @@ class Student extends Model
         'parent_name', 'parent_relationship', 'parent_address', 'parent_contact_number',
         'hte_id', 'hte_department_id', 'supervisor_record_id', 'supervisor_id',
         'internship_semester', 'internship_year', 'internship_status',
-        'registration_status', 'registration_feedback', 'registration_reviewed_by', 'registration_reviewed_at',
+        'registration_status',
         'consent_status', 'schedule_status', 'ojt_start_date', 'ojt_end_date',
         'required_ojt_hours', 'allow_past_attendance',
         'official_am_start', 'official_am_end', 'official_pm_start', 'official_pm_end', 'work_days',
@@ -63,9 +63,6 @@ class Student extends Model
         'internship_year',
         'internship_status',
         'registration_status',
-        'registration_feedback',
-        'registration_reviewed_by',
-        'registration_reviewed_at',
         'consent_status',
         'schedule_status',
         'ojt_start_date',
@@ -240,9 +237,6 @@ class Student extends Model
             'allow_past_attendance' => (bool) ($internship()?->allow_past_attendance ?? false),
 
             'registration_status' => $enrollment()?->registration_status ?? 'pending',
-            'registration_feedback' => $enrollment()?->registration_feedback,
-            'registration_reviewed_by' => $enrollment()?->registration_reviewed_by,
-            'registration_reviewed_at' => $enrollment()?->registration_reviewed_at,
 
             'official_am_start' => $schedule()['am_start'],
             'official_am_end' => $schedule()['am_end'],
@@ -344,7 +338,7 @@ class Student extends Model
             'allow_past_attendance' => (bool) $value,
             'required_ojt_hours' => number_format((float) $value, 2, '.', ''),
             'work_days' => is_array($value) ? $value : json_decode((string) $value, true),
-            'ojt_start_date', 'ojt_end_date', 'registration_reviewed_at' => $this->asDateTime($value),
+            'ojt_start_date', 'ojt_end_date' => $this->asDateTime($value),
             default => $value,
         };
     }

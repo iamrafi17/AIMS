@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   FiActivity,
   FiAlertTriangle,
@@ -15,6 +16,7 @@ import {
 import toast from 'react-hot-toast';
 import ReportTemplateControls from '../../components/reports/ReportTemplateControls';
 import api from '../../services/api';
+import { deploymentStageLabel } from '../../utils/deployment';
 
 const emptyReport = {
   overview: { total_students: 0, active: 0, completed: 0, pending: 0, deployed: 0, average_progress: 0 },
@@ -92,7 +94,6 @@ function ProgramHeadReports() {
   const [mobileView, setMobileView] = useState('compliance');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [reviewingDeployment, setReviewingDeployment] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -122,24 +123,6 @@ function ProgramHeadReports() {
     }
   };
 
-  const reviewDeployment = async (row, decision) => {
-    if (!row.approval_id) return toast.error('This deployment has not been submitted for review.');
-    const remarks = decision === 'returned'
-      ? window.prompt('Enter the required revision remarks for the Coordinator:')
-      : 'Requirements and working schedule reviewed by the Program Head.';
-    if (decision === 'returned' && !remarks?.trim()) return;
-    if (decision === 'forwarded' && !window.confirm('Forward this deployment request to the VPAA for final validation?')) return;
-    setReviewingDeployment(row.approval_id);
-    try {
-      const response = await api.put(`/program-head/deployments/${row.approval_id}/review`, { decision, remarks });
-      toast.success(response.data.message);
-      await refreshReport();
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Unable to review the deployment request.');
-    } finally {
-      setReviewingDeployment(null);
-    }
-  };
 
   const overview = report.overview || emptyReport.overview;
   const attendance = report.attendance || emptyReport.attendance;
@@ -301,7 +284,7 @@ function ProgramHeadReports() {
 
       {activeTab === 'hte_deployment_review' && (
         <Panel title="HTE Deployment Review Report" subtitle={`${report.deployment_reviews?.length || 0} deployment records in the selected program scope`} icon={FiUsers}>
-          <div className="overflow-x-auto"><table className="w-full min-w-[1180px] text-left"><thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700"><th className="pb-3">Student</th><th className="pb-3">HTE / Batch</th><th className="pb-3">Proposed Date</th><th className="pb-3">Working Schedule</th><th className="pb-3">Requirements</th><th className="pb-3">Coordinator Submission</th><th className="pb-3">Review Status</th><th className="pb-3">Actions</th></tr></thead><tbody>{report.deployment_reviews?.length ? report.deployment_reviews.map((row) => <tr key={row.student_id} className="border-b border-slate-100 text-xs last:border-0 dark:border-gray-700"><td className="py-4"><p className="font-black text-slate-800 dark:text-white">{row.student}</p><p className="mt-1 text-[9px] text-slate-400">{row.student_id}</p></td><td className="py-4"><p className="font-bold">{row.hte}</p><p className="mt-1 text-[9px] text-slate-400">{row.batch}</p></td><td className="py-4">{row.proposed_date || 'Not set'}</td><td className="max-w-72 py-4">{row.working_schedule}</td><td className="py-4 font-bold">{row.requirements_readiness}</td><td className="py-4">{row.submitted_at ? new Date(row.submitted_at).toLocaleString('en-PH') : 'Not submitted'}</td><td className="py-4"><StatusPill value={row.review_status} /></td><td className="py-4">{row.review_status === 'pending' && row.approval_id ? <div className="flex gap-2"><button disabled={reviewingDeployment === row.approval_id} onClick={() => reviewDeployment(row, 'forwarded')} className="rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-black uppercase text-white disabled:opacity-50">Forward</button><button disabled={reviewingDeployment === row.approval_id} onClick={() => reviewDeployment(row, 'returned')} className="rounded-lg bg-rose-100 px-3 py-2 text-[9px] font-black uppercase text-rose-700 disabled:opacity-50">Return</button></div> : <span className="text-[9px] font-bold text-slate-400">No action available</span>}</td></tr>) : <tr><td colSpan="8" className="py-14 text-center font-bold text-slate-400">No deployment records are available.</td></tr>}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[1180px] text-left"><thead><tr className="border-b border-slate-100 text-[9px] uppercase tracking-wider text-slate-400 dark:border-gray-700"><th className="pb-3">Student</th><th className="pb-3">HTE / Batch</th><th className="pb-3">Proposed Date</th><th className="pb-3">Working Schedule</th><th className="pb-3">Requirements</th><th className="pb-3">Coordinator Submission</th><th className="pb-3">Review Status</th><th className="pb-3">Actions</th></tr></thead><tbody>{report.deployment_reviews?.length ? report.deployment_reviews.map((row) => <tr key={row.student_id} className="border-b border-slate-100 text-xs last:border-0 dark:border-gray-700"><td className="py-4"><p className="font-black text-slate-800 dark:text-white">{row.student}</p><p className="mt-1 text-[9px] text-slate-400">{row.student_id}</p></td><td className="py-4"><p className="font-bold">{row.hte}</p><p className="mt-1 text-[9px] text-slate-400">{row.batch}</p></td><td className="py-4">{row.proposed_date || 'Not set'}</td><td className="max-w-72 py-4">{row.working_schedule}</td><td className="py-4 font-bold">{row.requirements_readiness}</td><td className="py-4">{row.submitted_at ? new Date(row.submitted_at).toLocaleString('en-PH') : 'Not submitted'}</td><td className="py-4"><StatusPill value={row.deployment_stage ? deploymentStageLabel(row.deployment_stage) : row.review_status} /></td><td className="py-4"><Link to="/program-head/documents?tab=deployments" className="text-xs font-bold text-[#7D001D] underline dark:text-rose-300">Open Deployment Approval</Link></td></tr>) : <tr><td colSpan="8" className="py-14 text-center font-bold text-slate-400">No deployment records are available.</td></tr>}</tbody></table></div>
         </Panel>
       )}
 

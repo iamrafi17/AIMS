@@ -1,7 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import L from 'leaflet';
-import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
 import {
   FiAlertCircle,
   FiBarChart2,
@@ -35,6 +32,7 @@ import {
 import toast from 'react-hot-toast';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
+import CoordinatorLiveMap from './CoordinatorLiveMap';
 
 const emptySummary = {
   total: 0, present: 0, late: 0, absent: 0, holiday: 0,
@@ -77,58 +75,6 @@ function Modal({ title, subtitle, onClose, children, width = 'max-w-2xl' }) {
   </div>;
 }
 
-const liveMarkerIcons = {
-  active: L.divIcon({ className: 'live-student-marker', html: '<span></span>', iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14] }),
-  outside: L.divIcon({ className: 'live-student-marker live-student-marker--outside', html: '<span></span>', iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14] }),
-};
-
-function FitLiveLocations({ positions }) {
-  const map = useMap();
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      map.invalidateSize();
-      if (positions.length === 1) map.setView(positions[0], 17);
-      if (positions.length > 1) map.fitBounds(positions, { padding: [40, 40], maxZoom: 17 });
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [map, positions]);
-
-  return null;
-}
-
-function LiveStudentMap({ locations }) {
-  const positions = useMemo(
-    () => locations.map((location) => [location.latitude, location.longitude]),
-    [locations],
-  );
-
-  return (
-    <div className="h-[430px] overflow-hidden rounded-2xl border border-slate-200 dark:border-gray-700">
-      <MapContainer center={positions[0] || [12.8797, 121.774]} zoom={positions.length ? 16 : 6} scrollWheelZoom className="h-full w-full">
-        <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={19} />
-        <FitLiveLocations positions={positions} />
-        {locations.map((location) => (
-          <Marker key={location.id} position={[location.latitude, location.longitude]} icon={location.outside_geofence ? liveMarkerIcons.outside : liveMarkerIcons.active}>
-            <Popup>
-              <div className="min-w-48">
-                <p className="font-black text-[#690016]">{location.name}</p>
-                <p className="text-xs text-slate-500">{location.school_id} · {location.program}</p>
-                <p className={`mt-2 text-xs font-bold ${location.outside_geofence ? 'text-rose-700' : 'text-emerald-700'}`}>{location.outside_geofence ? 'Outside HTE geofence' : 'Currently timed in'}</p>
-                <p className="mt-1 text-xs text-slate-500">{location.hte || 'No HTE assigned'}</p>
-                {location.distance_from_hte !== null && <p className="mt-1 text-xs text-slate-500">Distance from HTE: {location.distance_from_hte} m / {location.geofence_radius} m allowed</p>}
-                {location.accuracy !== null && <p className="mt-1 text-xs text-slate-500">GPS accuracy: ±{Math.round(location.accuracy)} m</p>}
-                <p className="mt-1 text-xs text-slate-400">Updated {new Date(location.captured_at).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-      </MapContainer>
-    </div>
-  );
-}
-
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 focus:ring-4 focus:ring-[#7D001D]/5 dark:border-gray-600 dark:bg-gray-900 dark:text-white';
 const formatDate = (value) => value ? new Date(value).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 const formatTime = (value) => value ? new Date(value).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }) : '—';
@@ -154,8 +100,7 @@ function AttendanceManagement() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const previewRequestId = useRef(0);
-  const [liveLocations, setLiveLocations] = useState([]);
-  const [liveSummary, setLiveSummary] = useState({ sharing: 0, total_students: 0, server_time: null });
+  const [liveData, setLiveData] = useState({ active_students: [], htes: [], server_time: null });
   const [liveLoading, setLiveLoading] = useState(false);
 
   const fetchRecords = useCallback(async () => {
@@ -204,12 +149,7 @@ function AttendanceManagement() {
 
     try {
       const response = await api.get('/coordinator/attendance/live-locations');
-      setLiveLocations(response.data.locations || []);
-      setLiveSummary({
-        sharing: response.data.sharing || 0,
-        total_students: response.data.total_students || 0,
-        server_time: response.data.server_time || null,
-      });
+      setLiveData({ active_students: response.data.active_students || [], htes: response.data.htes || [], server_time: response.data.server_time || null });
     } catch (error) {
       if (showLoading) toast.error(error.response?.data?.message || 'Unable to load live student locations.');
     } finally {
@@ -299,7 +239,7 @@ function AttendanceManagement() {
       ].map(([label, value, Icon, colors]) => <article key={label} className="portal-metric-card portal-summary-card rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800"><div className="flex items-center gap-3"><span className={`grid h-10 w-10 place-items-center rounded-xl ${colors}`}><Icon /></span><div><p className="text-xl font-black text-slate-800 dark:text-white">{value}</p><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</p></div></div></article>)}
     </section>
 
-    <section className="portal-filter-panel rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    {tab !== 'live-map' && <section className="portal-filter-panel rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="portal-filter-grid grid gap-3 xl:grid-cols-[1fr_repeat(4,minmax(130px,auto))]">
         <label className="portal-filter-search relative"><FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={filters.search} onChange={(event) => updateFilter('search', event.target.value)} placeholder="Search student name or ID..." className={`${inputClass} pl-10`} /></label>
         <select value={filters.status} onChange={(event) => updateFilter('status', event.target.value)} className={inputClass}><option value="">All statuses</option><option value="present">Present</option><option value="late">Late</option><option value="absent">Absent</option><option value="holiday">Holiday</option></select>
@@ -307,7 +247,7 @@ function AttendanceManagement() {
         <input type="date" value={filters.date_from} onChange={(event) => updateFilter('date_from', event.target.value)} className={inputClass} title="Start date" />
         <input type="date" value={filters.date_to} onChange={(event) => updateFilter('date_to', event.target.value)} className={inputClass} title="End date" />
       </div>
-    </section>
+    </section>}
 
     <nav className="portal-mobile-tabs flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-1 dark:bg-gray-800">
       {[
@@ -318,23 +258,7 @@ function AttendanceManagement() {
       ].map(([value, label, Icon]) => <button key={value} onClick={() => setTab(value)} className={`inline-flex whitespace-nowrap items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black transition ${tab === value ? 'bg-white text-[#7D001D] shadow-sm dark:bg-gray-700 dark:text-rose-300' : 'text-slate-500'}`}><Icon /> {label}</button>)}
     </nav>
 
-    {tab === 'live-map' && <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <article className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="font-black text-slate-800 dark:text-white">Timed-In Student Live Locations</h2><p className="mt-1 text-xs text-slate-400">Live GPS monitoring starts after Time In and stops at Time Out</p></div>
-          <div className="flex items-center gap-2"><span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />Live · refreshes every 15s</span><button type="button" onClick={() => fetchLiveLocations(true)} disabled={liveLoading} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">{liveLoading ? 'Refreshing...' : 'Refresh'}</button></div>
-        </div>
-        {liveLoading && !liveLocations.length ? <div className="grid h-[430px] place-items-center rounded-2xl bg-slate-50 text-sm font-bold text-slate-400 dark:bg-gray-900">Loading live locations...</div> : <LiveStudentMap locations={liveLocations} />}
-      </article>
-      <aside className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <div className="grid grid-cols-2 gap-3"><div className="rounded-2xl bg-emerald-50 p-4 dark:bg-emerald-950/30"><p className="text-2xl font-black text-emerald-700 dark:text-emerald-300">{liveSummary.sharing}</p><p className="mt-1 text-[10px] font-black uppercase text-emerald-600">Timed in</p></div><div className="rounded-2xl bg-slate-50 p-4 dark:bg-gray-900"><p className="text-2xl font-black text-slate-800 dark:text-white">{liveSummary.total_students}</p><p className="mt-1 text-[10px] font-black uppercase text-slate-400">Program students</p></div></div>
-        <div className="mt-4 space-y-2">
-          <p className="text-xs font-black uppercase tracking-wider text-slate-400">Currently Timed In</p>
-          {liveLocations.length ? liveLocations.map((location) => <div key={location.id} className={`rounded-2xl border p-3 ${location.outside_geofence ? 'border-rose-200 bg-rose-50/60 dark:border-rose-900 dark:bg-rose-950/20' : 'border-slate-100 dark:border-gray-700'}`}><div className="flex items-start gap-3"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${location.outside_geofence ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'}`}><FiMapPin /></span><div className="min-w-0"><p className="truncate text-sm font-black text-slate-800 dark:text-white">{location.name}</p><p className="mt-0.5 text-[11px] text-slate-400">{location.school_id} · {location.hte || 'No HTE'}</p>{location.outside_geofence && <p className="mt-1 text-[10px] font-black uppercase text-rose-700 dark:text-rose-300">Outside radius: {location.distance_from_hte} m / {location.geofence_radius} m</p>}<p className={`mt-1 text-[10px] font-bold ${location.outside_geofence ? 'text-rose-600' : 'text-emerald-600'}`}>Last GPS update {new Date(location.captured_at).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</p></div></div></div>) : <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-10 text-center text-xs leading-5 text-slate-400 dark:border-gray-600">No student currently has an active timed-in session with a recorded location.</div>}
-        </div>
-        <p className="mt-4 rounded-2xl bg-blue-50 p-3 text-[11px] leading-5 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">The student marker keeps its last known GPS position for the entire active session and disappears only after successful Time Out.</p>
-      </aside>
-    </section>}
+    {tab === 'live-map' && <CoordinatorLiveMap students={liveData.active_students} htes={liveData.htes} serverTime={liveData.server_time} loading={liveLoading} onRefresh={() => fetchLiveLocations(true)} />}
 
     {tab === 'logs' && <section className="portal-table-panel overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="overflow-x-auto"><table className="portal-card-table portal-card-table--attendance w-full min-w-[900px] text-left"><thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-gray-900"><tr><th className="px-5 py-4">Student</th><th className="px-4 py-4">Date & Mode</th><th className="px-4 py-4">Time Record</th><th className="px-4 py-4">Hours</th><th className="px-4 py-4">Status</th><th className="px-5 py-4 text-right">Action</th></tr></thead>
@@ -352,7 +276,7 @@ function AttendanceManagement() {
       <article className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm xl:col-span-2 dark:border-gray-700 dark:bg-gray-800"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-black text-slate-800 dark:text-white">Rendered Hours Trend</h2><p className="mt-1 text-xs text-slate-400">Daily regular and overtime hours across the latest filtered dates</p></div><span className="text-xs font-black text-[#7D001D] dark:text-rose-300">Automatic Smart Clock records</span></div><div className="mt-4 h-72"><ResponsiveContainer width="100%" height="100%"><AreaChart data={analytics.daily_hours}><defs><linearGradient id="hoursFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#7D001D" stopOpacity={0.35} /><stop offset="95%" stopColor="#7D001D" stopOpacity={0} /></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" /><XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(date) => new Date(date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })} /><YAxis tick={{ fontSize: 11 }} /><Tooltip contentStyle={chartTooltipStyle} /><Area type="monotone" dataKey="hours" stroke="#7D001D" strokeWidth={3} fill="url(#hoursFill)" /></AreaChart></ResponsiveContainer></div></article>
     </section>}
 
-    {tab !== 'analytics' && <footer className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-5 py-4 text-xs dark:border-gray-700 dark:bg-gray-800"><div className="flex items-center gap-3"><label className="flex items-center gap-2 font-bold text-slate-500 dark:text-gray-300"><span>Entries per page</span><select value={perPage} onChange={(event) => { setPerPage(Number(event.target.value)); setPage(1); }} aria-label="Attendance entries per page" className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-700 outline-none focus:border-[#7D001D] focus:ring-2 focus:ring-[#7D001D]/10 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200">{pageSizes.map((size) => <option key={size} value={size}>{size}</option>)}</select></label><p className="text-slate-400">{total} record(s) · Page {page} of {lastPage}</p></div><div className="flex gap-2"><button disabled={page <= 1} onClick={() => setPage((current) => Math.max(current - 1, 1))} className="rounded-lg border border-slate-200 p-2 disabled:opacity-30 dark:border-gray-600" aria-label="Previous attendance page"><FiChevronLeft /></button><button disabled={page >= lastPage} onClick={() => setPage((current) => Math.min(current + 1, lastPage))} className="rounded-lg border border-slate-200 p-2 disabled:opacity-30 dark:border-gray-600" aria-label="Next attendance page"><FiChevronRight /></button></div></footer>}
+    {tab !== 'analytics' && tab !== 'live-map' && <footer className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-5 py-4 text-xs dark:border-gray-700 dark:bg-gray-800"><div className="flex items-center gap-3"><label className="flex items-center gap-2 font-bold text-slate-500 dark:text-gray-300"><span>Entries per page</span><select value={perPage} onChange={(event) => { setPerPage(Number(event.target.value)); setPage(1); }} aria-label="Attendance entries per page" className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-700 outline-none focus:border-[#7D001D] focus:ring-2 focus:ring-[#7D001D]/10 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200">{pageSizes.map((size) => <option key={size} value={size}>{size}</option>)}</select></label><p className="text-slate-400">{total} record(s) · Page {page} of {lastPage}</p></div><div className="flex gap-2"><button disabled={page <= 1} onClick={() => setPage((current) => Math.max(current - 1, 1))} className="rounded-lg border border-slate-200 p-2 disabled:opacity-30 dark:border-gray-600" aria-label="Previous attendance page"><FiChevronLeft /></button><button disabled={page >= lastPage} onClick={() => setPage((current) => Math.min(current + 1, lastPage))} className="rounded-lg border border-slate-200 p-2 disabled:opacity-30 dark:border-gray-600" aria-label="Next attendance page"><FiChevronRight /></button></div></footer>}
 
     {selected && <Modal title="View Daily Journal" subtitle={`${selected.student?.first_name} ${selected.student?.last_name} · ${selected.student?.student_id} · ${formatDate(selected.date)}`} onClose={() => { previewRequestId.current += 1; setSelected(null); setJournalPreview(null); setPreviewLoading(false); setPreviewError(''); }}>
       <div className="space-y-4 p-4 sm:p-5">

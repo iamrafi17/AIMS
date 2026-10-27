@@ -192,6 +192,185 @@ class CoordinatorAttendanceManagementTest extends TestCase
             ->assertJsonCount(0, 'locations');
     }
 
+    public function test_live_monitoring_includes_active_student_without_gps_and_derives_stale_status(): void
+    {
+        [$coordinator, $student] = $this->context();
+        Sanctum::actingAs($coordinator);
+
+        $this->getJson('/api/coordinator/attendance/live-locations')
+            ->assertOk()->assertJsonPath('summary.timed_in', 0)
+            ->assertJsonCount(0, 'active_students');
+
+        Attendance::create([
+            'student_id' => $student->id, 'date' => now()->toDateString(),
+            'status' => 'present', 'work_mode' => 'wfo', 'session_type' => 'full_day',
+            'am_time_in' => now(),
+        ]);
+
+        $this->getJson('/api/coordinator/attendance/live-locations')
+            ->assertOk()->assertJsonPath('summary.timed_in', 1)
+            ->assertJsonPath('summary.unavailable', 1)
+            ->assertJsonPath('active_students.0.student_id', $student->id)
+            ->assertJsonPath('active_students.0.location', null)
+            ->assertJsonCount(0, 'locations');
+
+        StudentLiveLocation::create([
+            'student_id' => $student->id, 'latitude' => 13.4753,
+            'longitude' => 122.0275, 'accuracy' => 12,
+            'captured_at' => now()->subMinutes(3),
+        ]);
+
+        $this->getJson('/api/coordinator/attendance/live-locations')
+            ->assertOk()->assertJsonPath('summary.stale', 1)
+            ->assertJsonPath('active_students.0.gps_status', 'stale')
+            ->assertJsonPath('active_students.0.location.accuracy', 12)
+            ->assertJsonCount(1, 'locations');
+    }
+
+    public function test_live_geofence_marks_accuracy_overlap_as_uncertain(): void
+    {
+        [$coordinator, $student] = $this->context();
+        $student->hte->update([
+            'latitude' => 13.4753, 'longitude' => 122.0275,
+            'geofence_radius' => 100, 'geofence_enabled' => true,
+        ]);
+        Attendance::create([
+            'student_id' => $student->id, 'date' => now()->toDateString(),
+            'status' => 'present', 'work_mode' => 'wfo', 'session_type' => 'full_day',
+            'am_time_in' => now(),
+        ]);
+        $location = StudentLiveLocation::create([
+            'student_id' => $student->id, 'latitude' => 13.4753,
+            'longitude' => 122.0275, 'accuracy' => 150,
+            'captured_at' => now(),
+        ]);
+        Sanctum::actingAs($coordinator);
+        $this->getJson('/api/coordinator/attendance/live-locations')
+            ->assertOk()->assertJsonPath('locations.0.geofence_status', 'uncertain');
+
+        $location->update(['accuracy' => 10]);
+        $this->getJson('/api/coordinator/attendance/live-locations')
+            ->assertOk()->assertJsonPath('locations.0.geofence_status', 'inside');
+
+        $location->update(['latitude' => 13.4853]);
+        $this->getJson('/api/coordinator/attendance/live-locations')
+            ->assertOk()->assertJsonPath('locations.0.geofence_status', 'outside');
+
+        $location->update(['accuracy' => null]);
+        $this->getJson('/api/coordinator/attendance/live-locations')
+            ->assertOk()->assertJsonPath('locations.0.geofence_status', 'uncertain');
+    }
+
+    public function test_vpaa_live_map_shows_timed_in_students_across_colleges_with_gps_status_and_role_protection(): void
+    {
+        [$coordinator, $first] = $this->context();
+        $otherCollege = College::create(['name' => 'Education', 'code' => 'CED', 'is_active' => true]);
+        $otherProgram = Program::create(['college_id' => $otherCollege->id, 'name' => 'Education', 'code' => 'BSED', 'is_active' => true]);
+        $second = Student::create([
+            'user_id' => User::factory()->create(['role' => 'student'])->id,
+            'student_id' => '2026-3002', 'first_name' => 'Other', 'last_name' => 'Intern',
+            'gender' => 'female', 'birth_date' => '2002-01-01', 'address' => 'Santa Cruz',
+            'contact_number' => '09171111112', 'college_id' => $otherCollege->id,
+            'program_id' => $otherProgram->id, 'academic_period_id' => $first->academic_period_id,
+            'year_level' => 4, 'section' => 'A', 'registration_status' => 'approved',
+            'internship_status' => 'active',
+        ]);
+        foreach ([$first, $second] as $student) {
+            Attendance::create([
+                'student_id' => $student->id, 'date' => now()->toDateString(),
+                'status' => 'present', 'work_mode' => 'wfo', 'session_type' => 'full_day',
+                'am_time_in' => now(),
+            ]);
+        }
+        $location = StudentLiveLocation::create([
+            'student_id' => $first->id, 'latitude' => 13.4753, 'longitude' => 122.0275,
+            'accuracy' => 10, 'captured_at' => now(),
+        ]);
+
+        Sanctum::actingAs(User::factory()->create(['role' => 'vpaa']));
+        $this->getJson('/api/vpaa/attendance/live-locations')->assertOk()
+            ->assertJsonPath('summary.timed_in', 2)
+            ->assertJsonPath('summary.online', 1)
+            ->assertJsonPath('summary.unavailable', 1)
+            ->assertJsonPath('active_students.0.college', 'CICS')
+            ->assertJsonPath('active_students.0.program_id', $first->program_id)
+            ->assertJsonPath('active_students.1.college', 'CED')
+            ->assertJsonCount(2, 'filter_options.colleges')
+            ->assertJsonCount(2, 'filter_options.programs')
+            ->assertJsonCount(1, 'locations');
+
+        Sanctum::actingAs($coordinator);
+        $this->getJson('/api/vpaa/attendance/live-locations')->assertForbidden();
+        $this->getJson('/api/coordinator/attendance/live-locations')->assertOk()
+            ->assertJsonPath('summary.timed_in', 1);
+
+        $location->update(['captured_at' => now()->subMinutes(3)]);
+        Sanctum::actingAs(User::factory()->create(['role' => 'vpaa']));
+        $this->getJson('/api/vpaa/attendance/live-locations')->assertOk()
+            ->assertJsonPath('summary.stale', 1)
+            ->assertJsonPath('sharing', 1);
+        Attendance::forStudent($first->id)->firstOrFail()->update(['am_time_out' => now()]);
+        $this->getJson('/api/vpaa/attendance/live-locations')->assertOk()
+            ->assertJsonPath('summary.timed_in', 1)
+            ->assertJsonPath('sharing', 0);
+    }
+
+    public function test_dean_attendance_live_map_includes_no_gps_and_stale_students_only_in_own_college(): void
+    {
+        [, $student] = $this->context();
+        $dean = User::factory()->create(['role' => 'dean', 'college_id' => $student->college_id]);
+        $otherCollege = College::create(['name' => 'Education', 'code' => 'CED', 'is_active' => true]);
+        $otherProgram = Program::create(['college_id' => $otherCollege->id, 'name' => 'Education', 'code' => 'BSED', 'is_active' => true]);
+        $otherStudent = Student::create([
+            'user_id' => User::factory()->create(['role' => 'student'])->id,
+            'student_id' => '2026-3999', 'first_name' => 'Other', 'last_name' => 'College',
+            'gender' => 'female', 'birth_date' => '2002-01-01', 'address' => 'Santa Cruz',
+            'contact_number' => '09171111999', 'college_id' => $otherCollege->id,
+            'program_id' => $otherProgram->id, 'academic_period_id' => $student->academic_period_id,
+            'year_level' => 4, 'section' => 'A', 'registration_status' => 'approved',
+            'internship_status' => 'active',
+        ]);
+        Sanctum::actingAs($dean->fresh());
+        $this->getJson('/api/dean/attendance/live-locations')->assertOk()
+            ->assertJsonPath('summary.timed_in', 0)
+            ->assertJsonCount(1, 'filter_options.colleges')
+            ->assertJsonPath('filter_options.colleges.0.code', 'CICS')
+            ->assertJsonCount(1, 'filter_options.programs')
+            ->assertJsonPath('filter_options.programs.0.code', 'BSIT');
+
+        foreach ([$student, $otherStudent] as $intern) {
+            Attendance::create([
+                'student_id' => $intern->id, 'date' => now()->toDateString(),
+                'status' => 'present', 'work_mode' => 'wfo', 'session_type' => 'full_day',
+                'am_time_in' => now(),
+            ]);
+        }
+        StudentLiveLocation::create([
+            'student_id' => $otherStudent->id, 'latitude' => 13.4753, 'longitude' => 122.0275,
+            'accuracy' => 10, 'captured_at' => now(),
+        ]);
+        $this->getJson('/api/dean/attendance/live-locations')->assertOk()
+            ->assertJsonPath('summary.timed_in', 1)
+            ->assertJsonPath('summary.unavailable', 1)
+            ->assertJsonPath('active_students.0.student_id', $student->id)
+            ->assertJsonPath('active_students.0.location', null);
+
+        StudentLiveLocation::create([
+            'student_id' => $student->id, 'latitude' => 13.4853, 'longitude' => 122.0275,
+            'accuracy' => 10, 'captured_at' => now()->subMinutes(3),
+        ]);
+        $this->getJson('/api/dean/attendance/live-locations')->assertOk()
+            ->assertJsonPath('summary.stale', 1)
+            ->assertJsonPath('sharing', 1)
+            ->assertJsonCount(1, 'locations');
+        Attendance::forStudent($student->id)->firstOrFail()->update(['am_time_out' => now()]);
+        $this->getJson('/api/dean/attendance/live-locations')->assertOk()
+            ->assertJsonPath('summary.timed_in', 0);
+
+        Sanctum::actingAs(User::factory()->create(['role' => 'vpaa']));
+        $this->getJson('/api/dean/attendance/live-locations')->assertForbidden();
+    }
+
     public function test_dean_live_map_is_limited_to_active_fresh_locations_in_assigned_college(): void
     {
         [, $student] = $this->context();

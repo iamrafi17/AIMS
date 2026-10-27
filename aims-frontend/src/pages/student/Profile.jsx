@@ -21,7 +21,9 @@ import toast from 'react-hot-toast';
 import UserAvatar from '../../components/UserAvatar';
 import useAuth from '../../context/useAuth';
 import api from '../../services/api';
+import { usePasswordMinimum } from '../../utils/passwordStrength';
 import ContactNumberInput from '../../components/forms/ContactNumberInput';
+import PsgcAddressSelect from '../../components/forms/PsgcAddressSelect';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-[#7D001D]/45 focus:ring-4 focus:ring-[#7D001D]/8 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-700 dark:disabled:text-gray-400';
 
@@ -63,10 +65,12 @@ function SectionHeader({ icon: Icon, title, description, editing, onEdit, onCanc
 }
 
 function StudentProfile() {
+  const passwordMinimum = usePasswordMinimum();
   const { user, student, refreshUser } = useAuth();
   const fileInput = useRef(null);
   const [editingPersonal, setEditingPersonal] = useState(false);
   const [editingContact, setEditingContact] = useState(false);
+  const [addressValid, setAddressValid] = useState(false);
   const [savingSection, setSavingSection] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -151,6 +155,10 @@ function StudentProfile() {
 
   const saveContact = async (event) => {
     event.preventDefault();
+    if (!addressValid) {
+      toast.error('Select a province, municipality or city, and barangay.');
+      return;
+    }
     setSavingSection('contact');
     try {
       const response = await api.put('/profile/contact', contact);
@@ -254,12 +262,17 @@ function StudentProfile() {
           </section>
 
           <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6 dark:border-gray-700 dark:bg-gray-800">
-            <SectionHeader icon={PhoneIcon} title="Contact Information" description="Keep your active email, contact number, and present address updated." editing={editingContact} onEdit={() => setEditingContact(true)} onCancel={() => { resetContact(); setEditingContact(false); }} />
+            <SectionHeader icon={PhoneIcon} title="Contact Information" description="Keep your active email, contact number, and present address updated." editing={editingContact} onEdit={() => { setAddressValid(false); setEditingContact(true); }} onCancel={() => { resetContact(); setAddressValid(false); setEditingContact(false); }} />
             <form onSubmit={saveContact}>
               <div className="grid gap-4 md:grid-cols-2">
                 <Field label="Email Address" icon={EnvelopeIcon}><input type="email" className={inputClass} value={contact.email} onChange={(event) => setContact((current) => ({ ...current, email: event.target.value }))} disabled={!editingContact} required /></Field>
                 <Field label="Contact Number" icon={PhoneIcon}><ContactNumberInput className={inputClass} value={contact.contact_number} onValueChange={(contact_number) => setContact((current) => ({ ...current, contact_number }))} disabled={!editingContact} required autoComplete="tel" placeholder="09XX XXX XXXX" /></Field>
-                <Field label="Present Address" icon={MapPinIcon} className="md:col-span-2"><textarea rows="3" className={`${inputClass} resize-none`} value={contact.address} onChange={(event) => setContact((current) => ({ ...current, address: event.target.value }))} disabled={!editingContact} required /></Field>
+                <div className="md:col-span-2">
+                  <p className="mb-1.5 flex min-h-9 items-start gap-1.5 text-[11px] font-extrabold uppercase leading-4 tracking-wide text-slate-500 dark:text-gray-400"><MapPinIcon className="profile-field-icon size-4 shrink-0 text-[#a8750b]" /><span>Present Address</span></p>
+                  {editingContact
+                    ? <PsgcAddressSelect value={contact.address} onChange={(address) => setContact((current) => ({ ...current, address }))} onValidityChange={setAddressValid} className={inputClass} />
+                    : <textarea rows="3" className={`${inputClass} resize-none`} value={contact.address} aria-label="Present Address" disabled />}
+                </div>
               </div>
               {editingContact && <div className="mt-6 flex justify-end"><button type="submit" disabled={savingSection === 'contact'} className="inline-flex items-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-60"><CheckIcon className="size-4" /> {savingSection === 'contact' ? 'Saving...' : 'Save Contact Information'}</button></div>}
             </form>
@@ -289,14 +302,14 @@ function StudentProfile() {
               ].map(([name, label]) => (
                 <Field key={name} label={label} icon={KeyIcon}>
                   <div className="relative">
-                    <input type={showPasswords ? 'text' : 'password'} className={`${inputClass} pr-11`} value={passwords[name]} onChange={(event) => setPasswords((current) => ({ ...current, [name]: event.target.value }))} minLength={name === 'current_password' ? undefined : 8} autoComplete={name === 'current_password' ? 'current-password' : 'new-password'} required autoFocus={name === 'current_password'} />
+                    <input type={showPasswords ? 'text' : 'password'} className={`${inputClass} pr-11`} value={passwords[name]} onChange={(event) => setPasswords((current) => ({ ...current, [name]: event.target.value }))} minLength={name === 'current_password' ? undefined : passwordMinimum} maxLength={255} autoComplete={name === 'current_password' ? 'current-password' : 'new-password'} required autoFocus={name === 'current_password'} />
                     <button type="button" onClick={() => setShowPasswords((visible) => !visible)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:text-[#7D001D]" aria-label={showPasswords ? 'Hide passwords' : 'Show passwords'}>
                       {showPasswords ? <EyeSlashIcon className="size-5" /> : <EyeIcon className="size-5" />}
                     </button>
                   </div>
                 </Field>
               ))}
-              <p className="rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-500 dark:bg-gray-900/60 dark:text-gray-400">Use at least 8 characters. Your new password must differ from your current password.</p>
+              <p className="rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-500 dark:bg-gray-900/60 dark:text-gray-400">Use at least {passwordMinimum} characters. Your new password must differ from your current password.</p>
               <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 dark:border-gray-700 sm:flex-row sm:justify-end">
                 <button type="button" onClick={closePasswordModal} disabled={savingSection === 'password'} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">Cancel</button>
                 <button type="submit" disabled={savingSection === 'password'} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-60"><KeyIcon className="size-4" /> {savingSection === 'password' ? 'Changing...' : 'Change Password'}</button>

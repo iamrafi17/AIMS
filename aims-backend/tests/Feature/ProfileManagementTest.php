@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Student;
+use App\Models\SystemSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -179,6 +180,33 @@ class ProfileManagementTest extends TestCase
             'contact_number' => '09181234567',
             'address' => 'MarSU Santa Cruz Campus',
         ]);
+    }
+
+    public function test_all_account_roles_use_the_saved_minimum_when_changing_passwords(): void
+    {
+        SystemSetting::where('key', 'minimum_password_length')->update(['value' => '16']);
+        foreach (['student', 'admin', 'coordinator', 'program_head', 'dean', 'vpaa', 'supervisor'] as $role) {
+            $user = $role === 'student' ? $this->studentAccount()[0] : User::factory()->create(['role' => $role]);
+            $this->postJson('/api/login', [
+                'login' => $user->email,
+                'password' => 'password',
+                'device_name' => 'Existing password after policy change',
+            ])->assertOk()->assertJsonPath('user.id', $user->id);
+            Sanctum::actingAs($user);
+            $this->putJson('/api/profile/password', [
+                'current_password' => 'password',
+                'password' => 'ShortPass123!',
+                'password_confirmation' => 'ShortPass123!',
+            ])->assertUnprocessable()->assertJsonValidationErrors('password');
+            $this->assertTrue(Hash::check('password', $user->fresh()->password));
+
+            $this->putJson('/api/profile/password', [
+                'current_password' => 'password',
+                'password' => 'NewPassword1234!',
+                'password_confirmation' => 'NewPassword1234!',
+            ])->assertOk();
+            $this->assertTrue(Hash::check('NewPassword1234!', $user->fresh()->password));
+        }
     }
 
     private function studentAccount(): array

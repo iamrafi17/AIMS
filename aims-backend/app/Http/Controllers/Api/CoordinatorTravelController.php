@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SystemNotification;
 use App\Models\Student;
 use App\Models\TravelLog;
+use App\Models\TravelCheckpoint;
 use App\Models\TravelReport;
 use App\Models\User;
 use App\Support\ProgramAccess;
@@ -59,7 +60,9 @@ class CoordinatorTravelController extends Controller
                 }
             })
             ->orderBy('last_name')->limit(100)->get()
-            ->filter(fn (Student $student) => $student->internship_status === 'active'
+            ->filter(fn (Student $student) => in_array($student->internship_status, ['pending', 'active'], true)
+                && $student->schedule_status === 'approved'
+                && $student->ojt_start_date
                 && $student->hte?->is_active
                 && (int) TravelWorkflow::coordinatorFor($student)?->id === (int) $request->user()->id)
             ->take(30)->map(fn (Student $student): array => TravelWorkflow::studentPayload($student))->values();
@@ -223,16 +226,17 @@ class CoordinatorTravelController extends Controller
     private function ensureSchedulable(Request $request, Student $student, string $scheduledAt): void
     {
         $student->loadMissing('hte');
-        if ($student->internship_status !== 'active' || ! $student->hte?->is_active) {
-            throw ValidationException::withMessages(['student_id' => 'An active internship and HTE assignment are required.']);
+        if (! in_array($student->internship_status, ['pending', 'active'], true)
+            || $student->schedule_status !== 'approved' || ! $student->ojt_start_date || ! $student->hte?->is_active) {
+            throw ValidationException::withMessages(['student_id' => 'A pending or active internship, approved deployment, OJT start date, and active HTE assignment are required.']);
         }
         if ((int) TravelWorkflow::coordinatorFor($student)?->id !== (int) $request->user()->id) {
             abort(404);
         }
         $date = \Illuminate\Support\Carbon::parse($scheduledAt)->setTimezone(config('app.timezone'))->startOfDay();
-        if (($student->ojt_start_date && $date->lt($student->ojt_start_date))
-            || (! OjtCompletion::usesAutomaticEnd($student) && $student->ojt_end_date && $date->gt($student->ojt_end_date))) {
-            throw ValidationException::withMessages(['scheduled_at' => 'Travel date must be within the student internship period.']);
+        // Travel to the HTE may precede the OJT start date.
+        if (! OjtCompletion::usesAutomaticEnd($student) && $student->ojt_end_date && $date->gt($student->ojt_end_date)) {
+            throw ValidationException::withMessages(['scheduled_at' => 'Travel date cannot be after the student internship end date.']);
         }
     }
 
@@ -332,6 +336,16 @@ class CoordinatorTravelController extends Controller
         TravelWorkflow::authorizeCoordinator($request->user(), $travel);
         $path = $this->privateStoragePath($travel->arrival_photo_path);
         abort_unless($path && $this->privateDisk()->exists($path), 404, 'Arrival photo not found.');
+
+        return response()->file($this->privateDisk()->path($path));
+    }
+
+    public function checkpointPhoto(Request $request, TravelLog $travel, TravelCheckpoint $checkpoint)
+    {
+        TravelWorkflow::authorizeCoordinator($request->user(), $travel);
+        abort_unless((int) $checkpoint->travel_log_id === (int) $travel->id, 404);
+        $path = $this->privateStoragePath($checkpoint->photo_path);
+        abort_unless($path && $this->privateDisk()->exists($path), 404, 'Checkpoint photo not found.');
 
         return response()->file($this->privateDisk()->path($path));
     }

@@ -20,6 +20,7 @@ import {
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
+import { usePasswordMinimum } from '../../utils/passwordStrength';
 import useAuth from '../../context/useAuth';
 import UserAvatar from '../../components/UserAvatar';
 import { EmptyPanel, LoadingPanel, MetricCard, PageIntro } from '../../components/common/PortalUI';
@@ -126,7 +127,7 @@ function UserModal({ item, onClose, onSaved }) {
       return toast.error('Supervisor already has an account.');
     }
     setSelectedSupervisor(supervisor);
-    setForm((current) => ({ ...current, name: supervisor.full_name, supervisor_record_id: supervisor.id }));
+    setForm((current) => ({ ...current, name: supervisor.full_name, email: current.email || supervisor.contact_email || '', supervisor_record_id: supervisor.id }));
   };
 
   const submit = async (event) => {
@@ -246,7 +247,7 @@ function UserModal({ item, onClose, onSaved }) {
               <div><h3 className="font-black text-[#690016] dark:text-rose-200">Supervisor Assignment Search</h3><p className="mt-1 text-xs leading-5 text-slate-500">Search by HTE name, Department / Unit, or Supervisor name, then select the existing record.</p></div>
               {!item && <div className="mt-4 flex flex-col gap-2 sm:flex-row"><div className="relative flex-1"><MagnifyingGlassIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" /><input value={supervisorSearch} onChange={(event) => { setSupervisorSearch(event.target.value); setSupervisorSearchComplete(false); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); searchSupervisors(); } }} className={`${inputClass} pl-12`} placeholder="Search HTE, department, or supervisor" /></div><button type="button" disabled={supervisorSearchBusy} onClick={searchSupervisors} className="rounded-2xl bg-[#7D001D] px-5 py-3 text-sm font-black text-white disabled:opacity-50">{supervisorSearchBusy ? 'Searching...' : 'Search'}</button></div>}
               {!item && supervisorSearchComplete && <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">{supervisorResults.length ? supervisorResults.map((supervisor) => <button key={supervisor.id} type="button" disabled={supervisor.has_account} onClick={() => chooseSupervisor(supervisor)} className={`w-full rounded-xl border p-3 text-left transition ${String(selectedSupervisor?.id) === String(supervisor.id) ? 'border-[#7D001D] bg-white shadow-sm dark:bg-slate-900' : 'border-slate-200 bg-white/70 hover:border-[#7D001D]/40 dark:border-slate-700 dark:bg-slate-900/70'} disabled:cursor-not-allowed disabled:opacity-60`}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-black text-slate-800 dark:text-white">{supervisor.full_name}</p><p className="mt-1 text-xs text-slate-500">{supervisor.hte?.name}</p><p className="mt-0.5 text-xs font-bold text-[#7D001D] dark:text-rose-300">{supervisor.department?.department_name}</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${supervisor.has_account ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{supervisor.has_account ? 'Account already created' : 'Available'}</span></div></button>) : <p className="rounded-xl border border-dashed border-slate-300 py-6 text-center text-sm text-slate-500 dark:border-slate-700">No matching supervisor record found.</p>}</div>}
-              {selectedSupervisor && <div className="mt-4 grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30 sm:grid-cols-2"><ReadOnlyAssignment label="Full Name" value={selectedSupervisor.full_name} /><ReadOnlyAssignment label="Role" value="Supervisor" /><ReadOnlyAssignment label="HTE Name" value={selectedSupervisor.hte?.name || ''} /><ReadOnlyAssignment label="Department / Unit" value={selectedSupervisor.department?.department_name || ''} /></div>}
+              {selectedSupervisor && <div className="mt-4 grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30 sm:grid-cols-2"><ReadOnlyAssignment label="Full Name" value={selectedSupervisor.full_name} /><ReadOnlyAssignment label="Role" value="Supervisor" /><ReadOnlyAssignment label="HTE Name" value={selectedSupervisor.hte?.name || ''} /><ReadOnlyAssignment label="Department / Unit" value={selectedSupervisor.department?.department_name || ''} />{selectedSupervisor.contact_email && <ReadOnlyAssignment label="Supervisor Email" value={selectedSupervisor.contact_email} />}</div>}
             </section>
           )}
 
@@ -469,6 +470,7 @@ function AccountActionModal({ user, action, onClose, onCompleted }) {
 }
 
 function ResetPasswordModal({ user, onClose, onCompleted }) {
+  const passwordMinimum = usePasswordMinimum();
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -477,8 +479,8 @@ function ResetPasswordModal({ user, onClose, onCompleted }) {
   const submit = async (event) => {
     event.preventDefault();
 
-    if (password.length < 8) {
-      toast.error('Password must contain at least 8 characters.');
+    if (password.length < passwordMinimum) {
+      toast.error(`Password must contain at least ${passwordMinimum} characters.`);
       return;
     }
 
@@ -543,14 +545,14 @@ function ResetPasswordModal({ user, onClose, onCompleted }) {
                 <input
                   autoFocus
                   required
-                  minLength="8"
+                  minLength={passwordMinimum}
                   maxLength="255"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   className="w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-12 pr-12 outline-none transition focus:border-[#7D001D] focus:ring-4 focus:ring-[#7D001D]/10 dark:border-slate-700 dark:bg-slate-950"
-                  placeholder="Minimum 8 characters"
+                  placeholder={`Minimum ${passwordMinimum} characters`}
                 />
                 <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-[#7D001D]" aria-label={showPassword ? 'Hide passwords' : 'Show passwords'}>
                   {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
@@ -564,7 +566,7 @@ function ResetPasswordModal({ user, onClose, onCompleted }) {
                 <KeyIcon className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-amber-600" />
                 <input
                   required
-                  minLength="8"
+                  minLength={passwordMinimum}
                   maxLength="255"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"

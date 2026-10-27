@@ -59,7 +59,7 @@ class StudentNormalizationTest extends TestCase
         ]);
         $enrollment = OjtEnrollment::create([
             'school_id' => '2026-001',
-            'full_name' => 'DELA CRUZ, Juan',
+            'first_name' => 'Juan', 'last_name' => 'Dela Cruz',
             'section' => '4-BSIS A',
             'college_id' => $college->id,
             'program_id' => $program->id,
@@ -105,7 +105,6 @@ class StudentNormalizationTest extends TestCase
 
         $hte = HTE::create([
             'name' => 'Marinduque State University',
-            'normalized_name' => 'marinduque state university',
             'address' => 'Boac, Marinduque',
             'contact_person' => 'HTE Contact',
             'contact_email' => 'hte@example.com',

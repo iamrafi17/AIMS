@@ -8,6 +8,7 @@ use App\Models\College;
 use App\Models\OjtEnrollment;
 use App\Models\Program;
 use App\Models\SecurityQuestion;
+use App\Models\SystemSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
@@ -170,6 +171,15 @@ class SecurityQuestionRecoveryTest extends TestCase
         ])->assertUnprocessable()
             ->assertJsonValidationErrors('password');
 
+        SystemSetting::where('key', 'minimum_password_length')->update(['value' => '14']);
+        $this->postJson('/api/reset-password', [
+            'user_id' => $student->student_id,
+            'token' => $resetToken,
+            'password' => 'NewPass123',
+            'password_confirmation' => 'NewPass123',
+        ])->assertUnprocessable()->assertJsonValidationErrors('password');
+        $this->assertTrue(Hash::check($oldPassword, $user->fresh()->password));
+
         $this->postJson('/api/reset-password', [
             'user_id' => $student->student_id,
             'token' => $resetToken,
@@ -295,7 +305,7 @@ class SecurityQuestionRecoveryTest extends TestCase
         ]);
         OjtEnrollment::create([
             'school_id' => $studentId,
-            'full_name' => 'Security Test Student',
+            'first_name' => 'Security Test', 'last_name' => 'Student',
             'section' => 'BSIT 4A',
             'college_id' => $college->id,
             'program_id' => $program->id,

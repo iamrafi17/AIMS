@@ -7,13 +7,11 @@ import RequirementManagerModal from './RequirementManagerModal';
 import ContactNumberInput from '../../components/forms/ContactNumberInput';
 
 const emptyForm = {
-  student_name: '',
   student_id: '',
   first_name: '',
   middle_name: '',
   last_name: '',
   email: '',
-  password: '',
   gender: 'female',
   birth_date: '',
   address: '',
@@ -28,6 +26,7 @@ const emptyForm = {
   parent_address: '',
   parent_contact_number: '',
   hte_id: '',
+  hte_department_id: '',
   internship_semester: '',
   internship_year: '',
   internship_status: 'pending',
@@ -99,7 +98,7 @@ function Modal({ title, subtitle, onClose, children, size = 'default', height, f
 }
 
 function Input({ label, name, form, setForm, type = 'text', required = false, ...props }) {
-  const inputClassName = 'w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 focus:ring-4 focus:ring-[#7D001D]/5 dark:border-gray-600 dark:bg-gray-900 dark:text-white';
+  const inputClassName = 'w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 focus:ring-4 focus:ring-[#7D001D]/5 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-600 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-800';
   const isContactNumber = name === 'contact_number' || name === 'parent_contact_number';
 
   return (
@@ -124,7 +123,7 @@ function Select({ label, name, form, setForm, children, required = false, ...pro
         {label}
         {required && ' *'}
       </span>
-      <select name={name} value={form[name] ?? ''} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} required={required} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 dark:border-gray-600 dark:bg-gray-900 dark:text-white" {...props}>
+      <select name={name} value={form[name] ?? ''} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} required={required} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#7D001D]/50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-600 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-800" {...props}>
         {children}
       </select>
     </label>
@@ -253,7 +252,7 @@ function StudentManagement() {
     setEditor({ mode: 'create' });
   };
   const openEdit = (student) => {
-    setForm({ ...emptyForm, ...student, email: student.user?.email || '', password: '', college_id: student.college_id || student.college?.id || '', program_id: student.program_id || student.program?.id || '', hte_id: student.hte_id || student.hte?.id || '', birth_date: student.birth_date?.slice(0, 10) || '', required_ojt_hours: student.official_ojt_setting?.required_hours ?? student.required_ojt_hours ?? '', ojt_start_date: student.official_ojt_setting?.ojt_start_date?.slice(0, 10) || student.ojt_start_date?.slice(0, 10) || '', ojt_end_date: student.ojt_end_date?.slice(0, 10) || '' });
+    setForm({ ...emptyForm, ...student, email: student.user?.email || '', college_id: student.college_id || student.college?.id || '', program_id: student.program_id || student.program?.id || '', hte_id: student.hte_id || student.hte?.id || '', birth_date: student.birth_date?.slice(0, 10) || '', required_ojt_hours: student.official_ojt_setting?.required_hours ?? student.required_ojt_hours ?? '', ojt_start_date: student.official_ojt_setting?.ojt_start_date?.slice(0, 10) || student.ojt_start_date?.slice(0, 10) || '', ojt_end_date: student.ojt_end_date?.slice(0, 10) || '' });
     setSelected(null);
     setEditorStep(0);
     setEditor({ mode: 'edit', student });
@@ -261,8 +260,8 @@ function StudentManagement() {
 
   const validateEditorStep = (step = editorStep) => {
     const requiredByStep = [
-      ['student_id', 'first_name', 'last_name', 'email', 'gender', 'birth_date', 'contact_number', 'address'],
-      ['college_id', 'program_id', 'year_level', 'section', 'required_ojt_hours'],
+      ['student_id', 'first_name', 'last_name', 'email'],
+      ['college_id', 'program_id', 'year_level', 'section'],
       ['parent_name', 'parent_contact_number', 'parent_address'],
     ];
     const missing = requiredByStep[step].some((field) => String(form[field] ?? '').trim() === '');
@@ -283,9 +282,13 @@ function StudentManagement() {
     if (editor.mode === 'edit' && (editorStep !== 2 || !validateEditorStep(2))) return;
     setBusy(true);
     try {
-      const payload = editor.mode === 'create' ? { full_name: form.student_name.trim(), school_id: form.student_id.trim(), academic_section_id: Number(form.academic_section_id) } : { ...form, college_id: Number(form.college_id), program_id: Number(form.program_id), hte_id: form.hte_id ? Number(form.hte_id) : null, year_level: Number(form.year_level), required_ojt_hours: Number(form.required_ojt_hours), allow_past_attendance: Boolean(form.allow_past_attendance) };
+      const payload = editor.mode === 'create' ? { first_name: form.first_name.trim(), middle_name: form.middle_name.trim() || null, last_name: form.last_name.trim(), school_id: form.student_id.trim(), academic_section_id: Number(form.academic_section_id) } : { ...form, college_id: Number(form.college_id), program_id: Number(form.program_id), hte_id: form.hte_id ? Number(form.hte_id) : null, year_level: Number(form.year_level), required_ojt_hours: Number(form.required_ojt_hours), allow_past_attendance: Boolean(form.allow_past_attendance) };
       delete payload.registration_status;
-      if (!payload.password) delete payload.password;
+      delete payload.password;
+      delete payload.gender;
+      delete payload.birth_date;
+      delete payload.contact_number;
+      delete payload.address;
       const response = editor.mode === 'create' ? await api.post('/coordinator/students', payload) : await api.put(`/coordinator/students/${editor.student.id}`, payload);
       toast.success(response.data.message);
       setEditor(null);
@@ -415,7 +418,7 @@ function StudentManagement() {
       <div className="portal-summary-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {[
           ['Total Students', summary.total, FiUsers, 'text-[#7D001D]'],
-          ['Awaiting Deployment', summary.awaiting_deployment, FiFileText, 'text-amber-600'],
+          ['Pending Internship', summary.awaiting_deployment, FiFileText, 'text-amber-600'],
           ['Completed', summary.completed, FiCheck, 'text-emerald-600'],
           ['Dropped', summary.dropped, FiX, 'text-rose-600'],
           ['Active Interns', summary.active, FiUserCheck, 'text-blue-600'],
@@ -471,7 +474,7 @@ function StudentManagement() {
             <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-gray-900">
               <tr>
                 <th className="px-5 py-3">School ID</th>
-                <th className="px-4 py-3">Full Name</th>
+                <th className="px-4 py-3">Student Name</th>
                 <th className="px-4 py-3">Section</th>
                 <th className="px-4 py-3">Added Through</th>
                 <th className="px-5 py-3">Registration</th>
@@ -482,7 +485,7 @@ function StudentManagement() {
                 enrollments.map((enrollment) => (
                   <tr key={enrollment.id} className="border-t border-slate-100 dark:border-gray-700">
                     <td className="px-5 py-3 text-xs font-black text-slate-700 dark:text-gray-200">{enrollment.school_id}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-800 dark:text-white">{enrollment.full_name}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-slate-800 dark:text-white">{[enrollment.first_name, enrollment.middle_name, enrollment.last_name].filter(Boolean).join(' ')}</td>
                     <td className="px-4 py-3 text-xs font-bold text-slate-600 dark:text-gray-300">{enrollment.section}</td>
                     <td className="px-4 py-3">
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase text-slate-500 dark:bg-gray-700 dark:text-gray-300">{enrollment.source}</span>
@@ -669,7 +672,11 @@ function StudentManagement() {
         <Modal title="Add Student Manually" subtitle="Add one OJT student who was not included in the CSV file." onClose={() => setEditor(null)}>
           <form onSubmit={saveStudent}>
             <div className="space-y-4 p-5">
-              <Input label="Full Name" name="student_name" form={form} setForm={setForm} placeholder="e.g. Juan Dela Cruz" autoFocus required />
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Input label="First Name" name="first_name" form={form} setForm={setForm} placeholder="e.g. Juan" autoFocus required />
+                <Input label="Middle Name" name="middle_name" form={form} setForm={setForm} placeholder="Optional" />
+                <Input label="Last Name" name="last_name" form={form} setForm={setForm} placeholder="e.g. Dela Cruz" required />
+              </div>
               <Input label="School ID" name="student_id" form={form} setForm={setForm} placeholder="e.g. 2026-1001" required />
               <Select label="Section" name="academic_section_id" form={form} setForm={setForm} required>
                 <option value="">Select section</option>
@@ -720,15 +727,14 @@ function StudentManagement() {
                     <Input label="Middle Name" name="middle_name" form={form} setForm={setForm} />
                     <Input label="Last Name" name="last_name" form={form} setForm={setForm} required />
                     <Input label="Email" name="email" type="email" form={form} setForm={setForm} required />
-                    <Input label={editor.mode === 'create' ? 'Password (blank = generated)' : 'New Password (optional)'} name="password" type="password" form={form} setForm={setForm} />
-                    <Select label="Gender" name="gender" form={form} setForm={setForm} required>
+                    <Select label="Gender" name="gender" form={form} setForm={setForm} disabled>
                       <option value="female">Female</option>
                       <option value="male">Male</option>
                     </Select>
-                    <Input label="Birth Date" name="birth_date" type="date" form={form} setForm={setForm} required />
-                    <Input label="Contact Number" name="contact_number" form={form} setForm={setForm} required />
+                    <Input label="Birth Date" name="birth_date" type="date" form={form} setForm={setForm} disabled />
+                    <Input label="Contact Number" name="contact_number" form={form} setForm={setForm} disabled />
                     <div className="md:col-span-3">
-                      <Input label="Address" name="address" form={form} setForm={setForm} required />
+                      <Input label="Address" name="address" form={form} setForm={setForm} disabled />
                     </div>
                   </div>
                 </>
@@ -765,14 +771,7 @@ function StudentManagement() {
                         </option>
                       ))}
                     </Select>
-                    <Select label="HTE" name="hte_id" form={form} setForm={setForm}>
-                      <option value="">Not assigned</option>
-                      {options.htes?.map((hte) => (
-                        <option key={hte.id} value={hte.id}>
-                          {hte.name}
-                        </option>
-                      ))}
-                    </Select>
+                    <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-gray-600 dark:bg-gray-900 dark:text-slate-300 md:col-span-2">HTE assignment and department are managed in <Link to="/coordinator/htes" className="font-bold text-[#7D001D] dark:text-rose-300">Student Deployments</Link>.</p>
                     <Select label="Year Level" name="year_level" form={form} setForm={setForm} required>
                       {[1, 2, 3, 4, 5].map((year) => (
                         <option key={year} value={year}>
@@ -781,18 +780,9 @@ function StudentManagement() {
                       ))}
                     </Select>
                     <Input label="Section" name="section" form={form} setForm={setForm} required />
-                    {editor.student?.official_ojt_setting
-                      ? <label className="block text-sm font-bold">Required OJT Hours <input className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-gray-600 dark:bg-gray-900" value={editor.student.official_ojt_setting.required_hours} readOnly /><span className="text-xs text-slate-500">Published by Program Head</span></label>
-                      : <Input label="Required OJT Hours" name="required_ojt_hours" type="number" min="1" form={form} setForm={setForm} required />}
+                    <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-gray-600 dark:bg-gray-900 dark:text-slate-300 md:col-span-2">OJT start date, hours, and schedule are managed in <Link to="/coordinator/htes" className="font-bold text-[#7D001D] dark:text-rose-300">Student Deployments</Link>. Published Program Head settings apply there.</p>
                     <Input label="Semester" name="internship_semester" form={form} setForm={setForm} />
                     <Input label="Academic Year" name="internship_year" placeholder="2026-2027" form={form} setForm={setForm} />
-                    <div className="hidden md:block" />
-                    {editor.student?.official_ojt_setting
-                      ? <label className="block text-sm font-bold">OJT Start Date <input className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-gray-600 dark:bg-gray-900" type="date" value={editor.student.official_ojt_setting.ojt_start_date.slice(0, 10)} readOnly /><span className="text-xs text-slate-500">Published by Program Head</span></label>
-                      : <Input label="OJT Start Date" name="ojt_start_date" type="date" form={form} setForm={setForm} />}
-                    {editor.student?.official_ojt_setting
-                      ? <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-gray-600 dark:bg-gray-900">Estimated OJT end date is calculated automatically after deployment from the work schedule and completed attendance hours.</p>
-                      : <Input label="OJT End Date" name="ojt_end_date" type="date" form={form} setForm={setForm} />}
                   </div>
                 </>
               )}
@@ -806,7 +796,7 @@ function StudentManagement() {
                   <div className="grid gap-3 md:grid-cols-3">
                     <Select label="Internship Status" name="internship_status" form={form} setForm={setForm}>
                       <option value="pending">Pending</option>
-                      <option value="active">Active</option>
+                      {form.internship_status === 'active' && <option value="active">Active</option>}
                       <option value="completed">Completed</option>
                       <option value="dropped">Dropped</option>
                     </Select>
@@ -815,25 +805,7 @@ function StudentManagement() {
                       <option value="done">Done</option>
                       <option value="rejected">Rejected</option>
                     </Select>
-                    <Select label="Schedule Status" name="schedule_status" form={form} setForm={setForm}>
-                      <option value="pending">Pending</option>
-                      <option value="approved">Approved</option>
-                      <option value="rejected">Rejected</option>
-                    </Select>
-                    <label className="flex items-center gap-3 self-end rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold dark:border-gray-600">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(form.allow_past_attendance)}
-                        onChange={(event) =>
-                          setForm((current) => ({
-                            ...current,
-                            allow_past_attendance: event.target.checked,
-                          }))
-                        }
-                      />{' '}
-                      Allow past attendance
-                    </label>
-                    <div className="hidden md:block" />
+                    <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-gray-600 dark:bg-gray-900 dark:text-slate-300">Deployment approval: <strong className="capitalize">{form.schedule_status}</strong></p>
                     <Input label="Guardian Name" name="parent_name" form={form} setForm={setForm} required />
                     <Input label="Relationship" name="parent_relationship" form={form} setForm={setForm} />
                     <Input label="Contact Number" name="parent_contact_number" form={form} setForm={setForm} required />
@@ -918,7 +890,7 @@ function StudentManagement() {
         >
           <div className="p-5">
             <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
-              Upload the existing predefined school CSV without changing its layout. AIMS reads only <b>Column E (School No.)</b> and <b>Column F (Full Name)</b> from numbered student rows.
+              Upload the existing predefined school CSV without changing its layout. AIMS reads <b>Column E (School No.)</b> and <b>Column F (Full Name)</b>, then separates the last name and any trailing middle initial for review.
             </div>
             {!importResult?.completed && (
               <>
@@ -983,11 +955,13 @@ function StudentManagement() {
                     File: <b className="text-slate-700 dark:text-slate-200">{importResult.file_name}</b> · Section: <b className="text-slate-700 dark:text-slate-200">{importResult.section?.name}</b>
                   </div>
                   <div className="max-h-80 overflow-auto">
-                    <table className="w-full min-w-[680px] text-left">
+                    <table className="w-full min-w-[820px] text-left">
                       <thead className="sticky top-0 bg-white text-[10px] uppercase tracking-wide text-slate-400 dark:bg-gray-800">
                         <tr>
                           <th className="px-4 py-3">School No.</th>
-                          <th className="px-4 py-3">Full Name</th>
+                          <th className="px-4 py-3">First Name</th>
+                          <th className="px-4 py-3">Middle Name</th>
+                          <th className="px-4 py-3">Last Name</th>
                           <th className="px-4 py-3">Status</th>
                           <th className="px-4 py-3">Details</th>
                         </tr>
@@ -998,7 +972,9 @@ function StudentManagement() {
                           return (
                             <tr key={`${student.row}-${student.school_no}`} className="border-t border-slate-100 dark:border-gray-700">
                               <td className="px-4 py-3 text-sm font-black text-slate-800 dark:text-white">{student.school_no || '—'}</td>
-                              <td className="px-4 py-3 text-sm text-slate-700 dark:text-gray-200">{student.full_name || '—'}</td>
+                              <td className="px-4 py-3 text-sm text-slate-700 dark:text-gray-200">{student.first_name || '—'}</td>
+                              <td className="px-4 py-3 text-sm text-slate-700 dark:text-gray-200">{student.middle_name || '—'}</td>
+                              <td className="px-4 py-3 text-sm text-slate-700 dark:text-gray-200">{student.last_name || '—'}</td>
                               <td className="px-4 py-3">
                                 <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${statusStyle}`}>{student.status}</span>
                               </td>

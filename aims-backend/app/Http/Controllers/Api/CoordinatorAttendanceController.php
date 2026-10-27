@@ -4,8 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\College;
+use App\Models\Program;
+use App\Models\Student;
 use App\Models\StudentLiveLocation;
 use App\Support\AttendanceHours;
+use App\Support\DeanAccess;
 use App\Support\ProgramAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -70,38 +74,108 @@ class CoordinatorAttendanceController extends Controller
 
     public function liveLocations(Request $request)
     {
-        $programId = ProgramAccess::programId($request->user());
+        return $this->liveLocationsResponse($request, 'coordinator');
+    }
 
-        $locations = StudentLiveLocation::query()
-            ->whereHas('student', fn (Builder $student) => $student->whereIn('students.id', ProgramAccess::studentQuery($request->user())->select('students.id')))
+    public function universityLiveLocations(Request $request)
+    {
+        return $this->liveLocationsResponse($request, 'vpaa');
+    }
+
+    public function collegeLiveLocations(Request $request)
+    {
+        return $this->liveLocationsResponse($request, 'dean');
+    }
+
+    private function liveLocationsResponse(Request $request, string $scope)
+    {
+        $now = now();
+        $collegeId = $scope === 'dean' ? DeanAccess::collegeId($request->user()) : null;
+        $activeAttendance = Attendance::query()
+            ->whereDate('attendance.date', $now->toDateString())
+            ->whereIn('attendance.status', ['present', 'late'])
+            ->where(fn (Builder $session) => $session
+                ->where(fn (Builder $am) => $am
+                    ->whereHas('events', fn (Builder $events) => $events->where('event_type', 'am_in'))
+                    ->whereDoesntHave('events', fn (Builder $events) => $events->where('event_type', 'am_out')))
+                ->orWhere(fn (Builder $pm) => $pm
+                    ->whereHas('events', fn (Builder $events) => $events->where('event_type', 'pm_in'))
+                    ->whereDoesntHave('events', fn (Builder $events) => $events->where('event_type', 'pm_out'))));
+
+        $sessions = $activeAttendance
+            ->whereHas('student', fn (Builder $student) => match ($scope) {
+                'dean' => $student->forCollege($collegeId),
+                'vpaa' => $student,
+                default => $student->whereIn('students.id', ProgramAccess::studentQuery($request->user())->select('students.id')),
+            })
             ->whereHas('student.user', fn (Builder $user) => $user->where('is_active', true))
-            ->whereHas('student.attendance', fn (Builder $attendance) => $attendance
-                ->whereDate('attendance.date', now()->toDateString())
-                ->whereIn('attendance.status', ['present', 'late'])
-                ->where(fn (Builder $session) => $session
-                    ->where(fn (Builder $am) => $am
-                        ->whereHas('events', fn (Builder $events) => $events->where('event_type', 'am_in'))
-                        ->whereDoesntHave('events', fn (Builder $events) => $events->where('event_type', 'am_out')))
-                    ->orWhere(fn (Builder $pm) => $pm
-                        ->whereHas('events', fn (Builder $events) => $events->where('event_type', 'pm_in'))
-                        ->whereDoesntHave('events', fn (Builder $events) => $events->where('event_type', 'pm_out')))))
-            ->with([
-                'student:id,user_id,student_id,first_name,last_name',
-                'student.program:id,name,code',
-                'student.hte:id,name,address,latitude,longitude,geofence_radius,geofence_enabled',
-            ])
-            ->latest('captured_at')
+            ->with(['student.program.college', 'student.hte', 'student.liveLocation'])
             ->get();
 
-        $totalStudents = ProgramAccess::studentQuery($request->user())
+        $students = $sessions->map(function (Attendance $attendance) use ($now) {
+            $student = $attendance->student;
+            $timeIn = $attendance->pm_time_in && ! $attendance->pm_time_out
+                ? $attendance->pm_time_in : $attendance->am_time_in;
+            $location = $student->liveLocation;
+            // A location from an earlier session must never be presented as this session's position.
+            if ($location && (($location->attendance_id && $location->attendance_id !== $attendance->id)
+                || ($location->student_internship_id && $location->student_internship_id !== $attendance->student_internship_id)
+                || (! $location->attendance_id && $timeIn && $location->created_at->lt($timeIn->copy()->subSecond())))) {
+                $location = null;
+            }
+            $location?->setRelation('student', $student);
+            $age = $location ? max(0, $location->captured_at->diffInSeconds($now, false)) : null;
+            $status = ! $location ? 'unavailable' : ($age <= config('attendance.gps_online_seconds', 30)
+                ? 'online' : ($age <= config('attendance.gps_stale_seconds', 120) ? 'delayed' : 'stale'));
+
+            return [
+                'student_id' => $student->id,
+                'school_id' => $student->student_id,
+                'name' => trim($student->first_name.' '.$student->last_name),
+                'college_id' => $student->program?->college_id,
+                'college' => $student->program?->college?->code,
+                'program_id' => $student->program?->id,
+                'program' => $student->program?->code,
+                'hte_id' => $student->hte?->id,
+                'hte' => $student->hte?->name,
+                'time_in' => $timeIn?->toIso8601String(),
+                'gps_status' => $status,
+                'location' => $location ? $this->liveLocationPayload($location) : null,
+            ];
+        })->values();
+        $locations = $students->pluck('location')->filter()->values();
+
+        $totalStudents = (match ($scope) {
+            'dean' => Student::query()->forCollege($collegeId),
+            'vpaa' => Student::query(),
+            default => ProgramAccess::studentQuery($request->user()),
+        })
             ->whereHas('user', fn (Builder $user) => $user->where('is_active', true))
             ->count();
 
+        $filterOptions = $scope === 'coordinator' ? null : [
+            'colleges' => College::query()->when($collegeId, fn (Builder $query) => $query->whereKey($collegeId))
+                ->orderBy('name')->get(['id', 'name', 'code']),
+            'programs' => Program::query()->when($collegeId, fn (Builder $query) => $query->where('college_id', $collegeId))
+                ->orderBy('code')->get(['id', 'college_id', 'name', 'code']),
+        ];
+
         return response()->json([
-            'server_time' => now()->toIso8601String(),
+            'server_time' => $now->toIso8601String(),
             'sharing' => $locations->count(),
             'total_students' => $totalStudents,
-            'locations' => $locations->map(fn (StudentLiveLocation $location) => $this->liveLocationPayload($location))->values(),
+            ...($filterOptions ? ['filter_options' => $filterOptions] : []),
+            'locations' => $locations,
+            'active_students' => $students,
+            'summary' => [
+                'timed_in' => $students->count(),
+                'online' => $students->where('gps_status', 'online')->count(),
+                'delayed' => $students->where('gps_status', 'delayed')->count(),
+                'stale' => $students->where('gps_status', 'stale')->count(),
+                'unavailable' => $students->where('gps_status', 'unavailable')->count(),
+            ],
+            'htes' => $students->filter(fn ($student) => $student['hte_id'])
+                ->unique('hte_id')->map(fn ($student) => ['id' => $student['hte_id'], 'name' => $student['hte']])->values(),
         ]);
     }
 
@@ -264,6 +338,7 @@ class CoordinatorAttendanceController extends Controller
         $distance = null;
         $radius = null;
         $outsideGeofence = false;
+        $geofenceStatus = 'unavailable';
 
         if ($hte?->geofence_enabled && $hte->latitude !== null && $hte->longitude !== null && $hte->geofence_radius > 0) {
             $radius = (int) $hte->geofence_radius;
@@ -274,6 +349,13 @@ class CoordinatorAttendanceController extends Controller
                 (float) $hte->longitude,
             ));
             $outsideGeofence = $distance > $radius;
+            if ($location->accuracy !== null) {
+                $accuracy = (float) $location->accuracy;
+                $geofenceStatus = $distance - $accuracy > $radius ? 'outside'
+                    : ($distance + $accuracy <= $radius ? 'inside' : 'uncertain');
+            } else {
+                $geofenceStatus = 'uncertain';
+            }
         }
 
         return [
@@ -288,8 +370,11 @@ class CoordinatorAttendanceController extends Controller
             'longitude' => $location->longitude,
             'accuracy' => $location->accuracy,
             'captured_at' => $location->captured_at->toIso8601String(),
+            'recorded_at' => $location->recorded_at?->toIso8601String(),
+            'received_at' => $location->received_at?->toIso8601String(),
             'status' => $outsideGeofence ? 'outside_geofence' : 'timed_in',
             'outside_geofence' => $outsideGeofence,
+            'geofence_status' => $geofenceStatus,
             'distance_from_hte' => $distance,
             'geofence_radius' => $radius,
         ];

@@ -167,7 +167,7 @@ class ProgramHeadDashboardController extends Controller
                 'decisionMaker.roleDefinition:id,code',
                 'decisionMaker.employeeProfile:id,user_id,first_name,middle_name,last_name',
             ])
-            ->latest('created_at')
+            ->latest('id')
             ->get()
             ->groupBy('subject_id');
         $deploymentReviews = $students->whereNotNull('hte_id')->map(function (Student $student) use ($deploymentApprovals) {
@@ -187,6 +187,7 @@ class ProgramHeadDashboardController extends Controller
                 'submitted_by' => $approval?->submitter?->name,
                 'submitted_at' => $approval?->submitted_at?->toIso8601String() ?? $approval?->created_at?->toIso8601String(),
                 'review_status' => $approval?->status ?? 'not_submitted',
+                'deployment_stage' => $approval?->deployment_stage,
                 'coordinator_remarks' => null,
                 'program_head_remarks' => $approval?->decisionMaker?->role === 'program_head' ? $approval->remarks : null,
             ];
