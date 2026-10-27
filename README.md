@@ -85,52 +85,7 @@ The frontend will run on `http://localhost:5173`
 
 The production-safe seeder creates reference data only. Create authorized accounts through the administrator workflow; no shared sample credentials are installed.
 
-## API Endpoints
 
-### Authentication
-- `POST /api/login` - User login
-- `POST /api/register` - Student registration
-- `POST /api/logout` - User logout
-- `GET /api/user` - Get current user
-
-### Student
-- `GET /api/student/dashboard` - Student dashboard
-- `GET /api/student/attendance` - Attendance history
-- `POST /api/student/attendance/clock-in` - Clock in
-- `POST /api/student/attendance/clock-out` - Clock out
-- `GET /api/student/requirements` - List requirements
-- `POST /api/student/requirements/{id}/upload` - Upload requirement
-
-### Coordinator
-- `GET /api/coordinator/dashboard` - Coordinator dashboard
-- `GET /api/coordinator/students` - List students
-- `POST /api/coordinator/students/{id}/approve` - Approve registration
-- `POST /api/coordinator/students/{id}/reject` - Reject registration
-
-### Admin
-- `GET /api/admin/dashboard` - Admin dashboard
-- `GET /api/admin/users` - List users
-- `POST /api/admin/users` - Create user
-- `PUT /api/admin/users/{id}` - Update user
-- `DELETE /api/admin/users/{id}` - Deactivate user while preserving related records
-
-## Database Schema
-
-The application uses the following main tables:
-- users
-- students
-- colleges
-- programs
-- htes (Host Training Establishments)
-- attendance
-- internship_requirements
-- announcements
-- travel_logs
-- travel_checkpoints
-- evaluations
-- activity_logs
-- moas (Memorandum of Agreement)
-- holidays
 
 ## Project Structure
 
@@ -174,26 +129,6 @@ AIMS/
 4. Add routes in `routes/api.php`
 5. Create React page in `src/pages/`
 6. Add route in `src/App.jsx`
-
-### Environment Variables
-
-Backend `.env`:
-```
-APP_NAME="AIMS - MarSU Santa Cruz"
-APP_URL=http://localhost:8000
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=aims_db
-DB_USERNAME=aims_app
-DB_PASSWORD=use-a-secret-password
-SANCTUM_STATEFUL_DOMAINS=localhost:5173
-```
-
-Frontend `.env`:
-```
-VITE_API_URL=http://localhost:8000/api
-```
 
 ## Operations
 
